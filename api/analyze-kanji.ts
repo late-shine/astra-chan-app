@@ -100,7 +100,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     type: "json_schema",
                     json_schema: {
                         name: "kanji_feedback",
-                        strict: true,
+                        strict: false,
                         schema: {
                             type: "object",
                             properties: {
