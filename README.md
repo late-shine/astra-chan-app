@@ -138,8 +138,8 @@ One strategy worth sharing: I would use one Claude session to review the codebas
 ## Setup (Local Development)
 
 ```bash
-git clone https://github.com/YOURUSERNAME/astra.git
-cd astra
+git clone https://github.com/late-shine/astra-chan-app.git
+cd astra-chan-app
 npm install
 cp .env.example .env
 # Fill in your Firebase and OpenRouter/Gemini API keys
