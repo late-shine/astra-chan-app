@@ -76,6 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             body: JSON.stringify({
                 // Calling Gemini 2.0 Flash through OpenRouter's routing layer
                 model: "google/gemma-4-31b-it:free",
+                max_tokens: 1024,
                 messages: [
                     {
                         role: "user",
@@ -87,14 +88,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                             {
                                 type: "image_url",
                                 image_url: {
-                                    // OpenRouter reads the standard Data-URL format directly!
-                                    url: imageData
+                                    url: imageData.startsWith("data:")
+                                        ? imageData
+                                        : `data:image/png;base64,${imageData}`
                                 }
                             }
                         ]
                     }
                 ],
-
+                // FIX: Use json_schema (not json_object) — this is the correct OpenRouter
+                // structured output format that actually enforces the schema.
+                response_format: {
+                    type: "json_schema",
+                    json_schema: {
+                        name: "kanji_feedback",
+                        strict: false,
+                        schema: {
+                            type: "object",
+                            properties: {
+                                score: {
+                                    type: "integer",
+                                    description: "An accuracy score percentage from 0 to 100."
+                                },
+                                feedbackTitle: {
+                                    type: "string",
+                                    description: "Cute short praise/motivational title from Astra-chan (max 35 chars)."
+                                },
+                                advice: {
+                                    type: "string",
+                                    description: "Structured stroke-by-stroke feedback, critique on balance, and magical words of encouragement from Astra-chan."
+                                }
+                            },
+                            required: ["score", "feedbackTitle", "advice"],
+                            additionalProperties: false
+                        }
+                    }
+                }
             })
         });
 
@@ -111,8 +140,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             throw new Error("Empty response received from OpenRouter.");
         }
 
-        const cleaned = replyText.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "");
-const resultObj = JSON.parse(cleaned);
+        const resultObj = JSON.parse(replyText.trim());
 
         // Returns identical JSON object format so your frontend code stays perfectly intact!
         return res.json(resultObj);
