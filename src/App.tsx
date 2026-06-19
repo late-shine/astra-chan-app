@@ -7200,8 +7200,8 @@ export default function App() {
                             <User className="w-3.5 h-3.5 text-natural-forest" />
                           </div>
                           <div className="min-w-0">
-                            <p className="text-xs font-bold font-serif text-natural-foreground truncate">{friend.name}</p>
-                            <p className="text-[9px] font-mono text-natural-forest-light truncate">{friend.uid.slice(0, 16)}...</p>
+                            <p className="text-xs font-bold font-serif text-natural-charcoal truncate">{friend.name}</p>
+                            <p className="text-[9px] font-mono text-natural-forest-light truncate">{friend.uid?.slice(0, 16) ?? "unknown"}...</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-0.5 shrink-0">
