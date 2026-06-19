@@ -90,7 +90,8 @@ Your response MUST be a single raw JSON-compliant object matching the requested 
         throw new Error("Empty response received from OpenRouter.");
       }
 
-      const resultObj = JSON.parse(replyText.trim());
+      const cleaned = replyText.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "");
+const resultObj = JSON.parse(cleaned);
 
       return res.json(resultObj);
     } catch (err: any) {

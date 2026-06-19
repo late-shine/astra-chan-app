@@ -111,7 +111,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             throw new Error("Empty response received from OpenRouter.");
         }
 
-        const resultObj = JSON.parse(replyText.trim());
+        const cleaned = replyText.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "");
+const resultObj = JSON.parse(cleaned);
 
         // Returns identical JSON object format so your frontend code stays perfectly intact!
         return res.json(resultObj);
