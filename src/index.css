@@ -1,0 +1,103 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+JP:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Klee+One:wght@400;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-natural-bg: #FAF7F2;
+  --color-natural-card: #F0ECE3;
+  --color-natural-card-light: #FAF9F6;
+  --color-natural-forest: #2E3A2F;
+  --color-natural-forest-light: #506253;
+  --color-natural-sage: #7E8F7C;
+  --color-natural-earth: #4A3F35;
+  --color-natural-clay: #C27D56;
+  --color-natural-terracotta: #CA5E4B;
+  --color-natural-border: #DFD9CE;
+  --color-natural-charcoal: #2B2D2B;
+
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-serif: "Noto Serif JP", Georgia, serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+/* ── Kana / Kanji Display Font ──────────────────────────────────────────────
+   The Japanese characters (hiragana, katakana, kanji) all use font-serif.
+   We override --font-serif here so the toggle only affects the kana/kanji,
+   leaving the UI body text (font-sans / Inter) completely untouched.
+   :root comes AFTER @import "tailwindcss" so it wins the cascade.
+   Digital: Noto Sans JP (clean, modern strokes)
+   Written: Klee One (semi-handwritten, warm)
+─────────────────────────────────────────────────────────────────────────── */
+:root {
+  --font-serif: "Noto Sans JP", system-ui, sans-serif;
+}
+
+/* Written / semi-handwritten — specificity (0,1,1) beats :root (0,1,0) */
+html.font-written {
+  --font-serif: "Klee One", cursive;
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+body {
+  background-color: var(--color-natural-bg);
+  color: var(--color-natural-charcoal);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* ── Light Mode: Dark Background + Bright Text/Borders ─────────────────────
+   Backgrounds always stay dark (atmospheric image is preserved).
+   Only text, borders, and interactive element colours shift to bright cream
+   so they pop against the dark backdrop.
+─────────────────────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --color-natural-bg: #120E1B;
+  --color-natural-card: #1D1829;
+  --color-natural-card-light: #262036;
+  --color-natural-forest: #F5F0E8;
+  --color-natural-forest-light: #DDD5C8;
+  --color-natural-sage: #C8BFB4;
+  --color-natural-earth: #FAF7F2;
+  --color-natural-clay: #E8B98A;
+  --color-natural-terracotta: #F0967A;
+  --color-natural-border: #C0B8AC;
+  --color-natural-charcoal: #FAF7F2;
+}
+
+/* Cosmic Witch Dark Mode Theme Variables */
+[data-theme="dark"] {
+  --color-natural-bg: #120E1B;
+  --color-natural-card: #1D1829;
+  --color-natural-card-light: #262036;
+  --color-natural-forest: #A788FF;
+  --color-natural-forest-light: #C9B8FF;
+  --color-natural-sage: #8F72E8;
+  --color-natural-earth: #EAE6FF;
+  --color-natural-clay: #DF9BFF;
+  --color-natural-terracotta: #FF7597;
+  --color-natural-border: #32264C;
+  --color-natural-charcoal: #F1EAFF;
+}
+
+/* Custom scrollbar to match Natural Tones design */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-natural-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-natural-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-natural-sage);
+}
+
+/* Smooth active focus glow */
+input, select, textarea, button {
+  transition: all 0.15s ease;
+}
