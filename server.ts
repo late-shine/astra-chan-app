@@ -55,7 +55,7 @@ Your response MUST be a single raw JSON-compliant object matching the requested 
           "X-Title": "Astra App"
         },
         body: JSON.stringify({
-          model: "google/gemini-2.0-flash",
+          model: "google/gemini-2.0-flash-exp:free",
           messages: [
             {
               role: "user",
