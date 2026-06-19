@@ -74,33 +74,7 @@ Your response MUST be a single raw JSON-compliant object matching the requested 
               ]
             }
           ],
-          // FIX: Use json_schema (not json_object) — correct OpenRouter structured output format
-          response_format: {
-            type: "json_schema",
-            json_schema: {
-              name: "kanji_feedback",
-              strict: false,
-              schema: {
-                type: "object",
-                properties: {
-                  score: {
-                    type: "integer",
-                    description: "An accuracy score percentage from 0 to 100."
-                  },
-                  feedbackTitle: {
-                    type: "string",
-                    description: "Cute short praise/motivational title from Astra-chan (max 35 chars)."
-                  },
-                  advice: {
-                    type: "string",
-                    description: "Structured stroke-by-stroke feedback, critique on balance, and magical words of encouragement from Astra-chan."
-                  }
-                },
-                required: ["score", "feedbackTitle", "advice"],
-                additionalProperties: false
-              }
-            }
-          }
+
         })
       });
 
