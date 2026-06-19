@@ -5012,7 +5012,7 @@ export default function App() {
                       {/* Score Badge Header */}
                       <div className="flex items-center gap-3 p-3 bg-natural-bg rounded-2xl border border-natural-border/50">
                         <div className="w-12 h-12 rounded-full border-2 border-natural-clay flex items-center justify-center bg-natural-card font-mono text-base font-extrabold text-natural-charcoal shadow-inner shrink-0 relative">
-                          {analysisResult.score}%
+                          {Number(analysisResult.score) || "?"}%
                         </div>
                         <div>
                           <span className="text-[9px] font-mono text-[#D26E40] uppercase tracking-wider font-extrabold">VERDICT ACCURACY</span>
