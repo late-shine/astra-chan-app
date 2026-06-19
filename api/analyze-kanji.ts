@@ -75,7 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             },
             body: JSON.stringify({
                 // Calling Gemini 2.0 Flash through OpenRouter's routing layer
-                model: "google/gemini-2.0-flash-exp:free",
+                model: "google/gemma-4-31b-it:free",
                 messages: [
                     {
                         role: "user",
