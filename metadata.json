@@ -1,8 +1,0 @@
-{
-  "name": "Remix: Astra-chan - Learn Hiragana \u0026 Kanji",
-  "description": "An interactive, cute companion-led Hiragana and Kanji practicing app featuring a drawing canvas, randomized tests, pronunciation audio guides, and streaks tracking.",
-  "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
-}
