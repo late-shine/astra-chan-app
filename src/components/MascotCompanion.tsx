@@ -48,13 +48,13 @@ export default function MascotCompanion({
       case "success":
         return "🔮 Yatta! Perfect spell alignment! Your stroke coordinates are glowing with pure magical power. Keep going, wizard! ✨";
       case "failure":
-        return "🧙‍♀️ Daijoubu! Even grand wizards fizzle their spells sometimes. Take a deep breath of green tea mist, click the speaker helper to check the voice accent, and cast it again!";
+        return "^^ Daijoubu! Even grand wizards fizzle their spells sometimes. Take a deep breath of green tea mist, click the speaker helper to check the voice accent, and cast it again!";
       case "kanji":
         return `✍️ Tracing the ancient kanji ${selectedChar ? `"${selectedChar}"` : "symbol"} on our washi paper grid focuses your mystical energy. Let your pen follow the brush strokes in proper order!`;
       case "learn-flashcard":
         return "📖 You are safe inside the Sanctuary! Click on any elemental rune card to hear its native pronunciation audio and see its hidden dictionary combinations.";
       case "learn-vocabs":
-        return "🌿 Ah, the N5 Word Garden! We have over 320 spell ingredients here, grouped by category. Study each plant closely and click the checkmark to store it in your inventory!";
+        return "🌿 Ah, the N5 Word Garden! We have over 720+ spell ingredients here, grouped by category. Study each plant closely and click the checkmark to store it in your inventory!";
       case "survival-danger":
         return "🔥 Oh no! The midnight candle is flickering down! Enter your romaji spelling key faster to fuel the mystical flame, quick! ⚡";
       case "clicked":
