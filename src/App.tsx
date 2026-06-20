@@ -45,6 +45,7 @@ import {
   Plus,
   Download,
   Upload,
+  Table2,
 } from "lucide-react";
 
 import { HIRAGANA_DATA, KATAKANA_DATA, KANJI_DATA, VOCABULARY_DATA } from "./data";
@@ -75,6 +76,7 @@ import { HiraganaItem, KatakanaItem, KanjiItem, VocabularyItem, StudentStats, SR
 import DrawingCanvas from "./components/DrawingCanvas";
 import MascotCompanion from "./components/MascotCompanion";
 import AtmosphereCanvas from "./components/AtmosphereCanvas";
+import ReferenceCharts from "./components/ReferenceCharts";
 import { useSRS } from "./hooks/useSRS";
 import wonderingImg from "./assets/images/astra-wondering.jpeg";
 import excitedImg from "./assets/images/astra-excited.png.jpeg";
@@ -163,7 +165,7 @@ function playClickTick() {
 
 export default function App() {
   // Screens navigation state
-  const [currentScreen, setCurrentScreen] = useState<"menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz">("menu");
+  const [currentScreen, setCurrentScreen] = useState<"menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts">("menu");
   const [quizMode, setQuizMode] = useState<"choice" | "romaji" | "survival">("choice");
 
   // ── SRS Review Deck (hook + session state) ─────────────────────────────────
@@ -3700,12 +3702,19 @@ export default function App() {
                           icon: Volume2,
                           accent: "quiet",
                           action: () => {
-                            setIsMusicExpanded(true);
-                            setIsAtmosphereExpanded(true);
-                            showToast("Music and atmosphere controls opened.");
-                          },
-                        },
-                      ].map((roomItem) => {
+                                              setIsMusicExpanded(true);
+                                              setIsAtmosphereExpanded(true);
+                                              showToast("Music and atmosphere controls opened.");
+                                            },
+                                          },
+                                          {
+                                            title: "Reference Charts",
+                                            desc: "Grammar, counters & tables",
+                                            icon: Table2,
+                                            accent: "clay",
+                                            action: () => setCurrentScreen("charts"),
+                                          },
+                                        ].map((roomItem) => {
                         const Icon = roomItem.icon;
                         const activeClass = roomItem.accent === "forest"
                           ? "hover:border-natural-forest/70 hover:bg-natural-forest/10 text-natural-forest"
@@ -7357,6 +7366,11 @@ export default function App() {
                 })}
               </div>
             </motion.div>
+          )}
+
+          {/* ================= SCREEN: REFERENCE CHARTS ================= */}
+          {currentScreen === "charts" && (
+            <ReferenceCharts onBack={() => setCurrentScreen("menu")} />
           )}
 
           {/* ================= SCREEN: SRS REVIEW DECK ================= */}
