@@ -146,7 +146,7 @@ The home screen is Astra-chan's room — each object is a destination:
 | Animation | Framer Motion |
 | Database | Firebase Realtime Database |
 | Auth | Firebase Anonymous Auth |
-| AI Grading | Gemma 4 31B Vision (via OpenRouter) |
+| AI Grading | Cloudflare Workers AI |
 | Deployment | Vercel (serverless functions for API) |
 | Icons | Lucide React |
 
