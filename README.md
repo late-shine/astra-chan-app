@@ -5,6 +5,8 @@
 **Live App → [astra-kanji-tutor.vercel.app](https://astra-kanji-tutor.vercel.app)**  
 **GitHub → [github.com/late-shine/astra-chan-app](https://github.com/late-shine/astra-chan-app)**
 
+![Astra-chan's Study Room — the atmospheric home screen](docs/study-room.png)
+
 ---
 
 ## The Story
@@ -69,6 +71,11 @@ The home screen is Astra-chan's room — each object is a destination:
 - **Kanji Quiz** — meaning mode and reading mode, no category hints (so it actually tests knowledge)
 - **Kanji Drawing** — draw kanji on a canvas; graded by AI for stroke accuracy
 
+<p align="center">
+  <img src="docs/quiz-settings.png" alt="Quiz Settings — script, timer, and mode selector" width="49%" />
+  <img src="docs/kanji-drawing.png" alt="Kanji Drawing — stroke workspace with AI accuracy engine" width="49%" />
+</p>
+
 ### 📖 Grammar Dojo
 - 12 core N5 grammar patterns with full explanations
 - Expandable cards showing structure, 3 example sentences, and tips
@@ -84,6 +91,8 @@ The home screen is Astra-chan's room — each object is a destination:
 - **Adjectives** — い vs な conjugation tables with common mistakes
 - **Particles** — は/が/を/に/で/へ/の/と/も/から/まで with examples
 - Search bar and 🔊 pronunciation on every row
+
+![Reference Charts — Verb Groups table with readings and conjugations](docs/reference-charts.png)
 
 ### 🔁 Spaced Repetition (SRS)
 - Add any word or kanji to your personal Review Deck
@@ -108,6 +117,11 @@ The home screen is Astra-chan's room — each object is a destination:
 - 10 mastery badges (First Steps, Survivor, Week Warrior, Deck Master, N5 Scholar, and more)
 - Progress backup — download stats as JSON, restore anytime
 - Voice picker — choose from all Japanese voices available on your device
+
+<p align="center">
+  <img src="docs/calendar-stats.png" alt="Study Calendar — XP, streak, and monthly activity" width="49%" />
+  <img src="docs/character-grid.png" alt="Character Grid — progress tracking per kana" width="49%" />
+</p>
 
 ### 🎨 Atmosphere & Mascot
 - 5 animated background scenes with floating Japanese characters
@@ -195,6 +209,7 @@ OPENROUTER_API_KEY=
 
 ## Roadmap
 
+- [x] Study Room visual redesign (navigation as Astra-chan's room)
 - [x] Reference Charts (counters, particles, verb groups, adjectives, time)
 - [x] Grammar Dojo with N5 patterns and fill-in-the-blank practice
 - [x] Spaced Repetition System (SRS)
