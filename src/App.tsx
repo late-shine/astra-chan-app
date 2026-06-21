@@ -46,6 +46,7 @@ import {
   Download,
   Upload,
   Table2,
+  GraduationCap,
 } from "lucide-react";
 
 import { HIRAGANA_DATA, KATAKANA_DATA, KANJI_DATA, VOCABULARY_DATA } from "./data";
@@ -77,6 +78,7 @@ import DrawingCanvas from "./components/DrawingCanvas";
 import MascotCompanion from "./components/MascotCompanion";
 import AtmosphereCanvas from "./components/AtmosphereCanvas";
 import ReferenceCharts from "./components/ReferenceCharts";
+import GrammarDojo from "./components/GrammarDojo";
 import { useSRS } from "./hooks/useSRS";
 import wonderingImg from "./assets/images/astra-wondering.jpeg";
 import excitedImg from "./assets/images/astra-excited.png.jpeg";
@@ -165,7 +167,7 @@ function playClickTick() {
 
 export default function App() {
   // Screens navigation state
-  const [currentScreen, setCurrentScreen] = useState<"menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts">("menu");
+  const [currentScreen, setCurrentScreen] = useState<"menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo">("menu");
   const [quizMode, setQuizMode] = useState<"choice" | "romaji" | "survival">("choice");
 
   // ── SRS Review Deck (hook + session state) ─────────────────────────────────
@@ -3713,6 +3715,13 @@ export default function App() {
                                             icon: Table2,
                                             accent: "clay",
                                             action: () => setCurrentScreen("charts"),
+                                          },
+                                          {
+                                            title: "Grammar Dojo",
+                                            desc: "N5 grammar patterns & practice",
+                                            icon: GraduationCap,
+                                            accent: "forest",
+                                            action: () => setCurrentScreen("grammar-dojo"),
                                           },
                                         ].map((roomItem) => {
                         const Icon = roomItem.icon;
@@ -7371,6 +7380,11 @@ export default function App() {
           {/* ================= SCREEN: REFERENCE CHARTS ================= */}
           {currentScreen === "charts" && (
             <ReferenceCharts onBack={() => setCurrentScreen("menu")} />
+          )}
+
+          {/* ================= SCREEN: GRAMMAR DOJO ================= */}
+          {currentScreen === "grammar-dojo" && (
+            <GrammarDojo onBack={() => setCurrentScreen("menu")} onAwardXP={(xp) => awardXPAndIncrementAttempt(true, xp)} />
           )}
 
           {/* ================= SCREEN: SRS REVIEW DECK ================= */}
