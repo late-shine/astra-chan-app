@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ChevronLeft, Search, Volume2, Lightbulb, CheckCircle2, XCircle } from "lucide-react";
 
@@ -307,12 +307,14 @@ function buildQuiz(): QuizQuestion[] {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function ExampleRow({ example }: { example: GrammarExample }) {
+function ExampleRow({ example, showRomaji }: { example: GrammarExample; showRomaji: boolean }) {
   return (
     <div className="flex items-start justify-between gap-2 py-1">
       <div>
         <p className="font-serif text-base text-natural-charcoal">{example.japanese}</p>
-        <p className="font-serif text-xs text-natural-charcoal/60">{example.reading}</p>
+        {showRomaji && (
+          <p className="font-serif text-xs text-natural-charcoal/60">{example.reading}</p>
+        )}
         <p className="font-sans text-xs text-natural-charcoal/50 italic">{example.english}</p>
       </div>
       <button
@@ -376,6 +378,22 @@ export default function GrammarDojo({ onBack, onAwardXP }: GrammarDojoProps) {
   const [quizDone, setQuizDone] = useState(false);
   // ref keeps score in sync for XP calc (avoids stale closure on last question)
   const scoreRef = useRef(0);
+
+  // ── Romaji visibility (shared preference with Reference Charts) ────────────
+  const [showRomaji, setShowRomaji] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem("astra_show_romaji");
+      if (stored === "true") return true;
+      if (stored === "false") return false;
+    } catch (e) { }
+    return true; // N5 beginners need it visible by default
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("astra_show_romaji", String(showRomaji));
+    } catch (e) { }
+  }, [showRomaji]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
@@ -448,14 +466,28 @@ export default function GrammarDojo({ onBack, onAwardXP }: GrammarDojoProps) {
     <div className="flex flex-col">
       {/* Sticky header */}
       <div className="sticky top-0 z-20 bg-natural-bg/95 backdrop-blur border-b border-natural-border/70 px-4 py-3 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={mode === "practice" ? () => setMode("study") : onBack}
-          className="flex items-center gap-1.5 text-xs font-semibold text-natural-forest-light hover:text-natural-forest transition cursor-pointer"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          {mode === "practice" ? "Back to Patterns" : "Back to Room"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={mode === "practice" ? () => setMode("study") : onBack}
+            className="flex items-center gap-1.5 text-xs font-semibold text-natural-forest-light hover:text-natural-forest transition cursor-pointer"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            {mode === "practice" ? "Back to Patterns" : "Back to Room"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowRomaji((v) => !v)}
+            className={`rounded-full border border-natural-border px-2.5 py-1 text-xs font-mono transition cursor-pointer ${
+              showRomaji
+                ? "bg-natural-forest/10 text-natural-forest"
+                : "bg-natural-card text-natural-charcoal/50"
+            }`}
+            title={showRomaji ? "Hide romaji readings" : "Show romaji readings"}
+          >
+            {showRomaji ? "A Hide Romaji" : "ふ Show Romaji"}
+          </button>
+        </div>
         <div className="text-center">
           <h2 className="font-serif font-extrabold text-lg text-natural-forest leading-none">Grammar Dojo</h2>
           <p className="text-[10px] font-mono text-natural-forest-light uppercase tracking-wider mt-0.5">
@@ -573,7 +605,7 @@ export default function GrammarDojo({ onBack, onAwardXP }: GrammarDojoProps) {
 
                       <p className="text-xs text-natural-charcoal/70 font-sans mt-1">{p.meaning}</p>
 
-                      {!isExpanded && p.examples[0] && <ExampleRow example={p.examples[0]} />}
+                      {!isExpanded && p.examples[0] && <ExampleRow example={p.examples[0]} showRomaji={showRomaji} />}
 
                       <AnimatePresence initial={false}>
                         {isExpanded && (
@@ -588,7 +620,7 @@ export default function GrammarDojo({ onBack, onAwardXP }: GrammarDojoProps) {
                             </div>
                             <div className="flex flex-col gap-2 mt-2">
                               {p.examples.map((ex, i) => (
-                                <ExampleRow key={i} example={ex} />
+                                <ExampleRow key={i} example={ex} showRomaji={showRomaji} />
                               ))}
                             </div>
                             {p.tip && (
@@ -709,11 +741,13 @@ export default function GrammarDojo({ onBack, onAwardXP }: GrammarDojoProps) {
                           />
                         </div>
 
-                        {/* Hint */}
-                        <div className="flex gap-1.5 text-xs text-natural-charcoal/50">
-                          <Lightbulb className="w-3.5 h-3.5 text-natural-clay/70 shrink-0 mt-0.5" />
-                          <span>{currentQ.hint}</span>
-                        </div>
+                        {/* Hint — respects romaji toggle */}
+                        {showRomaji && (
+                          <div className="flex gap-1.5 text-xs text-natural-charcoal/50">
+                            <Lightbulb className="w-3.5 h-3.5 text-natural-clay/70 shrink-0 mt-0.5" />
+                            <span>{currentQ.hint}</span>
+                          </div>
+                        )}
 
                         {/* Answer choices */}
                         <div className="grid grid-cols-2 gap-2 mt-1">

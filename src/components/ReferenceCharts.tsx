@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ChevronLeft, Volume2, Search, AlertTriangle, Lightbulb, Zap } from "lucide-react";
 
@@ -342,7 +342,7 @@ const MINUTES = [
   { min: "10分", reading: "じゅっぷん", change: true },
 ];
 
-function TimeTab() {
+function TimeTab({ showRomaji }: { showRomaji: boolean }) {
   const [q, setQ] = useState("");
   return (
     <div className="flex flex-col gap-5">
@@ -353,13 +353,13 @@ function TimeTab() {
         <p className="text-[10px] font-mono text-natural-forest uppercase tracking-wider mb-2">Days of the Week (曜日)</p>
         <div className="overflow-x-auto rounded-2xl border border-natural-border">
           <table className="w-full border-collapse">
-            <TableHeader cols={["Kanji", "Reading", "English", "Memory tip"]} />
+            <TableHeader cols={showRomaji ? ["Kanji", "Reading", "English", "Memory tip"] : ["Kanji", "English", "Memory tip"]} />
             <tbody>
               {DAYS_OF_WEEK.filter(r => !q || [r.kanji, r.reading, r.english].some(s => s.toLowerCase().includes(q.toLowerCase()))).map((row, i) => (
                 <TableRow key={row.kanji} idx={i} speakText={row.reading}
                   cells={[
                     <span className="font-serif text-base text-natural-forest font-bold">{row.kanji}</span>,
-                    <span className="font-serif text-natural-charcoal">{row.reading}</span>,
+                    ...(showRomaji ? [<span className="font-serif text-natural-charcoal">{row.reading}</span>] : []),
                     <span>{row.english}</span>,
                     <span className="text-natural-charcoal/50 italic text-[11px]">{row.memory}</span>,
                   ]}
@@ -392,13 +392,13 @@ function TimeTab() {
         <p className="text-[10px] font-mono text-natural-forest uppercase tracking-wider mb-2">Days of the Month (日) — The Tricky Ones ★</p>
         <div className="overflow-x-auto rounded-2xl border border-natural-border">
           <table className="w-full border-collapse">
-            <TableHeader cols={["Day", "Reading", "Type"]} />
+            <TableHeader cols={showRomaji ? ["Day", "Reading", "Type"] : ["Day", "Type"]} />
             <tbody>
               {DAYS_OF_MONTH.filter(r => !q || [r.day, r.reading].some(s => s.toLowerCase().includes(q.toLowerCase()))).map((row, i) => (
                 <TableRow key={row.day} idx={i} speakText={row.reading}
                   cells={[
                     <span className="font-serif text-base text-natural-forest font-bold">{row.day}</span>,
-                    <span className="font-serif text-natural-charcoal">{row.reading}</span>,
+                    ...(showRomaji ? [<span className="font-serif text-natural-charcoal">{row.reading}</span>] : []),
                     <span className={row.note ? "text-natural-clay text-[11px] font-medium" : "text-natural-charcoal/30 text-[11px]"}>{row.note || "regular (number + にち)"}</span>,
                   ]}
                 />
@@ -464,7 +464,7 @@ const G2_VERBS = [
   { dict: "教える", reading: "おしえる", te: "おしえて", masu: "おしえます", meaning: "to teach" },
 ];
 
-function VerbsTab() {
+function VerbsTab({ showRomaji }: { showRomaji: boolean }) {
   const [q, setQ] = useState("");
   const filterVerb = (verbs: typeof G1_VERBS) =>
     !q ? verbs : verbs.filter(r => [r.dict, r.reading, r.te, r.masu, r.meaning].some(s => s.toLowerCase().includes(q.toLowerCase())));
@@ -483,13 +483,13 @@ function VerbsTab() {
         </div>
         <div className="overflow-x-auto rounded-2xl border border-natural-border">
           <table className="w-full border-collapse">
-            <TableHeader cols={["Dictionary", "Reading", "て-form", "ます-form", "Meaning"]} />
+            <TableHeader cols={showRomaji ? ["Dictionary", "Reading", "て-form", "ます-form", "Meaning"] : ["Dictionary", "て-form", "ます-form", "Meaning"]} />
             <tbody>
               {filterVerb(G1_VERBS).map((row, i) => (
                 <TableRow key={row.dict} idx={i} speakText={row.reading}
                   cells={[
                     <span className="font-serif text-base text-natural-forest font-bold">{row.dict}</span>,
-                    <span className="font-serif text-natural-charcoal">{row.reading}</span>,
+                    ...(showRomaji ? [<span className="font-serif text-natural-charcoal">{row.reading}</span>] : []),
                     <span className="font-serif text-natural-charcoal">{row.te}</span>,
                     <span className="font-serif text-natural-charcoal">{row.masu}</span>,
                     <span className={row.meaning.includes("⚠️") || row.meaning.includes("★") ? "text-natural-clay text-[11px]" : "text-[11px]"}>{row.meaning}</span>,
@@ -508,13 +508,13 @@ function VerbsTab() {
         </div>
         <div className="overflow-x-auto rounded-2xl border border-natural-border">
           <table className="w-full border-collapse">
-            <TableHeader cols={["Dictionary", "Reading", "て-form", "ます-form", "Meaning"]} />
+            <TableHeader cols={showRomaji ? ["Dictionary", "Reading", "て-form", "ます-form", "Meaning"] : ["Dictionary", "て-form", "ます-form", "Meaning"]} />
             <tbody>
               {filterVerb(G2_VERBS).map((row, i) => (
                 <TableRow key={row.dict} idx={i} speakText={row.reading}
                   cells={[
                     <span className="font-serif text-base text-natural-forest font-bold">{row.dict}</span>,
-                    <span className="font-serif text-natural-charcoal">{row.reading}</span>,
+                    ...(showRomaji ? [<span className="font-serif text-natural-charcoal">{row.reading}</span>] : []),
                     <span className="font-serif text-natural-charcoal">{row.te}</span>,
                     <span className="font-serif text-natural-charcoal">{row.masu}</span>,
                     <span className="text-[11px]">{row.meaning}</span>,
@@ -583,7 +583,7 @@ const NA_ADJ = [
   { dict: "嫌い", reading: "きらい", neg: "嫌いじゃない", past: "嫌いだった", pastNeg: "嫌いじゃなかった", noun: "嫌いな+N", meaning: "disliked" },
 ];
 
-function AdjectivesTab() {
+function AdjectivesTab({ showRomaji }: { showRomaji: boolean }) {
   const [q, setQ] = useState("");
   const filterAdj = (adjs: typeof I_ADJ) =>
     !q ? adjs : adjs.filter(r => [r.dict, r.reading, r.meaning].some(s => s.toLowerCase().includes(q.toLowerCase())));
@@ -599,13 +599,13 @@ function AdjectivesTab() {
         </div>
         <div className="overflow-x-auto rounded-2xl border border-natural-border">
           <table className="w-full border-collapse">
-            <TableHeader cols={["Adjective", "Reading", "Negative", "Past", "Past Neg.", "Before noun", "Meaning"]} />
+            <TableHeader cols={showRomaji ? ["Adjective", "Reading", "Negative", "Past", "Past Neg.", "Before noun", "Meaning"] : ["Adjective", "Negative", "Past", "Past Neg.", "Before noun", "Meaning"]} />
             <tbody>
               {filterAdj(I_ADJ).map((row, i) => (
                 <TableRow key={row.dict} idx={i} speakText={row.reading}
                   cells={[
                     <span className="font-serif text-base text-natural-forest font-bold">{row.dict}</span>,
-                    <span className="font-serif text-xs">{row.reading}</span>,
+                    ...(showRomaji ? [<span className="font-serif text-xs">{row.reading}</span>] : []),
                     <span className="font-serif text-xs">{row.neg}</span>,
                     <span className="font-serif text-xs">{row.past}</span>,
                     <span className="font-serif text-xs">{row.pastNeg}</span>,
@@ -629,13 +629,13 @@ function AdjectivesTab() {
         </div>
         <div className="overflow-x-auto rounded-2xl border border-natural-border">
           <table className="w-full border-collapse">
-            <TableHeader cols={["Adjective", "Reading", "Negative", "Past", "Past Neg.", "Before noun", "Meaning"]} />
+            <TableHeader cols={showRomaji ? ["Adjective", "Reading", "Negative", "Past", "Past Neg.", "Before noun", "Meaning"] : ["Adjective", "Negative", "Past", "Past Neg.", "Before noun", "Meaning"]} />
             <tbody>
               {filterAdj(NA_ADJ).map((row, i) => (
                 <TableRow key={row.dict} idx={i} speakText={row.reading}
                   cells={[
                     <span className="font-serif text-base text-natural-forest font-bold">{row.dict}</span>,
-                    <span className="font-serif text-xs">{row.reading}</span>,
+                    ...(showRomaji ? [<span className="font-serif text-xs">{row.reading}</span>] : []),
                     <span className="font-serif text-xs">{row.neg}</span>,
                     <span className="font-serif text-xs">{row.past}</span>,
                     <span className="font-serif text-xs">{row.pastNeg}</span>,
@@ -761,7 +761,7 @@ const PARTICLES = [
   },
 ];
 
-function ParticlesTab() {
+function ParticlesTab({ showRomaji }: { showRomaji: boolean }) {
   const [q, setQ] = useState("");
   const filtered = useMemo(() => {
     if (!q) return PARTICLES;
@@ -785,14 +785,18 @@ function ParticlesTab() {
             <div className="flex items-start gap-3">
               <div className="flex flex-col items-center shrink-0">
                 <span className="font-serif text-2xl text-natural-forest font-bold leading-none">{p.particle}</span>
-                <span className="font-mono text-[9px] text-natural-forest/50 mt-0.5">({p.reading})</span>
+                {showRomaji && (
+                  <span className="font-mono text-[9px] text-natural-forest/50 mt-0.5">({p.reading})</span>
+                )}
                 <SpeakButton text={p.particle} />
               </div>
               <div className="flex flex-col gap-1 flex-grow min-w-0">
                 <span className="text-[10px] font-mono text-natural-forest/70 uppercase tracking-wider">{p.core}</span>
                 <div className="bg-natural-bg/60 rounded-xl px-3 py-2 border border-natural-border/50">
                   <span className="font-serif text-sm text-natural-charcoal font-medium block">{p.example}</span>
-                  <span className="font-sans text-[10px] text-natural-charcoal/50 block">{p.exReading}</span>
+                  {showRomaji && (
+                    <span className="font-sans text-[10px] text-natural-charcoal/50 block">{p.exReading}</span>
+                  )}
                   <span className="font-sans text-[11px] text-natural-charcoal/70 block italic">{p.exMeaning}</span>
                 </div>
                 <p className="text-[11px] text-natural-charcoal/60 font-sans leading-relaxed">{p.mistake}</p>
@@ -819,14 +823,30 @@ const TABS: { id: TabId; label: string; emoji: string }[] = [
 export default function ReferenceCharts({ onBack }: ReferenceChartsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("counters");
 
+  // ── Romaji visibility (shared preference with Grammar Dojo) ────────────────
+  const [showRomaji, setShowRomaji] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem("astra_show_romaji");
+      if (stored === "true") return true;
+      if (stored === "false") return false;
+    } catch (e) { }
+    return true; // N5 beginners need it visible by default
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("astra_show_romaji", String(showRomaji));
+    } catch (e) { }
+  }, [showRomaji]);
+
   const renderTab = () => {
     switch (activeTab) {
       case "counters": return <CountersTab />;
       case "numbers": return <NumbersTab />;
-      case "time": return <TimeTab />;
-      case "verbs": return <VerbsTab />;
-      case "adjectives": return <AdjectivesTab />;
-      case "particles": return <ParticlesTab />;
+      case "time": return <TimeTab showRomaji={showRomaji} />;
+      case "verbs": return <VerbsTab showRomaji={showRomaji} />;
+      case "adjectives": return <AdjectivesTab showRomaji={showRomaji} />;
+      case "particles": return <ParticlesTab showRomaji={showRomaji} />;
     }
   };
 
@@ -843,6 +863,18 @@ export default function ReferenceCharts({ onBack }: ReferenceChartsProps) {
             >
               <ChevronLeft className="w-3.5 h-3.5" />
               Back to Room
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowRomaji((v) => !v)}
+              className={`rounded-full border border-natural-border px-2.5 py-1 text-xs font-mono transition cursor-pointer ${
+                showRomaji
+                  ? "bg-natural-forest/10 text-natural-forest"
+                  : "bg-natural-card text-natural-charcoal/50"
+              }`}
+              title={showRomaji ? "Hide romaji readings" : "Show romaji readings"}
+            >
+              {showRomaji ? "A Hide Romaji" : "ふ Show Romaji"}
             </button>
             <div className="flex flex-col">
               <h1 className="font-serif font-extrabold text-base text-natural-charcoal leading-tight">Reference Charts</h1>
