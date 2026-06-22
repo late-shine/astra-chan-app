@@ -146,7 +146,7 @@ The home screen is Astra-chan's room — each object is a destination:
 | Animation | Framer Motion |
 | Database | Firebase Realtime Database |
 | Auth | Firebase Anonymous Auth |
-| AI Grading | Gemma 4 31B Vision (via OpenRouter) |
+| AI Grading | Cloudflare Workers AI |
 | Deployment | Vercel (serverless functions for API) |
 | Icons | Lucide React |
 
@@ -218,7 +218,7 @@ OPENROUTER_API_KEY=
 - [x] Streak calendar and achievement badges
 - [x] Progress backup and restore
 - [x] Astra-chan AFK reactions with 3 artwork states
-- [ ] Kanji AI drawing analysis (in progress — OpenRouter integration)
+- [x] Kanji AI drawing analysis (10,000 neurons (requests) per day)
 - [ ] Custom chart maker (user-created reference tables)
 - [ ] N4 vocabulary expansion
 - [ ] App component splitting (App.tsx is currently 7500+ lines)
