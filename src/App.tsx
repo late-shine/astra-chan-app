@@ -1655,7 +1655,7 @@ export default function App() {
     speakJapanese(KANJI_DATA[target].kanji);
   };
 
-  // const handleContemplateKanji = () => {
+  const handleContemplateKanji = () => {
   const activeKanji = KANJI_DATA[currentKanjiIndex].kanji;
 
   if (sessionStudiedKanji.has(activeKanji)) {
@@ -1664,15 +1664,13 @@ export default function App() {
   }
   sessionStudiedKanji.add(activeKanji);
 
-  // rest stays exactly the same
-
-    // FIX: Use functional state update to avoid stale-closure XP loss
-    setStats((prev) => {
-      const updated = { ...prev, xp: prev.xp + 40 };
-      localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(updated));
-      return updated;
-    });
-    playChime(true);
+  // FIX: Use functional state update to avoid stale-closure XP loss
+  setStats((prev) => {
+    const updated = { ...prev, xp: prev.xp + 40 };
+    localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(updated));
+    return updated;
+  });
+  playChime(true);
     showToast(`+40 XP for studying "${activeKanji}"!`);
   };
 
