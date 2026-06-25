@@ -1655,9 +1655,16 @@ export default function App() {
     speakJapanese(KANJI_DATA[target].kanji);
   };
 
-  // Record viewed/studied Kanji script
-  const handleContemplateKanji = () => {
-    const activeKanji = KANJI_DATA[currentKanjiIndex].kanji;
+  // const handleContemplateKanji = () => {
+  const activeKanji = KANJI_DATA[currentKanjiIndex].kanji;
+
+  if (sessionStudiedKanji.has(activeKanji)) {
+    showToast(`Already studied "${activeKanji}" this session!`);
+    return;
+  }
+  sessionStudiedKanji.add(activeKanji);
+
+  // rest stays exactly the same
 
     // FIX: Use functional state update to avoid stale-closure XP loss
     setStats((prev) => {
@@ -1792,6 +1799,7 @@ export default function App() {
 
   // FIX: Track mascot timeout to prevent rapid-click stacking
   const mascotTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionStudiedKanji = useRef<Set<string>>(new Set()).current;
 
   // ── Idle / AFK detection refs ──────────────────────────────────────────────
   const lastInteractionRef = useRef<number>(Date.now());
