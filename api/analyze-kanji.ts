@@ -3,7 +3,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Vercel Serverless Function — POST /api/analyze-kanji
  *
- * Proxies canvas drawing data to Cloudflare Workers AI (Llama 3.2 11B Vision).
+ * Proxies canvas drawing data to Cloudflare Workers AI (LLaVA 1.5 7B vision model).
  * Credentials live exclusively in Vercel Environment Variables — never the client.
  *
  * Required env vars (Vercel Dashboard → Project → Settings → Environment Variables):
@@ -43,16 +43,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
         // ─── Build the Astra-chan evaluation prompt ───────────────────────────
+        // Pick a random encouragement style so feedback never feels repetitive
+        const styles = [
+            "Be warm and sisterly, like a tutor cheering on a younger student.",
+            "Be playful and magical, like a witch casting a learning spell.",
+            "Be precise and focused, like a sensei giving a lesson.",
+            "Be enthusiastic and celebratory, like a fan cheering at a match.",
+        ];
+        const style = styles[Math.floor(Math.random() * styles.length)];
+
         const promptText =
-            `You are Astra-chan (アストラちゃん), an enthusiastic and cute magical-girl mascot ` +
-            `who guides students through learning Japanese.\n` +
-            `Analyze the user's handwritten/drawn attempt for the Kanji character "${kanji}" ` +
-            `(meaning: "${meaning || "unknown"}").\n\n` +
-            `Compare their drawing to the correct structure, strokes, proportions, and balance of "${kanji}".\n` +
-            `Score 0-100. 90-100=near perfect, 70-89=good minor issues, 50-69=recognisable with mistakes, below 50=significant problems.\n\n` +
-            `Mention specific strokes or parts. Never say just "keep practicing" without specifics.\n` +
-            `Respond with ONLY this JSON, no other text:\n` +
-            `{"score":<integer 0-100>,"feedbackTitle":"<upbeat title under 35 chars>","advice":"<2-3 sentences of specific feedback about this drawing>"}`;
+            `You are evaluating a student's handwritten drawing of the Japanese kanji "${kanji}" (meaning: "${meaning || "unknown"}").\n` +
+            `Tone: ${style}\n\n` +
+            `Look at the image and evaluate these points:\n` +
+            `- Do the strokes match the correct structure of "${kanji}"?\n` +
+            `- Are the proportions and balance correct?\n` +
+            `- Does the overall shape resemble "${kanji}"?\n\n` +
+            `Score from 0 to 100:\n` +
+            `90-100 = excellent, matches "${kanji}" very closely\n` +
+            `70-89 = good effort, small issues with strokes or proportions\n` +
+            `50-69 = recognisable but needs work on specific parts\n` +
+            `below 50 = significant issues, needs more practice\n\n` +
+            `Write 2-3 sentences of specific feedback. ` +
+            `Vary your language — use different encouraging phrases each time. ` +
+            `Mention actual parts of the kanji that look good or need fixing. ` +
+            `End with one specific actionable tip for improvement.\n\n` +
+            `Reply with ONLY this JSON and nothing else:\n` +
+            `{"score":<integer 0-100>,"feedbackTitle":"<creative upbeat title under 35 chars>","advice":"<your 2-3 sentence feedback>"}`;
 
         // ─── Convert base64 image → uint8 array (Cloudflare Workers AI format) ─
         const base64Data = imageData.startsWith("data:")
@@ -60,9 +77,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             : imageData;
         const imageBytes = Array.from(Buffer.from(base64Data, "base64"));
 
-        // ─── Call Cloudflare Workers AI — Llama 3.2 11B Vision ─────────────
+        // ─── Call Cloudflare Workers AI — LLaVA 1.5 7B ──────────────────────
         const response = await fetch(
-            `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`,
+            `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`,
             {
                 method: "POST",
                 headers: {
@@ -71,7 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 },
                 body: JSON.stringify({
                     image: imageBytes,
-                    prompt: `agree\n\n${promptText}`,
+                    prompt: promptText,
                     max_tokens: 600,
                 }),
             }
