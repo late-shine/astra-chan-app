@@ -3,7 +3,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Vercel Serverless Function — POST /api/analyze-kanji
  *
- * Proxies canvas drawing data to Cloudflare Workers AI (LLaVA 1.5 vision model).
+ * Proxies canvas drawing data to Cloudflare Workers AI (Llama 3.2 11B Vision).
  * Credentials live exclusively in Vercel Environment Variables — never the client.
  *
  * Required env vars (Vercel Dashboard → Project → Settings → Environment Variables):
@@ -49,9 +49,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             `Analyze the user's handwritten/drawn attempt for the Kanji character "${kanji}" ` +
             `(meaning: "${meaning || "unknown"}").\n\n` +
             `Compare their drawing to the correct structure, strokes, proportions, and balance of "${kanji}".\n` +
-            `Score accuracy from 0 to 100 — be fair but encouraging!\n\n` +
-            `Respond ONLY with a raw JSON object (no markdown, no backticks, no extra text):\n` +
-            `{"score":<integer 0-100>,"feedbackTitle":"<short cute title max 35 chars>","advice":"<detailed stroke feedback and encouragement>"}`;
+            `Score 0-100. 90-100=near perfect, 70-89=good minor issues, 50-69=recognisable with mistakes, below 50=significant problems.\n\n` +
+            `Mention specific strokes or parts. Never say just "keep practicing" without specifics.\n` +
+            `Respond with ONLY this JSON, no other text:\n` +
+            `{"score":<integer 0-100>,"feedbackTitle":"<upbeat title under 35 chars>","advice":"<2-3 sentences of specific feedback about this drawing>"}`;
 
         // ─── Convert base64 image → uint8 array (Cloudflare Workers AI format) ─
         const base64Data = imageData.startsWith("data:")
@@ -59,9 +60,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             : imageData;
         const imageBytes = Array.from(Buffer.from(base64Data, "base64"));
 
-        // ─── Call Cloudflare Workers AI — LLaVA 1.5 7B (vision model) ────────
+        // ─── Call Cloudflare Workers AI — Llama 3.2 11B Vision ─────────────
         const response = await fetch(
-            `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`,
+            `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`,
             {
                 method: "POST",
                 headers: {
@@ -71,7 +72,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 body: JSON.stringify({
                     image: imageBytes,
                     prompt: promptText,
-                    max_tokens: 512,
+                    max_tokens: 600,
                 }),
             }
         );
