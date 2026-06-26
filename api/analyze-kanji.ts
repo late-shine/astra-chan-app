@@ -73,6 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     image: imageBytes,
                     prompt: promptText,
                     max_tokens: 600,
+                    agree: "yes",
                 }),
             }
         );
