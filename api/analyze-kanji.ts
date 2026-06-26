@@ -71,9 +71,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 },
                 body: JSON.stringify({
                     image: imageBytes,
-                    prompt: promptText,
+                    prompt: `agree\n\n${promptText}`,
                     max_tokens: 600,
-                    agree: "yes",
                 }),
             }
         );
