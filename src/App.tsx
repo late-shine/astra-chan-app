@@ -569,7 +569,7 @@ export default function App() {
   }, [isMusicPlaying]);
 
   useEffect(() => {
-    if (false) {
+    if (activeMediaSource === "synth" && isMusicPlaying) {
       startAmbientMusic();
     } else {
       if (synthTimerRef.current) {

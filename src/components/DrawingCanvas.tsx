@@ -38,14 +38,14 @@ export default function DrawingCanvas({ referenceChar }: DrawingCanvasProps) {
     let clientX = 0;
     let clientY = 0;
 
-    if (e.nativeEvent instanceof TouchEvent) {
-      if (e.nativeEvent.touches.length > 0) {
-        clientX = e.nativeEvent.touches[0].clientX;
-        clientY = e.nativeEvent.touches[0].clientY;
-      }
-    } else if (e.nativeEvent instanceof MouseEvent) {
-      clientX = e.nativeEvent.clientX;
-      clientY = e.nativeEvent.clientY;
+    // Guard: "TouchEvent" constructor does not exist on some browsers (e.g. Firefox desktop).
+    // Use feature-detection on the nativeEvent object instead of "instanceof".
+    if ("touches" in e.nativeEvent && (e.nativeEvent as TouchEvent).touches.length > 0) {
+      clientX = (e.nativeEvent as TouchEvent).touches[0].clientX;
+      clientY = (e.nativeEvent as TouchEvent).touches[0].clientY;
+    } else if ("clientX" in e.nativeEvent) {
+      clientX = (e.nativeEvent as MouseEvent).clientX;
+      clientY = (e.nativeEvent as MouseEvent).clientY;
     }
 
     return {
