@@ -4208,7 +4208,7 @@ export default function App() {
                             onChange={(e) => setVocabsCategory(e.target.value)}
                             className="w-full bg-natural-bg font-serif text-xs border border-natural-border focus:border-natural-forest py-2 px-3 rounded-xl outline-none text-natural-charcoal font-bold cursor-pointer"
                           >
-                            <option value="all">🌾 All themes (720+)</option>
+                            <option value="all">🌾 All themes (690+)</option>
                             <option value="greetings">🌸 Greetings & Rituals</option>
                             <option value="time">⏱️ Time, Days & Seasons</option>
                             <option value="places">🏠 Places & Shrines</option>
