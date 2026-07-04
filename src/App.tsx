@@ -599,6 +599,7 @@ export default function App() {
   const [choices, setChoices] = useState<string[]>([]);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [answerStatus, setAnswerStatus] = useState<"correct" | "incorrect" | null>(null);
+  const [waitingForNext, setWaitingForNext] = useState(false);
   const [typedInput, setTypedInput] = useState("");
 
   // Character Picker state (solo quiz pre-launch panel)
@@ -1561,9 +1562,12 @@ export default function App() {
       }
     }
 
-    setTimeout(() => {
-      advanceQuizIndex();
-    }, 2200);
+    // In survival mode auto-advance; in offline quiz show Next button
+    if (quizMode === "survival") {
+      setTimeout(() => { advanceQuizIndex(); }, 2200);
+    } else {
+      setWaitingForNext(true);
+    }
   };
 
   // Check typed Romaji Spelling Answer
@@ -1594,12 +1598,12 @@ export default function App() {
       awardXPAndIncrementAttempt(false, 0);
     }
 
-    setTimeout(() => {
-      advanceQuizIndex();
-    }, 2500);
+      // Show Next button instead of auto-advancing (offline only)
+      setWaitingForNext(true);
   };
 
   const advanceQuizIndex = () => {
+    setWaitingForNext(false);
     const nextIdx = quizIndex + 1;
     let alphabetPool: (HiraganaItem | KatakanaItem)[] = [];
     if (quizAlphabet === "hiragana") {
@@ -4815,6 +4819,20 @@ export default function App() {
                     </div>
                   ))}
                 </motion.div>
+              )}
+
+              {/* Next → button shown after answering in offline non-survival mode */}
+              {waitingForNext && quizMode !== "survival" && (
+                <motion.button
+                  type="button"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2 }}
+                  onClick={advanceQuizIndex}
+                  className="mt-4 px-8 py-3 bg-natural-forest text-natural-bg font-serif font-bold text-sm rounded-2xl hover:opacity-90 transition shadow-sm flex items-center gap-2 mx-auto"
+                >
+                  Next <ChevronRight className="w-4 h-4" />
+                </motion.button>
               )}
             </motion.div>
           )}
