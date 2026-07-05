@@ -1668,14 +1668,25 @@ export default function App() {
   }
   sessionStudiedKanji.add(activeKanji);
 
-  // FIX: Use functional state update to avoid stale-closure XP loss
+  // FIX: Update both XP and characterProgress so Kanji Quiz "Studied" pool works
   setStats((prev) => {
-    const updated = { ...prev, xp: prev.xp + 40 };
+    const prevProg = prev.characterProgress[activeKanji] || { correct: 0, total: 0 };
+    const updated = {
+      ...prev,
+      xp: prev.xp + 40,
+      characterProgress: {
+        ...prev.characterProgress,
+        [activeKanji]: {
+          correct: prevProg.correct + 1,
+          total: prevProg.total + 1,
+        },
+      },
+    };
     localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(updated));
     return updated;
   });
   playChime(true);
-    showToast(`+40 XP for studying "${activeKanji}"!`);
+  showToast(`+40 XP for studying "${activeKanji}"!`);
   };
 
   // Submit Canvas drawing to Astra-chan for Kanji accuracy assessment
