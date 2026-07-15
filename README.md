@@ -36,6 +36,53 @@ Some moments worth mentioning:
 
 This is still being built. It probably always will be.
 
+### Splitting App.tsx — a case study in AI-directed refactoring
+
+By the time the feature list above was mostly done, `App.tsx` had grown to
+**7,625 lines** — one giant component holding ~90 pieces of state and every
+screen's JSX in a single function scope. It worked, but it was becoming
+impossible to hand to any AI session without burning half the context
+window just reading it.
+
+The fix took **9 phases**, each one extracting a single screen
+(`menu`, `results`, `vocab-quiz`, `kanji-quiz`, `quiz`, `kanji-scroll`,
+`profile`, `review-deck`, `online-multiplayer`) into its own component under
+`src/components/`, using plain prop-passing — no Context, no state
+libraries, nothing that would risk subtly changing behavior.
+
+The workflow for each phase:
+1. One Claude session (the reviewing Claude) reads the current `App.tsx`,
+   identifies the next screen's exact line boundaries and every piece of
+   state/handler it touches, and writes a detailed, scoped prompt — what to
+   read, what *not* to read, what must never move, and the exact output
+   format expected.
+2. That prompt gets handed to Codex, which does the actual extraction.
+3. The result comes back to Claude for verification (line counts, bracket
+   balance, cross-screen state checks) before moving to the next phase.
+
+A few things made this harder than "just move the JSX":
+- Several screens shared state with each other — `currentKanjiIndex` was
+  used both inside the `kanji-scroll` screen and in the mascot companion
+  render outside it; the friend-invite system was shared between `profile`
+  and `online-multiplayer`. Each had to be identified and kept in `App.tsx`,
+  passed down as props to both consumers, rather than moved.
+- The `online-multiplayer` screen (the final and biggest phase, ~983 lines)
+  had state driven by `useEffect` hooks handling Firebase room
+  subscriptions — logic that had to stay in `App.tsx` regardless of where
+  the JSX lived, which inverted the usual "move anything self-contained"
+  instinct from every earlier phase.
+- One early Codex session burned through its usage limit fighting its own
+  PowerShell string-escaping and a self-created symlink to an external
+  `node_modules` folder, without producing a final result. The fix wasn't a
+  cleverer prompt — it was adding an explicit "work efficiently" section to
+  every prompt after that: no scripted string replacement, no full
+  project-wide lint/build runs chasing unrelated pre-existing errors, do the
+  edit once.
+
+End result: `App.tsx` down to **3,932 lines** (48% smaller), 8 new screen
+components, and zero behavior changes — verified phase by phase by actually
+clicking through the app, not just trusting a clean build.
+
 ---
 
 ## Why We Built This
@@ -176,7 +223,7 @@ This project was built entirely through AI collaboration. I directed, tested, de
 | **Codeium** | Code assistance |
 | **OneCompiler** | Quick isolated testing |
 
-**One strategy worth sharing:** I would use one Claude session to review the codebase and write a targeted prompt — specifying exactly which files and line ranges to read — then feed that prompt to a second Claude session with only those files. This made it possible to work on a 7500+ line codebase without hitting context limits. Each AI was used for what it does best rather than relying on one for everything.
+**One strategy worth sharing:** I would use one Claude session to review the codebase and write a targeted prompt — specifying exactly which files and line ranges to read — then feed that prompt to a second Claude session, or to Codex, with only those files. This made it possible to work on a 7500+ line codebase without hitting context limits. The App.tsx component split (see above) is the clearest example: 9 separate phased prompts, each one scoped to a single screen, each verified before the next began. Each AI was used for what it does best rather than relying on one for everything.
 
 ---
 
@@ -225,9 +272,9 @@ CLOUDFLARE_API_TOKEN=
 - [x] Astra-chan AFK reactions with 3 artwork states
 - [x] Kanji AI drawing analysis (10,000 free requests/day via Cloudflare)
 - [x] Romaji toggle for beginners across Grammar Dojo and Reference Charts
+- [x] App component splitting (App.tsx went from 7,625 lines to 3,932 lines across 9 phases — see below)
 - [ ] Custom chart maker (user-created reference tables)
 - [ ] N4 vocabulary expansion
-- [ ] App component splitting (App.tsx is currently 7500+ lines)
 - [ ] Mobile app version
 
 ---
