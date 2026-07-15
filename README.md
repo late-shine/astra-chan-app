@@ -5,6 +5,8 @@
 **Live App → [astra-kanji-tutor.vercel.app](https://astra-kanji-tutor.vercel.app)**  
 **GitHub → [github.com/late-shine/astra-chan-app](https://github.com/late-shine/astra-chan-app)**
 
+> Status: Active personal project / learning app. Some features require Firebase and Cloudflare credentials.
+
 ![Astra-chan's Study Room — the atmospheric home screen](docs/study-room.png)
 
 ---
@@ -79,7 +81,7 @@ A few things made this harder than "just move the JSX":
   project-wide lint/build runs chasing unrelated pre-existing errors, do the
   edit once.
 
-End result: `App.tsx` down to **3,932 lines** (48% smaller), 8 new screen
+End result: `App.tsx` down to **3,932 lines** (48% smaller), 9 new screen
 components, and zero behavior changes — verified phase by phase by actually
 clicking through the app, not just trusting a clean build.
 
@@ -240,6 +242,8 @@ This project was built entirely through AI collaboration. I directed, tested, de
 
 ## Setup (Local Development)
 
+> **Known requirements:** multiplayer and kanji-drawing AI grading need Firebase Realtime Database, Firebase Anonymous Auth, and Cloudflare Workers AI credentials. Everything else runs without them.
+
 ```bash
 git clone https://github.com/late-shine/astra-chan-app.git
 cd astra-chan-app
@@ -272,7 +276,7 @@ CLOUDFLARE_API_TOKEN=
 - [x] Astra-chan AFK reactions with 3 artwork states
 - [x] Kanji AI drawing analysis (10,000 free requests/day via Cloudflare)
 - [x] Romaji toggle for beginners across Grammar Dojo and Reference Charts
-- [x] App component splitting (App.tsx went from 7,625 lines to 3,932 lines across 9 phases — see below)
+- [x] App component splitting (App.tsx went from 7,625 lines to 3,932 lines across 9 phases — described above)
 - [ ] Custom chart maker (user-created reference tables)
 - [ ] N4 vocabulary expansion
 - [ ] Mobile app version
