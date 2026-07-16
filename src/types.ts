@@ -25,6 +25,16 @@ export interface KatakanaItem {
   examples: UsageExample[];
 }
 
+export interface KanjiWordEntry {
+  word: string;              // e.g. "先生"
+  reading: string;           // full word reading in hiragana, e.g. "せんせい"
+  meaning: string;           // e.g. "teacher"
+  kanjiReading: string;      // just the reading this kanji contributes, e.g. "せい"
+  readingType: "onyomi" | "kunyomi" | "onyomi-variant" | "irregular";
+  note?: string;              // optional — only include when it adds real value
+  commonness: "common" | "moderate" | "rare";
+}
+
 export interface KanjiItem {
   kanji: string;
   meaning: string;
@@ -35,6 +45,7 @@ export interface KanjiItem {
   mnemonic: string;
   strokeCount: number;
   examples: UsageExample[];
+  kanjiWords?: KanjiWordEntry[];
 }
 
 export interface VocabularyItem {
