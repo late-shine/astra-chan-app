@@ -1,7 +1,9 @@
 import type React from "react";
-import { motion } from "motion/react";
-import { ChevronLeft, ChevronRight, Plus, RefreshCw, Sparkles, Volume2 } from "lucide-react";
+import { useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { BookOpenText, ChevronLeft, ChevronRight, Plus, RefreshCw, Sparkles, Volume2 } from "lucide-react";
 import DrawingCanvas from "./DrawingCanvas";
+import KanjiWordFamilyPanel from "./KanjiWordFamilyPanel";
 import type { KanjiItem } from "../types";
 import companionImg from "../assets/images/synthid-removed-Gemini_Generated_Image_csh1tcsh1tcsh1tc.png";
 
@@ -39,7 +41,12 @@ export default function KanjiScrollScreen({
   handleContemplateKanji,
   handleEvaluateKanjiDrawing,
 }: KanjiScrollScreenProps) {
+  const [isWordFamilyOpen, setIsWordFamilyOpen] = useState(false);
+  const currentKanji = kanjiData[currentKanjiIndex];
+  const hasWordFamily = !!(currentKanji.kanjiWords && currentKanji.kanjiWords.length > 0);
+
   return (
+    <>
             <motion.div
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
@@ -80,6 +87,17 @@ export default function KanjiScrollScreen({
                       <Volume2 className="w-3.5 h-3.5 text-natural-forest" />
                       PRONOUNCE VOICE
                     </button>
+
+                    {hasWordFamily && (
+                      <button
+                        type="button"
+                        onClick={() => setIsWordFamilyOpen(true)}
+                        className="px-4 py-1.5 bg-natural-bg hover:bg-natural-forest/10 border border-natural-border rounded-lg text-xs font-mono font-bold text-natural-forest tracking-wider transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                      >
+                        <BookOpenText className="w-3.5 h-3.5 text-natural-forest" />
+                        WORD FAMILY
+                      </button>
+                    )}
 
                     {/* ➕ Add to SRS Review Deck */}
                     <button
@@ -294,5 +312,18 @@ export default function KanjiScrollScreen({
                 </div>
               </div>
             </motion.div>
+            <AnimatePresence>
+              {isWordFamilyOpen && hasWordFamily && (
+                <KanjiWordFamilyPanel
+                  kanji={currentKanji}
+                  onClose={() => setIsWordFamilyOpen(false)}
+                  speakJapanese={speakJapanese}
+                  hasCard={hasCard}
+                  addCard={addCard}
+                  showToast={showToast}
+                />
+              )}
+            </AnimatePresence>
+    </>
   );
 }
