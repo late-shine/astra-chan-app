@@ -70,10 +70,10 @@ const TRANSLATIONS = {
     nicknamePlaceholder: "Nickname",
     masteryLedger: "Mastery Ledger Book",
     allSyllabary: "All Syllabary",
-    coreSyllabary: "Core (GoijÅ«on)",
+    coreSyllabary: "Core (Goijūon)",
     voicedSyllabary: "Voiced (Dakuon)",
     semiVoicedSyllabary: "Semi-voiced",
-    combosSyllabary: "Combos (YÅon)",
+    combosSyllabary: "Combos (Yōon)",
     settingsTitle: "Grimoire Workshop & Settings",
     settingsSubtitle: "Customize color aesthetics, voice synthesizer, and background magic",
     colorAesthetic: "Color Aesthetic Presets",
@@ -93,65 +93,65 @@ const TRANSLATIONS = {
     previewDesc: "Real-time look of chosen color aesthetic"
   },
   ja: {
-    backBtn: "è–åŸŸã«æˆ»ã‚‹",
-    title: "å­¦ç¿’è¨˜éŒ²",
-    subtitle: "æ–‡å­—ã®ç¿’å¾—åº¦ã¨å®Ÿç¸¾ã®ç¢ºèª",
-    identity: "ç§ã®ã‚¢ã‚¤ãƒ‡ãƒ³ãƒ†ã‚£ãƒ†ã‚£",
-    identityDesc: "å›ºæœ‰ã‚³ãƒ¼ãƒ‰ã‚’å…±æœ‰ã—ã¦ã€å…±ã«å­¦ç¿’ã™ã‚‹ä»²é–“ã‚’æ‹›å¾…ã—ã¾ã—ã‚‡ã†",
-    copyCode: "ãƒ•ãƒ¬ãƒ³ãƒ‰ã‚³ãƒ¼ãƒ‰ã‚’ã‚³ãƒ”ãƒ¼",
-    displayName: "è¡¨ç¤ºå",
-    placeholderName: "æ›¸é“å®¶ã®åå‰ã‚’å…¥åŠ›",
-    saveBtn: "ä¿å­˜ã™ã‚‹",
-    assignedCode: "å‰²ã‚Šå½“ã¦ã‚‰ã‚ŒãŸãƒ•ãƒ¬ãƒ³ãƒ‰ã‚³ãƒ¼ãƒ‰",
-    exportBtn: "é€²æ—ã‚¢ãƒ¼ã‚«ã‚¤ãƒ–ã®ã‚¨ã‚¯ã‚¹ãƒãƒ¼ãƒˆ",
-    importBtn: "é€²æ—ã‚¢ãƒ¼ã‚«ã‚¤ãƒ–ã®ã‚¤ãƒ³ãƒãƒ¼ãƒˆ",
-    xpProgress: "å­¦è€…XPã®é€²æ—çŠ¶æ³",
-    grandArchivist: "ã‚°ãƒ©ãƒ³ãƒ‰ã‚¢ãƒ¼ã‚«ã‚¤ãƒ–ã¾ã§ã®XP",
-    accumulatedXP: "ç´¯ç©ç²å¾—XP",
-    totalXP: "åˆè¨ˆç²å¾—XP",
-    archivalPoints: "ã‚¢ãƒ¼ã‚«ã‚¤ãƒ–è©•ä¾¡ç‚¹æ•°",
-    currentStreak: "ç¾åœ¨ã®ç¶™ç¶šæ—¥æ•°",
-    continuousDays: "ç¶™ç¶šå­¦ç¿’æ—¥æ•°",
-    accuracyRate: "ã‚¯ã‚¤ã‚ºæ­£è§£çŽ‡",
-    archivalRank: "ã‚¢ãƒ¼ã‚«ã‚¤ãƒ–ã§ã®ç§°å·",
-    levelN5: "N5æ›¸é“å®¶ãƒ¬ãƒ™ãƒ«",
-    calendarTitle: "å­¦ç¿’ã‚«ãƒ¬ãƒ³ãƒ€ãƒ¼",
-    activeDays: "ã‚¢ã‚¯ãƒ†ã‚£ãƒ–æ—¥æ•°",
-    dayStreak: "å­¦ç¿’ç¶™ç¶šæ—¥æ•°",
-    totalDaysStudied: "é€šç®—å­¦ç¿’æ—¥æ•°",
-    studiedLegend: "å­¦ç¿’ã—ãŸæ—¥",
-    todayLegend: "æœ¬æ—¥",
-    masteryBadges: "ãƒžã‚¹ã‚¿ãƒªãƒ¼è¨˜ç« ",
-    unlocked: "ã‚¢ãƒ³ãƒ­ãƒƒã‚¯æ¸ˆã¿",
-    locked: "æœªè§£é™¤",
-    companions: "ä»²é–“ã¨ãƒ•ãƒ¬ãƒ³ãƒ‰ä¸€è¦§",
-    noCompanions: "ã‚¢ã‚¯ãƒ†ã‚£ãƒ–ãªä»²é–“ãŒã„ã¾ã›ã‚“ã€‚ã‚³ãƒ¼ãƒ‰ã‚’å…±æœ‰ã—ã¦ã€å¯¾æˆ¦ãƒ‡ãƒ¥ã‚¢ãƒ«ã‚’è§£æ”¾ã—ã¾ã—ã‚‡ã†ï¼",
-    addCompanionBtn: "ä»²é–“ã‚’è¿½åŠ ",
-    companionPlaceholder: "ä»²é–“ã®ãƒ•ãƒ¬ãƒ³ãƒ‰ã‚³ãƒ¼ãƒ‰",
-    nicknamePlaceholder: "ãƒ‹ãƒƒã‚¯ãƒãƒ¼ãƒ ",
-    masteryLedger: "äº”åéŸ³æ–‡å­—ç¿’å¾—å°å¸³",
-    allSyllabary: "ã™ã¹ã¦ã®éŸ³",
-    coreSyllabary: "æ¸…éŸ³ï¼ˆäº”åéŸ³ï¼‰",
-    voicedSyllabary: "æ¿éŸ³",
-    semiVoicedSyllabary: "åŠæ¿éŸ³",
-    combosSyllabary: "æ‹—éŸ³",
-    settingsTitle: "é­”å°Žå·¥æˆ¿ã¨ç’°å¢ƒè¨­å®š",
-    settingsSubtitle: "ã‚«ãƒ©ãƒ¼ãƒ‘ãƒ¬ãƒƒãƒˆã€éŸ³å£°åˆæˆã€èƒŒæ™¯ã®é­”æ³•åŠ¹æžœã‚’è¨­å®šã—ã¾ã™",
-    colorAesthetic: "ã‚«ãƒ©ãƒ¼ãƒ†ãƒ¼ãƒžã®é¸æŠž",
-    colorAestheticDesc: "ã‚ãªãŸã®å­¦ç¿’ãƒ•ãƒ­ãƒ¼ã«é©ã—ãŸãƒ“ã‚¸ãƒ¥ã‚¢ãƒ«ã‚¨ãƒŠã‚¸ãƒ¼ã‚’é¸ã‚“ã§ãã ã•ã„",
-    languageTitle: "ã‚¤ãƒ³ã‚¿ãƒ¼ãƒ•ã‚§ãƒ¼ã‚¹è¨€èªž",
-    languageDesc: "é­”å°Žæ›¸ã®è¨€èªžè¡¨ç¤ºã‚’è¨­å®šã—ã¾ã™",
-    voiceTitle: "éŸ³å£°åˆæˆã‚¢ã‚·ã‚¹ã‚¿ãƒ³ãƒˆ",
-    voiceDesc: "ç™ºéŸ³ãƒã‚§ãƒƒã‚¯ã§åˆ©ç”¨ã™ã‚‹æ—¥æœ¬èªžã®èª­ã¿ä¸Šã’éŸ³å£°ã‚’æŒ‡å®šã—ã¾ã™",
-    bgAnimTitle: "èƒŒæ™¯ã®é­”æ³•åŠ¹æžœ FX",
-    bgIntensityTitle: "é­”æ³•ç²’å­ã®å¼·åº¦",
-    bgBlurTitle: "èƒŒå¾Œã®ã‚¬ãƒ©ã‚¹ã®ã¼ã‹ã—å¼·åº¦",
-    bgOpacityTitle: "èƒŒæ™¯ã‚«ãƒ¼ãƒ‰ã®ä¸é€æ˜Žåº¦",
-    fontTitle: "æ–‡å­—ã‚¿ã‚¤ãƒã‚°ãƒ©ãƒ•ã‚£ / ãƒ•ã‚©ãƒ³ãƒˆ",
-    autoPronounceTitle: "ã‚¯ã‚¤ã‚ºè‡ªå‹•ç™ºéŸ³",
-    autoPronounceDesc: "æ–‡å­—ã‚’æãã‹ã‚¯ã‚¤ã‚ºã«ç­”ãˆã‚‹éš›ã€éŸ³å£°ã‚’è‡ªå‹•å†ç”Ÿã—ã¾ã™",
-    previewTitle: "ã‚«ãƒ©ãƒ¼ãƒ‘ãƒ¬ãƒƒãƒˆã®ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼",
-    previewDesc: "é¸æŠžã—ãŸã‚«ãƒ©ãƒ¼ãƒ†ãƒ¼ãƒžã®ãƒªã‚¢ãƒ«ã‚¿ã‚¤ãƒ ãªé…è‰²æ§‹é€ "
+    backBtn: "聖域に戻る",
+    title: "学習記録",
+    subtitle: "文字の習得度と実績の確認",
+    identity: "私のアイデンティティ",
+    identityDesc: "固有コードを共有して、共に学習する仲間を招待しましょう",
+    copyCode: "フレンドコードをコピー",
+    displayName: "表示名",
+    placeholderName: "書道家の名前を入力",
+    saveBtn: "保存する",
+    assignedCode: "割り当てられたフレンドコード",
+    exportBtn: "進捗アーカイブのエクスポート",
+    importBtn: "進捗アーカイブのインポート",
+    xpProgress: "学者XPの進捗状況",
+    grandArchivist: "グランドアーカイブまでのXP",
+    accumulatedXP: "累積獲得XP",
+    totalXP: "合計獲得XP",
+    archivalPoints: "アーカイブ評価点数",
+    currentStreak: "現在の継続日数",
+    continuousDays: "継続学習日数",
+    accuracyRate: "クイズ正解率",
+    archivalRank: "アーカイブでの称号",
+    levelN5: "N5書道家レベル",
+    calendarTitle: "学習カレンダー",
+    activeDays: "アクティブ日数",
+    dayStreak: "学習継続日数",
+    totalDaysStudied: "通算学習日数",
+    studiedLegend: "学習した日",
+    todayLegend: "本日",
+    masteryBadges: "マスタリー記章",
+    unlocked: "アンロック済み",
+    locked: "未解除",
+    companions: "仲間とフレンド一覧",
+    noCompanions: "アクティブな仲間がいません。コードを共有して、対戦デュアルを解放しましょう！",
+    addCompanionBtn: "仲間を追加",
+    companionPlaceholder: "仲間のフレンドコード",
+    nicknamePlaceholder: "ニックネーム",
+    masteryLedger: "五十音文字習得台帳",
+    allSyllabary: "すべての音",
+    coreSyllabary: "清音（五十音）",
+    voicedSyllabary: "濁音",
+    semiVoicedSyllabary: "半濁音",
+    combosSyllabary: "拗音",
+    settingsTitle: "魔導工房と環境設定",
+    settingsSubtitle: "カラーパレット、音声合成、背景の魔法効果を設定します",
+    colorAesthetic: "カラーテーマの選択",
+    colorAestheticDesc: "あなたの学習フローに適したビジュアルエナジーを選んでください",
+    languageTitle: "インターフェース言語",
+    languageDesc: "魔導書の言語表示を設定します",
+    voiceTitle: "音声合成アシスタント",
+    voiceDesc: "発音チェックで利用する日本語の読み上げ音声を指定します",
+    bgAnimTitle: "背景の魔法効果 FX",
+    bgIntensityTitle: "魔法粒子の強度",
+    bgBlurTitle: "背後のガラスのぼかし強度",
+    bgOpacityTitle: "背景カードの不透明度",
+    fontTitle: "文字タイポグラフィ / フォント",
+    autoPronounceTitle: "クイズ自動発音",
+    autoPronounceDesc: "文字を描くかクイズに答える際、音声を自動再生します",
+    previewTitle: "カラーパレットのプレビュー",
+    previewDesc: "選択したカラーテーマのリアルタイムな配色構造"
   }
 };
 
@@ -377,7 +377,7 @@ export default function ProfileScreen({
               type="button"
               onClick={() => {
                 navigator.clipboard.writeText(getFriendCode());
-                showToast(language === "ja" ? "ãƒ•ãƒ¬ãƒ³ãƒ‰ã‚³ãƒ¼ãƒ‰ã‚’ã‚³ãƒ”ãƒ¼ã—ã¾ã—ãŸ" : "Friend code copied");
+                showToast(language === "ja" ? "フレンドコードをコピーしました" : "Friend code copied");
               }}
               className="px-4 py-2 bg-natural-forest/15 border border-natural-forest/40 hover:bg-natural-forest hover:text-white rounded-xl text-xs font-mono font-black text-natural-forest transition-all duration-300 cursor-pointer flex items-center gap-2 shadow-xs group"
             >
@@ -453,7 +453,7 @@ export default function ProfileScreen({
         </div>
       </div>
 
-      {/* â”€â”€ WITCH'S GRIMOIRE WORKSHOP & ENVIRONMENT SETTINGS â”€â”€ */}
+      {/* ── WITCH'S GRIMOIRE WORKSHOP & ENVIRONMENT SETTINGS ── */}
       <div className="bg-white/5 border border-white/10 rounded-2xl p-5 shadow-inner backdrop-blur-md flex flex-col gap-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-white/5">
           <div 
@@ -493,7 +493,7 @@ export default function ProfileScreen({
               onClick={(e) => {
                 e.stopPropagation();
                 setLanguage("ja");
-                showToast("æ—¥æœ¬èªžã«è¨­å®šã•ã‚Œã¾ã—ãŸ");
+                showToast("日本語に設定されました");
               }}
               className={`px-3 py-1 rounded-lg text-[10px] font-mono font-bold transition ${
                 language === "ja"
@@ -501,7 +501,7 @@ export default function ProfileScreen({
                   : "bg-white/5 text-natural-forest/60 hover:bg-white/10"
               }`}
             >
-              æ—¥æœ¬èªž
+              日本語
             </button>
           </div>
         </div>
@@ -529,32 +529,32 @@ export default function ProfileScreen({
                 {[
                   {
                     id: "light",
-                    title: "ðŸŒ¸ Washi Parchment",
-                    desc: language === "ja" ? "å’Œé¢¨ã®ç™½ç ‚ã¨å¢¨æ±ã®ç¾Žã—ã„ãƒ©ã‚¤ãƒˆ" : "Classic light cream scroll style",
+                    title: "🌸 Washi Parchment",
+                    desc: language === "ja" ? "和風の白砂と墨汁の美しいライト" : "Classic light cream scroll style",
                     colors: ["#FAF7F2", "#C0B8AC", "#E8B98A", "#F0967A"]
                   },
                   {
                     id: "dark-cosmic",
-                    title: "ðŸ”® Cosmic Witch",
-                    desc: language === "ja" ? "å®‡å®™é­”å¥³ã®å¤œç©ºã‚’é£¾ã‚‹ã‚¢ãƒ¡ã‚¸ã‚¹ãƒˆ" : "Glowing amethyst mystical violet",
+                    title: "🔮 Cosmic Witch",
+                    desc: language === "ja" ? "宇宙魔女の夜空を飾るアメジスト" : "Glowing amethyst mystical violet",
                     colors: ["#120E1B", "#32264C", "#DF9BFF", "#FF7597"]
                   },
                   {
                     id: "dark-emerald",
-                    title: "ðŸŽ‹ Emerald Jade",
-                    desc: language === "ja" ? "é™ã‹ãªç«¹æž—ã®æŠ¹èŒ¶ã‚°ãƒªãƒ¼ãƒ³" : "Fresh matcha & bamboo green",
+                    title: "🎋 Emerald Jade",
+                    desc: language === "ja" ? "静かな竹林の抹茶グリーン" : "Fresh matcha & bamboo green",
                     colors: ["#0D1612", "#1E3E30", "#34D399", "#FCD34D"]
                   },
                   {
                     id: "dark-maple",
-                    title: "ðŸ Autumn Maple",
-                    desc: language === "ja" ? "ç´…è‘‰ã®å¤•æš®ã‚Œã‚’æ€ã‚ã›ã‚‹ç¥ç€" : "Terracotta rust & sunset amber",
+                    title: "🍁 Autumn Maple",
+                    desc: language === "ja" ? "紅葉の夕暮れを思わせる琥珀" : "Terracotta rust & sunset amber",
                     colors: ["#180F0E", "#4D2D2A", "#F0967A", "#F5B041"]
                   },
                   {
                     id: "dark-cyber",
-                    title: "ðŸŒŒ Cyber Tokyo",
-                    desc: language === "ja" ? "ãƒã‚ªãƒ³ã«è¼ãã‚µã‚¤ãƒãƒ¼ãƒ‘ãƒ³ã‚¯" : "Neon cyan & synth pink aura",
+                    title: "🌌 Cyber Tokyo",
+                    desc: language === "ja" ? "ネオンに輝くサイバーパンク" : "Neon cyan & synth pink aura",
                     colors: ["#0B0E17", "#212E46", "#06B6D4", "#EC4899"]
                   }
                 ].map((preset) => (
@@ -564,7 +564,7 @@ export default function ProfileScreen({
                     onClick={() => {
                       setTheme(preset.id);
                       document.documentElement.setAttribute("data-theme", preset.id);
-                      showToast(language === "ja" ? `ã‚«ãƒ©ãƒ¼ã‚’ã€Œ${preset.title}ã€ã«å¤‰æ›´ã—ã¾ã—ãŸ` : `Aesthetic: ${preset.title}`);
+                      showToast(language === "ja" ? `カラーを「${preset.title}」に変更しました` : `Aesthetic: ${preset.title}`);
                     }}
                     className={`p-3 rounded-xl border text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between h-20 hover:scale-[1.02] cursor-pointer ${
                       theme === preset.id
@@ -615,7 +615,7 @@ export default function ProfileScreen({
                   </select>
                   <button
                     type="button"
-                    onClick={() => speakJapanese("ã‚ãã“")}
+                    onClick={() => speakJapanese("あきこ")}
                     className="p-2.5 bg-natural-forest/15 text-natural-forest border border-natural-forest/40 rounded-xl hover:bg-natural-forest hover:text-natural-bg transition cursor-pointer shrink-0"
                     title="Test Voice Speak"
                   >
@@ -655,15 +655,15 @@ export default function ProfileScreen({
               </label>
               <div className="flex gap-2">
                 {[
-                  { id: "digital", label: "ðŸ“± Noto Sans JP", desc: language === "ja" ? "ãƒ‡ã‚¸ã‚¿ãƒ«ã‚´ã‚·ãƒƒã‚¯" : "Digital Clean Pixel" },
-                  { id: "written", label: "ðŸ–Œ " + (language === "ja" ? "æ•™ç§‘æ›¸ä½“ Klee One" : "Klee One"), desc: language === "ja" ? "ä¼çµ±çš„ãªç­†ãƒšãƒ³" : "Traditional Ink Brush" }
+                  { id: "digital", label: "📱 Noto Sans JP", desc: language === "ja" ? "デジタルゴシック" : "Digital Clean Pixel" },
+                  { id: "written", label: "🖌 " + (language === "ja" ? "教科書体 Klee One" : "Klee One"), desc: language === "ja" ? "伝統的な筆ペン" : "Traditional Ink Brush" }
                 ].map((opt) => (
                   <button
                     key={opt.id}
                     type="button"
                     onClick={() => {
                       setFontStyle(opt.id as any);
-                      showToast(language === "ja" ? `æ›¸ä½“ã‚’å¤‰æ›´ã—ã¾ã—ãŸ` : `Font set to ${opt.label}`);
+                      showToast(language === "ja" ? `書体を変更しました` : `Font set to ${opt.label}`);
                     }}
                     className={`flex-1 p-3 rounded-xl border text-left transition cursor-pointer ${
                       fontStyle === opt.id
@@ -705,20 +705,20 @@ export default function ProfileScreen({
                       className="text-2xl font-serif font-black transition-colors"
                       style={{ color: "var(--color-natural-forest)" }}
                     >
-                      å¤¢
+                      夢
                     </span>
                     <div className="leading-none text-left">
                       <p 
                         className="text-xs font-serif font-black"
                         style={{ color: "var(--color-natural-forest)" }}
                       >
-                        {language === "ja" ? "å¤¢ (ã‚†ã‚)" : "Yume"}
+                        {language === "ja" ? "夢 (ゆめ)" : "Yume"}
                       </p>
                       <p 
                         className="text-[8px] font-mono"
                         style={{ color: "var(--color-natural-forest-light)" }}
                       >
-                        {language === "ja" ? "é­”å°Žæ›¸ã®ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼" : "Aesthetic Preview"}
+                        {language === "ja" ? "魔導書のプレビュー" : "Aesthetic Preview"}
                       </p>
                     </div>
                   </div>
@@ -760,7 +760,7 @@ export default function ProfileScreen({
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-natural-forest/80 animate-pulse" />
                   <span className="text-[10px] font-mono font-bold text-natural-forest/80 uppercase tracking-wider">
-                    {language === "ja" ? "é›°å›²æ°—ãƒ»èƒŒæ™¯ã®é«˜åº¦ãªè¨­å®š" : "Atmosphere Advanced Settings"}
+                    {language === "ja" ? "雰囲気・背景の高度な設定" : "Atmosphere Advanced Settings"}
                   </span>
                 </div>
                 <div className="p-1 rounded-lg hover:bg-white/5 transition-colors">
@@ -786,10 +786,10 @@ export default function ProfileScreen({
                       </span>
                       <div className="grid grid-cols-4 gap-1">
                         {[
-                          { id: "letters" as const, label: language === "ja" ? "æ–‡å­—" : "Runes", desc: "Runes" },
-                          { id: "rain" as const, label: language === "ja" ? "é›¨" : "Rain", desc: "Rain" },
-                          { id: "both" as const, label: language === "ja" ? "ä¸¡æ–¹" : "Both", desc: "Both" },
-                          { id: "none" as const, label: language === "ja" ? "ç„¡ã—" : "None", desc: "None" }
+                          { id: "letters" as const, label: language === "ja" ? "文字" : "Runes", desc: "Runes" },
+                          { id: "rain" as const, label: language === "ja" ? "雨" : "Rain", desc: "Rain" },
+                          { id: "both" as const, label: language === "ja" ? "両方" : "Both", desc: "Both" },
+                          { id: "none" as const, label: language === "ja" ? "無し" : "None", desc: "None" }
                         ].map((anim) => (
                           <button
                             key={anim.id}
@@ -815,9 +815,9 @@ export default function ProfileScreen({
                       </span>
                       <div className="grid grid-cols-3 gap-1">
                         {[
-                          { id: "low" as const, label: language === "ja" ? "å¼±" : "Low" },
-                          { id: "medium" as const, label: language === "ja" ? "ä¸­" : "Medium" },
-                          { id: "high" as const, label: language === "ja" ? "å¼·" : "High" }
+                          { id: "low" as const, label: language === "ja" ? "弱" : "Low" },
+                          { id: "medium" as const, label: language === "ja" ? "中" : "Medium" },
+                          { id: "high" as const, label: language === "ja" ? "強" : "High" }
                         ].map((inte) => (
                           <button
                             key={inte.id}
@@ -861,11 +861,11 @@ export default function ProfileScreen({
                           onChange={(e) => setBgOpacity(e.target.value)}
                           className="px-2 py-1 bg-white/5 border border-white/10 text-natural-charcoal rounded-lg text-[10px] font-mono outline-none cursor-pointer focus:border-natural-forest/50 mt-1"
                         >
-                          <option value="/5" className="bg-natural-card">5% {language === "ja" ? "ä¸é€æ˜Žåº¦" : "Density"}</option>
-                          <option value="/10" className="bg-natural-card">10% {language === "ja" ? "ä¸é€æ˜Žåº¦" : "Density"}</option>
-                          <option value="/15" className="bg-natural-card">15% {language === "ja" ? "ä¸é€æ˜Žåº¦" : "Density"}</option>
-                          <option value="/25" className="bg-natural-card">25% {language === "ja" ? "ä¸é€æ˜Žåº¦" : "Density"}</option>
-                          <option value="/40" className="bg-natural-card">40% {language === "ja" ? "ä¸é€æ˜Žåº¦" : "Density"}</option>
+                          <option value="/5" className="bg-natural-card">5% {language === "ja" ? "不透明度" : "Density"}</option>
+                          <option value="/10" className="bg-natural-card">10% {language === "ja" ? "不透明度" : "Density"}</option>
+                          <option value="/15" className="bg-natural-card">15% {language === "ja" ? "不透明度" : "Density"}</option>
+                          <option value="/25" className="bg-natural-card">25% {language === "ja" ? "不透明度" : "Density"}</option>
+                          <option value="/40" className="bg-natural-card">40% {language === "ja" ? "不透明度" : "Density"}</option>
                         </select>
                       </div>
                     </div>
@@ -943,10 +943,10 @@ export default function ProfileScreen({
         </div>
       </div>
 
-      {/* â”€â”€ STREAK STUDY CALENDAR â”€â”€ */}
+      {/* ── STREAK STUDY CALENDAR ── */}
       {(() => {
         const MONTH_NAMES_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-        const MONTH_NAMES_JA = ["1æœˆ","2æœˆ","3æœˆ","4æœˆ","5æœˆ","6æœˆ","7æœˆ","8æœˆ","9æœˆ","10æœˆ","11æœˆ","12æœˆ"];
+        const MONTH_NAMES_JA = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
         const MONTH_NAMES = language === "ja" ? MONTH_NAMES_JA : MONTH_NAMES_EN;
 
         const { year: calYear, month: calMonth } = calViewDate;
@@ -1096,7 +1096,7 @@ export default function ProfileScreen({
         );
       })()}
 
-      {/* â”€â”€ MASTERY BADGES UNLOCKED â”€â”€ */}
+      {/* ── MASTERY BADGES UNLOCKED ── */}
       {(() => {
         const srsCardsList = Object.values(stats.srsCards || {});
         const vocabLearned = Object.keys(stats.vocabularyProgress || {}).filter(k => stats.vocabularyProgress[k]);
@@ -1106,53 +1106,53 @@ export default function ProfileScreen({
 
         const badges = [
           {
-            emoji: "ðŸŒ¸", name: language === "ja" ? "ç¬¬ä¸€æ­©" : "First Steps",
-            desc: language === "ja" ? "æœ€åˆã®ã‚¯ã‚¤ã‚ºã‚’å®Œäº†ã™ã‚‹" : "Complete your first quiz",
+            emoji: "🌸", name: language === "ja" ? "第一歩" : "First Steps",
+            desc: language === "ja" ? "最初のクイズを完了する" : "Complete your first quiz",
             earned: stats.totalAttempts > 0,
           },
           {
-            emoji: "âš¡", name: language === "ja" ? "ã‚µãƒã‚¤ãƒãƒ¼" : "Survivor",
-            desc: language === "ja" ? "ã‚µãƒã‚¤ãƒãƒ«ãƒ¢ãƒ¼ãƒ‰ã§30ç‚¹ä»¥ä¸Šç²å¾—" : "Score 30+ in survival mode",
+            emoji: "⚡", name: language === "ja" ? "サバイバー" : "Survivor",
+            desc: language === "ja" ? "サバイバルモードで30点以上獲得" : "Score 30+ in survival mode",
             earned: (stats.survivalBestScore || 0) >= 30,
           },
           {
-            emoji: "ðŸ”¥", name: language === "ja" ? "ä¿®ç·´ã®æˆ¦å£«" : "Week Warrior",
-            desc: language === "ja" ? "å­¦ç¿’ã‚’7æ—¥é–“ç¶™ç¶šã™ã‚‹" : "Maintain a 7-day streak",
+            emoji: "🔥", name: language === "ja" ? "修練の戦士" : "Week Warrior",
+            desc: language === "ja" ? "学習を7日間継続する" : "Maintain a 7-day streak",
             earned: stats.streakCount >= 7,
           },
           {
-            emoji: "ðŸ’Ž", name: language === "ja" ? "ä¸å±ˆã®ç²¾ç¥ž" : "Streak Master",
-            desc: language === "ja" ? "å­¦ç¿’ã‚’30æ—¥é–“ç¶™ç¶šã™ã‚‹" : "Maintain a 30-day streak",
+            emoji: "💎", name: language === "ja" ? "不屈の精神" : "Streak Master",
+            desc: language === "ja" ? "学習を30日間継続する" : "Maintain a 30-day streak",
             earned: stats.streakCount >= 30,
           },
           {
-            emoji: "ðŸ“¦", name: language === "ja" ? "ã‚³ãƒ¬ã‚¯ã‚¿ãƒ¼" : "Collector",
-            desc: language === "ja" ? "SRSãƒ‡ãƒƒã‚­ã«10æžšã®ã‚«ãƒ¼ãƒ‰ã‚’è¿½åŠ " : "Add 10 cards to your SRS deck",
+            emoji: "📦", name: language === "ja" ? "コレクター" : "Collector",
+            desc: language === "ja" ? "SRSデッキに10枚のカードを追加" : "Add 10 cards to your SRS deck",
             earned: srsCardsList.length >= 10,
           },
           {
-            emoji: "ðŸ†", name: language === "ja" ? "å¾©ç¿’ã®é”äºº" : "Deck Master",
-            desc: language === "ja" ? "ç´¯è¨ˆ50å›žSRSã‚«ãƒ¼ãƒ‰ã‚’å¾©ç¿’ã™ã‚‹" : "Review 50 SRS cards total",
+            emoji: "🏆", name: language === "ja" ? "復習の達人" : "Deck Master",
+            desc: language === "ja" ? "累計50回SRSカードを復習する" : "Review 50 SRS cards total",
             earned: (stats.srsReviewedTotal || 0) >= 50,
           },
           {
-            emoji: "ðŸŒŠ", name: language === "ja" ? "å¹³ä»®åæ¥µã‚ã—è€…" : "Hiragana Complete",
-            desc: language === "ja" ? "46æ–‡å­—ã®åŸºç¤Žçš„ãªå¹³ä»®åã‚’ç·´ç¿’ã™ã‚‹" : "Practice all 46 basic hiragana",
+            emoji: "🌊", name: language === "ja" ? "平仮名極めし者" : "Hiragana Complete",
+            desc: language === "ja" ? "46文字の基礎的な平仮名を練習する" : "Practice all 46 basic hiragana",
             earned: hiraganaComplete,
           },
           {
-            emoji: "â­", name: language === "ja" ? "æ¼¢å­—ã®å¼Ÿå­" : "Kanji Apprentice",
-            desc: language === "ja" ? "ç·´ç¿’ã§25æ–‡å­—ã®æ¼¢å­—ã«å‡ºä¼šã†" : "Encounter 25 kanji in practice",
+            emoji: "⭐", name: language === "ja" ? "漢字の弟子" : "Kanji Apprentice",
+            desc: language === "ja" ? "練習で25文字の漢字に出会う" : "Encounter 25 kanji in practice",
             earned: kanjiStudied >= 25,
           },
           {
-            emoji: "ðŸ“š", name: language === "ja" ? "ãƒœã‚­ãƒ£ãƒ–ãƒ©ãƒªãƒ¼" : "Word Collector",
-            desc: language === "ja" ? "50å€‹ã®å˜èªžã‚’å­¦ç¿’ã™ã‚‹" : "Learn 50 vocabulary words",
+            emoji: "📚", name: language === "ja" ? "ボキャブラリー" : "Word Collector",
+            desc: language === "ja" ? "50個の単語を学習する" : "Learn 50 vocabulary words",
             earned: vocabLearned.length >= 50,
           },
           {
-            emoji: "ðŸŽŒ", name: language === "ja" ? "N5è¨€èªžå­¦è€…" : "N5 Scholar",
-            desc: language === "ja" ? `ã™ã¹ã¦ã®${VOCABULARY_DATA.length}å€‹ã®å˜èªžã‚’ç¿’å¾—ã™ã‚‹` : `Learn all ${VOCABULARY_DATA.length} vocabulary words`,
+            emoji: "🎌", name: language === "ja" ? "N5言語学者" : "N5 Scholar",
+            desc: language === "ja" ? `すべての${VOCABULARY_DATA.length}個の単語を習得する` : `Learn all ${VOCABULARY_DATA.length} vocabulary words`,
             earned: vocabLearned.length >= VOCABULARY_DATA.length,
           },
         ];
@@ -1205,7 +1205,7 @@ export default function ProfileScreen({
                       {badge.desc}
                     </span>
                     {!badge.earned && (
-                      <span className="text-[8px] font-mono text-natural-forest/40 uppercase tracking-widest mt-1 font-bold">ðŸ”’ {t.locked}</span>
+                      <span className="text-[8px] font-mono text-natural-forest/40 uppercase tracking-widest mt-1 font-bold">🔒 {t.locked}</span>
                     )}
                   </div>
                 ))}
@@ -1215,7 +1215,7 @@ export default function ProfileScreen({
         );
       })()}
 
-      {/* â”€â”€ FRIENDS & NETWORK DUEL SYSTEM â”€â”€ */}
+      {/* ── FRIENDS & NETWORK DUEL SYSTEM ── */}
       <div className="bg-white/5 border border-white/10 rounded-2xl p-5 shadow-inner backdrop-blur-md flex flex-col gap-4 text-left">
         <div className="flex items-center gap-2 pb-2 border-b border-white/5">
           <User className="w-5 h-5 text-natural-forest" />
@@ -1303,7 +1303,7 @@ export default function ProfileScreen({
         )}
       </div>
 
-      {/* â”€â”€ CHARACTER ARCHIVE MASTERY MAP â”€â”€ */}
+      {/* ── CHARACTER ARCHIVE MASTERY MAP ── */}
       <div className="bg-white/5 border border-white/10 rounded-2xl p-5 shadow-inner backdrop-blur-md flex flex-col gap-4 text-left">
         
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-white/5 pb-3">
@@ -1327,7 +1327,7 @@ export default function ProfileScreen({
                     : "text-natural-forest/60 hover:text-natural-forest hover:bg-white/5"
                     }`}
                 >
-                  {s === "hiragana" ? "ã² Hiragana" : "ã‚« Katakana"}
+                  {s === "hiragana" ? "ひ Hiragana" : "カ Katakana"}
                 </button>
               ))}
             </div>
