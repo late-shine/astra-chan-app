@@ -65,6 +65,19 @@ export default function QuizScreen({
     return () => clearTimeout(t);
   }, [currentQuestion, quizMode]);
 
+  // Press Enter to advance to the next question when waiting for Next
+  useEffect(() => {
+    if (!waitingForNext) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        advanceQuizIndex();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [waitingForNext, advanceQuizIndex]);
+
   if (!currentQuestion) return null;
 
   return (

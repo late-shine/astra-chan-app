@@ -18,21 +18,34 @@
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
   --font-serif: "Noto Serif JP", Georgia, serif;
   --font-mono: "JetBrains Mono", monospace;
+
+  --animate-spin-slow: spin 8s linear infinite;
+  --animate-bounce-slow: bounce-slow 4s ease-in-out infinite;
+  --animate-fade-in: fade-in 0.4s ease-out;
+
+  @keyframes bounce-slow {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 }
 
-/* ── Kana / Kanji Display Font ──────────────────────────────────────────────
+/* â”€â”€ Kana / Kanji Display Font â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    The Japanese characters (hiragana, katakana, kanji) all use font-serif.
    We override --font-serif here so the toggle only affects the kana/kanji,
    leaving the UI body text (font-sans / Inter) completely untouched.
    :root comes AFTER @import "tailwindcss" so it wins the cascade.
    Digital: Noto Sans JP (clean, modern strokes)
    Written: Klee One (semi-handwritten, warm)
-─────────────────────────────────────────────────────────────────────────── */
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 :root {
   --font-serif: "Noto Sans JP", system-ui, sans-serif;
 }
 
-/* Written / semi-handwritten — specificity (0,1,1) beats :root (0,1,0) */
+/* Written / semi-handwritten â€” specificity (0,1,1) beats :root (0,1,0) */
 html.font-written {
   --font-serif: "Klee One", cursive;
 }
@@ -47,11 +60,11 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* ── Light Mode: Dark Background + Bright Text/Borders ─────────────────────
+/* â”€â”€ Light Mode: Dark Background + Bright Text/Borders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    Backgrounds always stay dark (atmospheric image is preserved).
    Only text, borders, and interactive element colours shift to bright cream
    so they pop against the dark backdrop.
-─────────────────────────────────────────────────────────────────────────── */
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 [data-theme="light"] {
   --color-natural-bg: #120E1B;
   --color-natural-card: #1D1829;
@@ -67,7 +80,8 @@ body {
 }
 
 /* Cosmic Witch Dark Mode Theme Variables */
-[data-theme="dark"] {
+[data-theme="dark"],
+[data-theme="dark-cosmic"] {
   --color-natural-bg: #120E1B;
   --color-natural-card: #1D1829;
   --color-natural-card-light: #262036;
@@ -79,6 +93,51 @@ body {
   --color-natural-terracotta: #FF7597;
   --color-natural-border: #32264C;
   --color-natural-charcoal: #F1EAFF;
+}
+
+/* Emerald Jade (Matcha / Bamboo Dark Mode) */
+[data-theme="dark-emerald"] {
+  --color-natural-bg: #0D1612;
+  --color-natural-card: #14221B;
+  --color-natural-card-light: #1D3126;
+  --color-natural-forest: #34D399;
+  --color-natural-forest-light: #A7F3D0;
+  --color-natural-sage: #10B981;
+  --color-natural-earth: #E6FDF4;
+  --color-natural-clay: #FCD34D;
+  --color-natural-terracotta: #F87171;
+  --color-natural-border: #1E3E30;
+  --color-natural-charcoal: #E6F7F0;
+}
+
+/* Autumn Maple (Warm Crimson / Terracotta Dark Mode) */
+[data-theme="dark-maple"] {
+  --color-natural-bg: #180F0E;
+  --color-natural-card: #251614;
+  --color-natural-card-light: #34201D;
+  --color-natural-forest: #F0967A;
+  --color-natural-forest-light: #FFC0AD;
+  --color-natural-sage: #E2725B;
+  --color-natural-earth: #FFEFEA;
+  --color-natural-clay: #F5B041;
+  --color-natural-terracotta: #CD6155;
+  --color-natural-border: #4D2D2A;
+  --color-natural-charcoal: #FFF0ED;
+}
+
+/* Cyber Tokyo (Electric Neon Dark Mode) */
+[data-theme="dark-cyber"] {
+  --color-natural-bg: #0B0E17;
+  --color-natural-card: #121824;
+  --color-natural-card-light: #1E293B;
+  --color-natural-forest: #06B6D4;
+  --color-natural-forest-light: #67E8F9;
+  --color-natural-sage: #0891B2;
+  --color-natural-earth: #E0F7FA;
+  --color-natural-clay: #EC4899;
+  --color-natural-terracotta: #F43F5E;
+  --color-natural-border: #212E46;
+  --color-natural-charcoal: #E0F2FE;
 }
 
 /* Custom scrollbar to match Natural Tones design */
@@ -100,4 +159,23 @@ body {
 /* Smooth active focus glow */
 input, select, textarea, button {
   transition: all 0.15s ease;
+}
+/* Thin local scrollbar helper used by upgraded glass panels */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-natural-forest) 35%, transparent) transparent;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-natural-forest) 28%, transparent);
+  border-radius: 999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--color-natural-forest) 45%, transparent);
 }

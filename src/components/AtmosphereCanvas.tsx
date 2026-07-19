@@ -3,7 +3,7 @@ import React, { useEffect, useRef } from "react";
 interface AtmosphereCanvasProps {
   animationType: "letters" | "rain" | "both" | "none";
   intensity: "low" | "medium" | "high";
-  theme: "light" | "dark";
+  theme: string;
 }
 
 interface RainParticle {
@@ -22,22 +22,26 @@ interface LetterParticle {
   speed: number;
   opacity: number;
   angle: number;
-  angleSpeed: number;
   swaySpeed: number;
   swayAmount: number;
   color: string;
 }
 
 const JAPANESE_MAGIC_RUNES = [
-  "あ", "い", "う", "え", "お", 
-  "か", "き", "く", "け", "こ", 
-  "さ", "し", "す", "せ", "そ",
-  "夢", "星", "空", "月", "風", 
-  "花", "葉", "光", "術", "美"
+  "ã‚", "ã„", "ã†", "ãˆ", "ãŠ", 
+  "ã‹", "ã", "ã", "ã‘", "ã“", 
+  "ã•", "ã—", "ã™", "ã›", "ã",
+  "å¤¢", "æ˜Ÿ", "ç©º", "æœˆ", "é¢¨", 
+  "èŠ±", "è‘‰", "å…‰", "è¡“", "ç¾Ž"
 ];
 
-const LIGHT_COLORS = ["#7E8F7C", "#C27D56", "#506253", "#9C85DB"];
-const DARK_COLORS = ["#A788FF", "#C9B8FF", "#DF9BFF", "#FF7597", "#8F72E8"];
+const THEME_COLORS: Record<string, string[]> = {
+  "light": ["#7E8F7C", "#C27D56", "#506253", "#9C85DB"],
+  "dark-cosmic": ["#A788FF", "#C9B8FF", "#DF9BFF", "#FF7597", "#8F72E8"],
+  "dark-emerald": ["#34D399", "#A7F3D0", "#10B981", "#FCD34D", "#34D399"],
+  "dark-maple": ["#F0967A", "#FFC0AD", "#E2725B", "#F5B041", "#CD6155"],
+  "dark-cyber": ["#06B6D4", "#67E8F9", "#0891B2", "#EC4899", "#F43F5E"]
+};
 
 export default function AtmosphereCanvas({
   animationType,
@@ -111,7 +115,7 @@ export default function AtmosphereCanvas({
 
     // Initialize letter particles pool
     const letterPool: LetterParticle[] = [];
-    const colorsList = theme === "dark" ? DARK_COLORS : LIGHT_COLORS;
+    const colorsList = THEME_COLORS[theme] || THEME_COLORS["light"] || THEME_COLORS["dark-cosmic"];
     for (let i = 0; i < maxLetters; i++) {
       letterPool.push({
         x: Math.random() * width,
@@ -121,7 +125,6 @@ export default function AtmosphereCanvas({
         speed: Math.random() * 0.4 + 0.2, // cozy drifting up
         opacity: Math.random() * 0.5 + 0.1,
         angle: Math.random() * Math.PI * 2,
-        angleSpeed: (Math.random() - 0.5) * 0.01,
         swaySpeed: Math.random() * 0.02 + 0.005,
         swayAmount: Math.random() * 15 + 5,
         color: colorsList[Math.floor(Math.random() * colorsList.length)]
@@ -135,7 +138,18 @@ export default function AtmosphereCanvas({
       // 1. Draw and update Rain particles
       if (maxRain > 0) {
         ctx.lineWidth = 1.2;
-        ctx.strokeStyle = theme === "dark" ? "rgba(167, 136, 255, 0.25)" : "rgba(126, 143, 124, 0.25)";
+        
+        let strokeStyle = "rgba(126, 143, 124, 0.25)";
+        if (theme === "dark-cosmic") {
+          strokeStyle = "rgba(167, 136, 255, 0.25)";
+        } else if (theme === "dark-emerald") {
+          strokeStyle = "rgba(52, 211, 153, 0.25)";
+        } else if (theme === "dark-maple") {
+          strokeStyle = "rgba(240, 150, 122, 0.25)";
+        } else if (theme === "dark-cyber") {
+          strokeStyle = "rgba(6, 182, 212, 0.25)";
+        }
+        ctx.strokeStyle = strokeStyle;
         
         ctx.beginPath();
         for (let i = 0; i < rainPool.length; i++) {
@@ -171,7 +185,7 @@ export default function AtmosphereCanvas({
           // Apply custom text properties and shadows for glowing effect in darkmode
           ctx.font = `bold ${l.size}px "Noto Serif JP", serif`;
           
-          if (theme === "dark") {
+          if (theme.startsWith("dark")) {
             ctx.shadowColor = l.color;
             ctx.shadowBlur = 6;
             ctx.fillStyle = l.color;
@@ -216,7 +230,7 @@ export default function AtmosphereCanvas({
       ref={canvasRef}
       className="fixed inset-0 pointer-events-none z-0 select-none"
       style={{
-        mixBlendMode: theme === "dark" ? "screen" : "multiply",
+        mixBlendMode: theme.startsWith("dark") ? "screen" : "normal",
         width: "100vw",
         height: "100vh",
       }}

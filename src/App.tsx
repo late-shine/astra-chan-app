@@ -248,6 +248,13 @@ export default function App() {
 
   // Quiz Pronunciation Voice settings
   const [autoPronounce, setAutoPronounce] = useState<boolean>(false);
+  const [language, setLanguage] = useState<"en" | "ja">(() => {
+    try {
+      const stored = localStorage.getItem("hira_app_language");
+      if (stored === "en" || stored === "ja") return stored;
+    } catch (e) { }
+    return "en";
+  });
   const [availableJapaneseVoices, setAvailableJapaneseVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedJapaneseVoiceURI, setSelectedJapaneseVoiceURI] = useState<string>(() => localStorage.getItem("astra_japanese_voice_uri") || "");
   const [isAtmosphereExpanded, setIsAtmosphereExpanded] = useState(false);
@@ -370,6 +377,13 @@ export default function App() {
       localStorage.setItem("astra_font_style", fontStyle);
     } catch (e) { }
   }, [fontStyle]);
+
+  // Persist language preference
+  useEffect(() => {
+    try {
+      localStorage.setItem("hira_app_language", language);
+    } catch (e) { }
+  }, [language]);
 
   // Zen Soundscape synthesizer start/stop and volume logic
   const startAmbientMusic = () => {
@@ -2763,6 +2777,27 @@ export default function App() {
     handleAddFriend,
     handleInviteFriend,
     handleRemoveFriend,
+    language,
+    setLanguage,
+    theme,
+    setTheme,
+    bgAnimationType,
+    setBgAnimationType,
+    bgIntensity,
+    setBgIntensity,
+    bgBlur,
+    setBgBlur,
+    bgOpacity,
+    setBgOpacity,
+    fontStyle,
+    setFontStyle,
+    autoPronounce,
+    setAutoPronounce,
+    availableJapaneseVoices,
+    selectedJapaneseVoiceURI,
+    setSelectedJapaneseVoiceURI,
+    activeBgScene,
+    setActiveBgScene,
   };
 
   // Props for the extracted ReviewDeckScreen component (Phase 8 of the App.tsx split).
@@ -3193,7 +3228,7 @@ export default function App() {
         <header className="flex flex-col sm:flex-row items-center justify-between gap-4 py-3 border-b border-natural-border/60 mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 border border-natural-border rounded-xl bg-natural-card shadow-sm">
-              <span className="text-xl font-bold font-serif text-natural-forest tracking-wider">ひ</span>
+              <span className="text-xl font-bold font-serif text-natural-forest tracking-wider">あ</span>
             </div>
             <div>
               <p className="text-xl font-serif tracking-widest text-natural-forest font-extrabold flex items-center gap-1.5 leading-none">
