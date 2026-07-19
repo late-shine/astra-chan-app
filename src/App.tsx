@@ -297,13 +297,49 @@ export default function App() {
     } catch (e) { }
     return "light";
   });
-  const [bgAnimationType, setBgAnimationType] = useState<"letters" | "rain" | "both" | "none">(() => {
+  const [bgAnimationType, setBgAnimationType] = useState<"auto" | "snow" | "sakura" | "sparkles" | "rain" | "letters" | "both" | "none">(() => {
     try {
       const stored = localStorage.getItem("hira_theme_bg_anim");
-      if (stored === "letters" || stored === "rain" || stored === "both" || stored === "none") return stored;
+      if (
+        stored === "auto" ||
+        stored === "snow" ||
+        stored === "sakura" ||
+        stored === "sparkles" ||
+        stored === "rain" ||
+        stored === "letters" ||
+        stored === "both" ||
+        stored === "none"
+      ) {
+        return stored;
+      }
     } catch (e) { }
-    return "both";
+    return "auto";
   });
+
+  const [autoCycleBg, setAutoCycleBg] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem("astra_auto_cycle_bg");
+      return stored === "false" ? false : true;
+    } catch (e) {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("astra_auto_cycle_bg", String(autoCycleBg));
+    } catch (e) {}
+  }, [autoCycleBg]);
+
+  useEffect(() => {
+    if (!autoCycleBg) return;
+
+    const timer = setInterval(() => {
+      setActiveBgScene((prev) => (prev + 1) % 4);
+    }, 60000); // cycle every 1 min
+
+    return () => clearInterval(timer);
+  }, [autoCycleBg, activeBgScene]);
   const [bgIntensity, setBgIntensity] = useState<"low" | "medium" | "high">(() => {
     try {
       const stored = localStorage.getItem("hira_theme_bg_intensity");
@@ -530,14 +566,6 @@ export default function App() {
       musicAudioRef.current.volume = Math.max(0, Math.min(1, musicVolume));
     }
   }, [musicVolume]);
-
-  // Auto-cycle background scenes every 50 seconds, smoothly
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveBgScene((prev: number) => (prev + 1) % 4);
-    }, 50000);
-    return () => clearInterval(interval);
-  }, []);
 
   // HTML Audio track: create/swap audio element when track changes
   useEffect(() => {
@@ -1128,7 +1156,7 @@ export default function App() {
     return [correct, ...distractors].sort(() => Math.random() - 0.5);
   };
 
-  const getVocabQuizKey = (item: VocabularyItem) => `${item.category}:${item.word}`;
+  const getVocabQuizKey = (item: VocabularyItem) => `${item.category}:${item.word}:${item.hiragana}`;
 
   const getVocabQuizBasePool = () => {
     if (vocabQuizScope === "category") {
@@ -2953,6 +2981,7 @@ export default function App() {
         animationType={bgAnimationType}
         intensity={bgIntensity}
         theme={theme}
+        activeBgScene={activeBgScene}
       />
 
       {/* Global Toast Notification */}
@@ -3222,7 +3251,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* MAIN LAYOUT WRAPPER */}
-      <div className="w-full max-w-4xl mx-auto flex-grow flex flex-col z-10 relative">
+      <div className={`w-full ${(currentScreen === "charts" || currentScreen === "grammar-dojo") ? "max-w-5xl px-2 sm:px-4" : "max-w-4xl"} mx-auto flex-grow flex flex-col z-10 relative`}>
 
         {/* APP HEADER */}
         <header className="flex flex-col sm:flex-row items-center justify-between gap-4 py-3 border-b border-natural-border/60 mb-4">
@@ -3575,6 +3604,7 @@ export default function App() {
 
 
         {/* WITCH'S GRIMOIRE ATMOSPHERE SETUP CONTROLS */}
+        {currentScreen === "menu" && (
         <div id="witch-grimoire-controls" className="mb-3 bg-natural-card/50 border border-natural-border/60 p-3 rounded-2xl shadow-sm relative overflow-hidden backdrop-blur-sm">
           <button
             type="button"
@@ -3620,6 +3650,22 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              {/* Auto Cycle Scene Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setAutoCycleBg(!autoCycleBg);
+                  showToast(autoCycleBg ? "Auto-cycle OFF" : "Auto-cycle ON (every 1m)");
+                }}
+                className={`p-1.5 rounded-xl border text-xs font-bold transition cursor-pointer flex items-center justify-center ${
+                  autoCycleBg
+                    ? "bg-natural-forest/15 border-natural-forest/35 text-natural-forest shadow-xs"
+                    : "bg-natural-card/85 border-natural-border/75 text-natural-forest-light hover:text-natural-forest"
+                }`}
+                title={autoCycleBg ? "Auto-Cycle Scenes: Active (Changes every 1m)" : "Auto-Cycle Scenes: Paused"}
+              >
+                <Clock className={`w-3.5 h-3.5 ${autoCycleBg ? "animate-pulse" : ""}`} />
+              </button>
             </div>
             {/* 1. Theme Toggle Pill (Light / Dark) */}
             <div className="flex items-center bg-natural-card/85 p-1 rounded-xl border border-natural-border/75">
@@ -3700,16 +3746,20 @@ export default function App() {
                 id="effect-type-selector"
                 value={bgAnimationType}
                 onChange={(e) => {
-                  const val = e.target.value as "letters" | "rain" | "both" | "none";
+                  const val = e.target.value as "auto" | "snow" | "sakura" | "sparkles" | "rain" | "letters" | "both" | "none";
                   setBgAnimationType(val);
-                  showToast(`Effect: ${val}`);
+                  showToast(`Effect: ${val === "auto" ? "Theme-Based" : val}`);
                 }}
                 className="bg-natural-card border border-natural-border/80 text-natural-forest text-[11px] font-bold font-serif px-2.5 py-1.5 rounded-xl cursor-pointer focus:outline-none focus:border-natural-forest transition"
               >
-                <option value="both">Runes &amp; Rain</option>
-                <option value="letters">Floating Runes</option>
-                <option value="rain">Gentle Rain</option>
-                <option value="none">None</option>
+                <option value="auto">🌟 Theme Particles (Auto)</option>
+                <option value="snow">❄️ Cozy Snow</option>
+                <option value="sakura">🌸 Cherry Blossoms</option>
+                <option value="sparkles">✨ Magic Sparkles</option>
+                <option value="rain">🌧️ Gentle Rain</option>
+                <option value="letters">🔮 Magic Runes</option>
+                <option value="both">💫 Runes &amp; Theme-FX</option>
+                <option value="none">❌ None</option>
               </select>
             </div>
 
@@ -3777,8 +3827,10 @@ export default function App() {
           </div>
           )}
         </div>
+        )}
 
         {/* ZEN COZY SOUNDSCAPE MUSIC STATION */}
+        {currentScreen === "menu" && (
         <div id="zen-soundscape-station" className="mb-3 bg-natural-card/50 border border-natural-border/60 p-3 rounded-2xl shadow-sm relative overflow-hidden backdrop-blur-sm">
           <button
             type="button"
@@ -3895,8 +3947,10 @@ export default function App() {
           </div>
           )}
         </div>
+        )}
 
         {/* COMPANION STATUS BOARD */}
+        {(currentScreen === "menu" || currentScreen === "kanji-scroll") && (
         <div id="companion-section-wrapper" className="mb-4">
           <MascotCompanion
             mood={mascotMood}
@@ -3907,6 +3961,7 @@ export default function App() {
             onClickCompanion={handleMascotClick}
           />
         </div>
+        )}
 
         {/* MAIN ROUTER SWITCH CONTAINER */}
         <main className="flex-grow flex flex-col justify-center">

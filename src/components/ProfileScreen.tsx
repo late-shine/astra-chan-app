@@ -203,8 +203,8 @@ interface ProfileScreenProps {
   setLanguage: React.Dispatch<React.SetStateAction<"en" | "ja">>;
   theme: string;
   setTheme: React.Dispatch<React.SetStateAction<any>>;
-  bgAnimationType: "letters" | "rain" | "both" | "none";
-  setBgAnimationType: React.Dispatch<React.SetStateAction<"letters" | "rain" | "both" | "none">>;
+  bgAnimationType: "auto" | "snow" | "sakura" | "sparkles" | "rain" | "letters" | "both" | "none";
+  setBgAnimationType: React.Dispatch<React.SetStateAction<"auto" | "snow" | "sakura" | "sparkles" | "rain" | "letters" | "both" | "none">>;
   bgIntensity: "low" | "medium" | "high";
   setBgIntensity: React.Dispatch<React.SetStateAction<"low" | "medium" | "high">>;
   bgBlur: number;
@@ -786,16 +786,20 @@ export default function ProfileScreen({
                       </span>
                       <div className="grid grid-cols-4 gap-1">
                         {[
-                          { id: "letters" as const, label: language === "ja" ? "文字" : "Runes", desc: "Runes" },
-                          { id: "rain" as const, label: language === "ja" ? "雨" : "Rain", desc: "Rain" },
-                          { id: "both" as const, label: language === "ja" ? "両方" : "Both", desc: "Both" },
-                          { id: "none" as const, label: language === "ja" ? "無し" : "None", desc: "None" }
+                          { id: "auto" as const, label: language === "ja" ? "自動" : "Theme", desc: "Auto" },
+                          { id: "snow" as const, label: language === "ja" ? "雪" : "Snow", desc: "Cozy" },
+                          { id: "sakura" as const, label: language === "ja" ? "桜" : "Sakura", desc: "Petals" },
+                          { id: "sparkles" as const, label: language === "ja" ? "輝き" : "Sparkle", desc: "Glow" },
+                          { id: "rain" as const, label: language === "ja" ? "雨" : "Rain", desc: "Lines" },
+                          { id: "letters" as const, label: language === "ja" ? "文字" : "Runes", desc: "Chars" },
+                          { id: "both" as const, label: language === "ja" ? "両方" : "Both", desc: "Runes+Rain" },
+                          { id: "none" as const, label: language === "ja" ? "無し" : "None", desc: "Off" }
                         ].map((anim) => (
                           <button
                             key={anim.id}
                             type="button"
                             onClick={() => setBgAnimationType(anim.id)}
-                            className={`py-2 rounded-lg border text-center transition cursor-pointer flex flex-col justify-center items-center ${
+                            className={`py-1.5 rounded-lg border text-center transition cursor-pointer flex flex-col justify-center items-center ${
                               bgAnimationType === anim.id
                                 ? "bg-natural-forest text-natural-bg border-natural-forest font-bold"
                                 : "bg-white/5 border-white/10 text-natural-forest/65 hover:bg-white/10"

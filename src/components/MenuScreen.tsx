@@ -954,7 +954,7 @@ export default function MenuScreen(props: MenuScreenProps) {
                           const isMastered = !!stats.vocabularyProgress[voc.word];
                           return (
                             <div
-                              key={`${voc.category}-${voc.word}`}
+                              key={`${voc.category}-${voc.word}-${voc.hiragana}`}
                               className={`p-3 border rounded-2xl flex items-center justify-between transition ${isMastered
                                 ? "bg-natural-forest/5 border-natural-forest/40"
                                 : "bg-natural-bg/30 border-natural-border/50 hover:bg-natural-bg"
