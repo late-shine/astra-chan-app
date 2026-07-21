@@ -203,6 +203,122 @@ function getKanjiDeconstruction(kanji: string): { radicals: KanjiRadical[]; mnem
         { char: "田", meaning: "Chassis", role: "passenger box" }
       ],
       mnemonic: "A heavy cart chassis with multiple tracking axle lines piercing it."
+    },
+    "学": {
+      radicals: [
+        { char: "⺌", meaning: "Guiding hands / Claws", role: "guiding touch" },
+        { char: "冖", meaning: "Roof", role: "school space canopy" },
+        { char: "子", meaning: "Child", role: "student" }
+      ],
+      mnemonic: "A young child learning under a protective school roof guided by active mentoring hands. 📚"
+    },
+    "校": {
+      radicals: [
+        { char: "木", meaning: "Tree / Wood", role: "building material" },
+        { char: "交", meaning: "Mix / Intersect", role: "social/exchange" }
+      ],
+      mnemonic: "A wooden structure where children meet, cross paths, and mix to learn together. 🏫"
+    },
+    "国": {
+      radicals: [
+        { char: "囗", meaning: "Border / Enclosure", role: "country boundary" },
+        { char: "玉", meaning: "Jade / Treasure", role: "sovereign crown" }
+      ],
+      mnemonic: "A precious jade treasure safely guarded inside a country's wide borders. 🗺️"
+    },
+    "大": {
+      radicals: [
+        { char: "一", meaning: "One / Horizontal", role: "extended arms" },
+        { char: "人", meaning: "Person", role: "physical body" }
+      ],
+      mnemonic: "A person stretching their arms out as wide as possible to show how big something is! 🙋"
+    },
+    "小": {
+      radicals: [
+        { char: "亅", meaning: "Hook", role: "center vertical" },
+        { char: "ハ", meaning: "Two dots", role: "tiny fragments" }
+      ],
+      mnemonic: "A main vertical post divided by two tiny sparks on either side to denote smallness. 🐾"
+    },
+    "前": {
+      radicals: [
+        { char: "丷", meaning: "Horns / Marks", role: "indicators" },
+        { char: "一", meaning: "One / Ground", role: "base line" },
+        { char: "月", meaning: "Moon / Flesh", role: "time duration" },
+        { char: "刂", meaning: "Knife / Sword", role: "cutting tool" }
+      ],
+      mnemonic: "Standing before a target with a sharp sword, slicing up time step-by-step. ⏱️"
+    },
+    "後": {
+      radicals: [
+        { char: "彳", meaning: "Step / Walk", role: "movement" },
+        { char: "幺", meaning: "Thread", role: "connection" },
+        { char: "夂", meaning: "Go slowly", role: "delayed walk" }
+      ],
+      mnemonic: "A person walking slowly, tied to a thread trailing behind them in time. 🚶‍♂️"
+    },
+    "先": {
+      radicals: [
+        { char: "牛", meaning: "Cow", role: "top leader" },
+        { char: "儿", meaning: "Legs", role: "active walker" }
+      ],
+      mnemonic: "Active legs walking ahead like a strong cow leading the herd. 🐄"
+    },
+    "人": {
+      radicals: [
+        { char: "丿", meaning: "Left lean", role: "back support" },
+        { char: "乀", meaning: "Right lean", role: "supporting leg" }
+      ],
+      mnemonic: "Two strokes leaning together, showing how bipedal people support each other to stand. 👥"
+    },
+    "子": {
+      radicals: [
+        { char: "了", meaning: "Baby body", role: "swaddled infant" },
+        { char: "一", meaning: "Outstretched arms", role: "playful reach" }
+      ],
+      mnemonic: "A swaddled infant stretching its tiny arms wide to ask for a warm hug! 👶"
+    },
+    "手": {
+      radicals: [
+        { char: "丿", meaning: "Top slash", role: "thumb stroke" },
+        { char: "二", meaning: "Two lines", role: "finger segments" },
+        { char: "亅", meaning: "Hook", role: "wrist line" }
+      ],
+      mnemonic: "An outstretched hand showing finger joints and palm curves ready to grasp objects. 🖐️"
+    },
+    "山": {
+      radicals: [
+        { char: "山", meaning: "Mountain", role: "three peaks" }
+      ],
+      mnemonic: "Three physical peaks climbing high into the sky coordinates. ⛰️"
+    },
+    "川": {
+      radicals: [
+        { char: "川", meaning: "River", role: "flowing currents" }
+      ],
+      mnemonic: "Three vertical flowing streams of active water washing down valleys. 🌊"
+    },
+    "田": {
+      radicals: [
+        { char: "囗", meaning: "Outer border", role: "field boundary" },
+        { char: "十", meaning: "Cross division", role: "plot dividers" }
+      ],
+      mnemonic: "A grid plot representing multiple irrigation sections of agricultural rice land. 🌾"
+    },
+    "天": {
+      radicals: [
+        { char: "一", meaning: "One / Limit", role: "celestial boundary" },
+        { char: "大", meaning: "Big / Great", role: "giant figure" }
+      ],
+      mnemonic: "A giant figure reaching up way past the highest sky limits. 🌌"
+    },
+    "雨": {
+      radicals: [
+        { char: "一", meaning: "Sky", role: "canopy" },
+        { char: "冂", meaning: "Cloud", role: "vapor container" },
+        { char: "丶", meaning: "Droplets", role: "falling rain" }
+      ],
+      mnemonic: "Water droplets falling from clouds under the wide open sky canopy. 🌧️"
     }
   };
 

@@ -301,7 +301,7 @@ function buildQuiz(): QuizQuestion[] {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function ExampleRow({ example, showRomaji }: { example: GrammarExample; showRomaji: boolean }) {
+function ExampleRow({ example, showRomaji, speakJapanese }: { example: GrammarExample; showRomaji: boolean; speakJapanese: (phrase: string) => void }) {
   return (
     <div className="flex items-start justify-between gap-3 p-3 bg-natural-bg/40 border border-natural-border/40 rounded-xl hover:bg-natural-card/50 hover:border-natural-border transition duration-200">
       <div className="min-w-0 flex-1">
@@ -652,7 +652,7 @@ export default function GrammarDojo({ onBack, onAwardXP, speakJapanese }: Gramma
                         {!isExpanded && p.examples[0] && (
                           <div className="mt-3 relative z-10">
                             <p className="text-[10px] font-mono uppercase tracking-widest text-natural-forest-light/60 font-bold mb-1.5">Example Practice</p>
-                            <ExampleRow example={p.examples[0]} showRomaji={showRomaji} />
+                            <ExampleRow example={p.examples[0]} showRomaji={showRomaji} speakJapanese={speakJapanese} />
                           </div>
                         )}
 
@@ -681,7 +681,7 @@ export default function GrammarDojo({ onBack, onAwardXP, speakJapanese }: Gramma
                               <div className="flex flex-col gap-2 mt-4">
                                 <p className="text-[10px] font-mono uppercase tracking-widest text-natural-forest-light/60 font-bold">Standard Formulations</p>
                                 {p.examples.map((ex, i) => (
-                                  <ExampleRow key={i} example={ex} showRomaji={showRomaji} />
+                                  <ExampleRow key={i} example={ex} showRomaji={showRomaji} speakJapanese={speakJapanese} />
                                 ))}
                               </div>
 
