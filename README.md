@@ -121,6 +121,7 @@ The home screen is Astra-chan's room — each object is a destination:
 - **Vocab Quiz** — meaning mode and reading mode with 4-choice answers
 - **Kanji Quiz** — meaning mode and reading mode, no category hints (so it actually tests knowledge)
 - **Kanji Drawing** — draw kanji on a canvas; graded by AI for stroke accuracy
+- **Kanji Word Family** — a deep-dive panel for select kanji, grouping real vocabulary by which reading of the kanji each word uses (e.g. 生 shown across せい in 先生, い in 生きる, なま in 生, う in 生まれる), with a short note explaining sound shifts like rendaku where it isn't obvious, plus per-word pronunciation and SRS-add buttons
 
 <p align="center">
   <img src="docs/quiz-settings.png" alt="Quiz Settings — script, timer, and mode selector" width="49%" />
@@ -143,7 +144,6 @@ The home screen is Astra-chan's room — each object is a destination:
 - **Dynamic Quantity Builder** — select any number and match it with N5 counter categories (pens, animals, people, etc.) to view automatic euphonic sound modifications and explanations
 - **Step-by-Step Verb Worksheet** — conjugate root verbs live by applying past, negative, polite, or negative-te suffixes, seeing conjugations react instantly
 - **Immersive 31-Day Ledger** — a complete interactive calendar visualizer to review irregular monthly date readings and listen to natural audio pronunciations
-- **Conjugation Speed Drills** — timed worksheet exercises to boost active recollection and speed-conjugating muscle memory
 
 ### 🔁 Spaced Repetition (SRS)
 - Add any word or kanji to your personal Review Deck
@@ -180,7 +180,7 @@ The home screen is Astra-chan's room — each object is a destination:
 - **Fluid Crossfade Transitions** — a physics-based, continuous lerped canvas transition system that gracefully crossfades particle states during scene switches (no sudden jumps, especially between snow and cherry blossoms!)
 - **Auto-Cycle Scenes Mode** — a cozy toggle option to cycle through the beautiful background scenes automatically every minute, with persistence saved in local storage
 - **Atmosphere controls** — 5 gorgeous music tracks, custom background blur, opacity, and intensity controls
-- **Theme & Fonts** — seamless dark/light modes + premium typography selector (Noto Sans JP / Klee One)
+- **Theme & Fonts** — 6 full visual themes (Light, Dark, 🔮 Cosmic Witch, 🎋 Emerald Jade, 🍁 Autumn Maple, 🌌 Cyber Tokyo), each with its own color palette and matching shift in Astra-chan's personality and dialogue, plus a premium typography selector (Noto Sans JP / Klee One)
 - **Astra-chan** — animated mascot with mood system, speech bubbles, and AFK reactions:
   - Goes wondering after 15 seconds of no interaction
   - Goes into deep AFK mode after 3 minutes
@@ -278,7 +278,10 @@ CLOUDFLARE_API_TOKEN=
 - [x] Kanji AI drawing analysis (10,000 free requests/day via Cloudflare)
 - [x] Romaji toggle for beginners across Grammar Dojo and Reference Charts
 - [x] App component splitting (App.tsx went from 7,625 lines to 3,932 lines across 9 phases — described above)
-- [ ] Custom chart maker (user-created reference tables)
+- [x] Interactive Mastery Sandbox (counter builder, verb conjugation worksheet, 31-day calendar ledger — built as interactive tools rather than literal user-created tables)
+- [x] Kanji Word Family panel (reading-grouped vocabulary deep-dive, 13 kanji so far)
+- [x] 6-theme visual system (Light, Dark, Cosmic Witch, Emerald Jade, Autumn Maple, Cyber Tokyo)
+- [ ] Kanji Word Family reading drill quiz
 - [ ] N4 vocabulary expansion
 - [ ] Mobile app version
 
