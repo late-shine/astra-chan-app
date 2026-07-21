@@ -54,7 +54,7 @@ export default function MascotCompanion({
       case "learn-flashcard":
         return "📖 You are safe inside the Sanctuary! Click on any elemental rune card to hear its native pronunciation audio and see its hidden dictionary combinations.";
       case "learn-vocabs":
-        return "🌿 Ah, the N5 Word Garden! We have over 720+ spell ingredients here, grouped by category. Study each plant closely and click the checkmark to store it in your inventory!";
+        return "🌿 Ah, the N5 Word Garden! We have over 690+ spell ingredients here, grouped by category. Study each plant closely and click the checkmark to store it in your inventory!";
       case "survival-danger":
         return "🔥 Oh no! The midnight candle is flickering down! Enter your romaji spelling key faster to fuel the mystical flame, quick! ⚡";
       case "clicked":
