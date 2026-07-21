@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, createContext, useContext } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   ChevronLeft, 
@@ -16,31 +16,27 @@ import InteractiveWorkbench from "./InteractiveWorkbench";
 
 interface ReferenceChartsProps {
   onBack: () => void;
+  speakJapanese: (phrase: string) => void;
 }
 
 type TabId = "counters" | "numbers" | "time" | "verbs" | "adjectives" | "particles";
 
-// ─── Speak Helper ─────────────────────────────────────────────────────────────
+// ─── Speak Context ────────────────────────────────────────────────────────────
+// SpeakButton is used inside several nested tab components (CountersTab,
+// NumbersTab, etc). Rather than threading speakJapanese through every one of
+// their prop interfaces, it's provided once here and read via context —
+// avoids touching unrelated tab components' signatures.
 
-function speak(text: string) {
-  if (!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "ja-JP";
-  u.rate = 0.9;
-  const voices = window.speechSynthesis.getVoices();
-  const jpVoice = voices.find((v) => v.lang.startsWith("ja"));
-  if (jpVoice) u.voice = jpVoice;
-  window.speechSynthesis.speak(u);
-}
+const SpeakContext = createContext<(text: string) => void>(() => {});
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function SpeakButton({ text }: { text: string }) {
+  const speakJapanese = useContext(SpeakContext);
   return (
     <button
       type="button"
-      onClick={() => speak(text)}
+      onClick={() => speakJapanese(text)}
       className="p-1.5 rounded-lg bg-natural-bg/90 border border-natural-border hover:bg-natural-forest/10 hover:border-natural-forest text-natural-forest/60 hover:text-natural-forest transition shrink-0 shadow-xs cursor-pointer"
       title={`Hear pronunciation: ${text}`}
     >
@@ -976,7 +972,7 @@ const TABS: { id: TabId; label: string; emoji: string }[] = [
   { id: "particles", label: "Particles", emoji: "🔗" },
 ];
 
-export default function ReferenceCharts({ onBack }: ReferenceChartsProps) {
+export default function ReferenceCharts({ onBack, speakJapanese }: ReferenceChartsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("counters");
   const [showSandbox, setShowSandbox] = useState<boolean>(false);
 
@@ -1008,6 +1004,7 @@ export default function ReferenceCharts({ onBack }: ReferenceChartsProps) {
   };
 
   return (
+    <SpeakContext.Provider value={speakJapanese}>
     <motion.div
       initial={{ opacity: 0, x: 50 }}
       animate={{ opacity: 1, x: 0 }}
@@ -1144,7 +1141,7 @@ export default function ReferenceCharts({ onBack }: ReferenceChartsProps) {
               initial={{ x: "100%" }}
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              transition={{ type: "spring", stiffness: 180, damping: 28 }}
               className="fixed top-0 right-0 h-full z-50 w-[420px] max-w-[92vw] overflow-y-auto bg-white/5 backdrop-blur-2xl border-l border-white/10 shadow-[0_0_60px_rgba(0,0,0,0.35)] [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.22)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10"
             >
               <button
@@ -1156,12 +1153,13 @@ export default function ReferenceCharts({ onBack }: ReferenceChartsProps) {
               >
                 <X className="h-4 w-4" />
               </button>
-              <InteractiveWorkbench onClose={() => setShowSandbox(false)} />
+              <InteractiveWorkbench onClose={() => setShowSandbox(false)} speakJapanese={speakJapanese} />
             </motion.div>
           </>
         )}
       </AnimatePresence>
 
     </motion.div>
+    </SpeakContext.Provider>
   );
 }

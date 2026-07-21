@@ -317,7 +317,9 @@ export default function AtmosphereCanvas({
 
       // --- DRAW SNOW ---
       if (multSnow > 0.002) {
-        ctx.fillStyle = theme.startsWith("dark") ? "rgba(240, 248, 255, 0.9)" : "rgba(90, 110, 100, 0.75)";
+        // All themes (including "light") sit on a dark atmospheric background,
+        // so snow should always render at full brightness — no theme branch needed.
+        ctx.fillStyle = "rgba(240, 248, 255, 0.9)";
         for (let i = 0; i < snowPool.length; i++) {
           const s = snowPool[i];
           ctx.beginPath();
@@ -401,10 +403,9 @@ export default function AtmosphereCanvas({
           ctx.quadraticCurveTo(0, 0, 0, -currentSize);
           ctx.closePath();
           
-          if (theme.startsWith("dark")) {
-            ctx.shadowColor = s.color;
-            ctx.shadowBlur = 5;
-          }
+          // All themes render on a dark background now, so the glow always applies.
+          ctx.shadowColor = s.color;
+          ctx.shadowBlur = 5;
           ctx.fill();
           ctx.restore();
 
@@ -468,13 +469,10 @@ export default function AtmosphereCanvas({
           
           ctx.font = `bold ${l.size}px "Noto Serif JP", serif`;
           
-          if (theme.startsWith("dark")) {
-            ctx.shadowColor = l.color;
-            ctx.shadowBlur = 6;
-            ctx.fillStyle = l.color;
-          } else {
-            ctx.fillStyle = l.color;
-          }
+          // All themes render on a dark background now, so the glow always applies.
+          ctx.shadowColor = l.color;
+          ctx.shadowBlur = 6;
+          ctx.fillStyle = l.color;
           
           ctx.globalAlpha = l.opacity * multLetters;
           ctx.fillText(l.char, 0, 0);
@@ -511,7 +509,8 @@ export default function AtmosphereCanvas({
       ref={canvasRef}
       className="fixed inset-0 pointer-events-none z-0 select-none"
       style={{
-        mixBlendMode: theme.startsWith("dark") ? "screen" : "normal",
+        // "screen" blend brightens particles against the dark backdrop every theme uses now.
+        mixBlendMode: "screen",
         width: "100vw",
         height: "100vh",
       }}

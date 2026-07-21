@@ -290,10 +290,12 @@ export default function App() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   // Customizable background elements and dark/light settings
-  const [theme, setTheme] = useState<"light" | "dark">(() => {
+  const VALID_THEMES = ["light", "dark", "dark-cosmic", "dark-emerald", "dark-maple", "dark-cyber"] as const;
+  type ThemeId = typeof VALID_THEMES[number];
+  const [theme, setTheme] = useState<ThemeId>(() => {
     try {
       const stored = localStorage.getItem("hira_theme_mode");
-      if (stored === "dark" || stored === "light") return stored;
+      if (stored && (VALID_THEMES as readonly string[]).includes(stored)) return stored as ThemeId;
     } catch (e) { }
     return "light";
   });
@@ -936,7 +938,11 @@ export default function App() {
     const loadVoices = () => {
       const voices = window.speechSynthesis.getVoices().filter((voice) => voice.lang.toLowerCase().startsWith("ja"));
       setAvailableJapaneseVoices(voices);
-      if (selectedJapaneseVoiceURI && !voices.some((voice) => voice.voiceURI === selectedJapaneseVoiceURI)) {
+      // Browsers return an empty voice list on the very first synchronous call
+      // (the real list loads asynchronously via "voiceschanged"). Only clear the
+      // saved preference once we actually have a populated list to check against —
+      // otherwise this wipes a valid saved voice before it's ever had a chance to load.
+      if (voices.length > 0 && selectedJapaneseVoiceURI && !voices.some((voice) => voice.voiceURI === selectedJapaneseVoiceURI)) {
         setSelectedJapaneseVoiceURI("");
         localStorage.removeItem("astra_japanese_voice_uri");
       }
@@ -1702,9 +1708,30 @@ export default function App() {
   // FIX: Update both XP and characterProgress so Kanji Quiz "Studied" pool works
   setStats((prev) => {
     const prevProg = prev.characterProgress[activeKanji] || { correct: 0, total: 0 };
+
+    // Record today's study date and recompute the streak the same way the kana
+    // quiz XP path does — without this, kanji study earns XP but silently
+    // doesn't count toward the streak until the next full page reload.
+    const todayStr = new Date().toLocaleDateString("en-CA");
+    const existingDates = prev.studyDates || [];
+    const updatedStudyDates = existingDates.includes(todayStr)
+      ? existingDates
+      : [...existingDates, todayStr];
+    const studySet = new Set(updatedStudyDates);
+    let currentStreak = 0;
+    const cursor = new Date();
+    cursor.setHours(0, 0, 0, 0);
+    while (studySet.has(cursor.toLocaleDateString("en-CA"))) {
+      currentStreak++;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+
     const updated = {
       ...prev,
       xp: prev.xp + 40,
+      streakCount: currentStreak,
+      lastActiveDate: todayStr,
+      studyDates: updatedStudyDates,
       characterProgress: {
         ...prev.characterProgress,
         [activeKanji]: {
@@ -3366,7 +3393,7 @@ export default function App() {
                             )}
                           </button>
                           <div className="min-w-0">
-                            <h4 className="font-serif font-extrabold text-natural-forest text-sm truncate">My Progress</h4>
+                            <h4 className="font-serif font-extrabold text-natural-forest text-sm truncate">{profileNameInput || "My Progress"}</h4>
                             <p className="text-[10px] text-natural-forest-light font-mono truncate">{getScholarRankTitle(stats.xp)}</p>
                           </div>
                         </div>
@@ -3992,12 +4019,12 @@ export default function App() {
 
           {/* ================= SCREEN: REFERENCE CHARTS ================= */}
           {currentScreen === "charts" && (
-            <ReferenceCharts onBack={() => setCurrentScreen("menu")} />
+            <ReferenceCharts onBack={() => setCurrentScreen("menu")} speakJapanese={speakJapanese} />
           )}
 
           {/* ================= SCREEN: GRAMMAR DOJO ================= */}
           {currentScreen === "grammar-dojo" && (
-            <GrammarDojo onBack={() => setCurrentScreen("menu")} onAwardXP={(xp) => awardXPAndIncrementAttempt(true, xp)} />
+            <GrammarDojo onBack={() => setCurrentScreen("menu")} onAwardXP={(xp) => awardXPAndIncrementAttempt(true, xp)} speakJapanese={speakJapanese} />
           )}
 
           {/* ================= SCREEN: SRS REVIEW DECK ================= */}

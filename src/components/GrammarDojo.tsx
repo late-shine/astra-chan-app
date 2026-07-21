@@ -17,6 +17,7 @@ import companionImg from "../assets/images/synthid-removed-Gemini_Generated_Imag
 interface GrammarDojoProps {
   onBack: () => void;
   onAwardXP: (amount: number) => void;
+  speakJapanese: (phrase: string) => void;
 }
 
 interface GrammarExample {
@@ -47,20 +48,6 @@ interface GrammarPattern {
   examples: GrammarExample[];
   tip?: string;
   quizBlanks: QuizBlank[];
-}
-
-// ─── Speak Helper (mirrors ReferenceCharts.tsx) ───────────────────────────────
-
-function speak(text: string) {
-  if (!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "ja-JP";
-  u.rate = 0.9;
-  const voices = window.speechSynthesis.getVoices();
-  const jpVoice = voices.find((v) => v.lang.startsWith("ja"));
-  if (jpVoice) u.voice = jpVoice;
-  window.speechSynthesis.speak(u);
 }
 
 // ─── Grammar Pattern Data ──────────────────────────────────────────────────────
@@ -332,7 +319,7 @@ function ExampleRow({ example, showRomaji }: { example: GrammarExample; showRoma
       </div>
       <button
         type="button"
-        onClick={() => speak(example.japanese)}
+        onClick={() => speakJapanese(example.japanese)}
         className="p-2 rounded-xl bg-natural-bg/80 border border-natural-border/50 hover:bg-natural-forest/10 hover:border-natural-forest text-natural-forest/60 hover:text-natural-forest transition shrink-0 cursor-pointer shadow-xs"
         title={`Pronounce: ${example.japanese}`}
       >
@@ -374,7 +361,7 @@ function BlankSentence({
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export default function GrammarDojo({ onBack, onAwardXP }: GrammarDojoProps) {
+export default function GrammarDojo({ onBack, onAwardXP, speakJapanese }: GrammarDojoProps) {
   // ── Study mode state ────────────────────────────────────────────────────────
   const [mode, setMode] = useState<"study" | "practice">("study");
   const [searchQuery, setSearchQuery] = useState("");
@@ -992,7 +979,7 @@ export default function GrammarDojo({ onBack, onAwardXP }: GrammarDojoProps) {
                                       
                                       <button
                                         type="button"
-                                        onClick={() => speak(currentQ.sentence.replace("＿＿＿", currentQ.blank))}
+                                        onClick={() => speakJapanese(currentQ.sentence.replace("＿＿＿", currentQ.blank))}
                                         className="p-1.5 bg-natural-card border border-natural-border/70 hover:bg-natural-forest/10 hover:text-natural-forest rounded-lg text-natural-forest-light transition cursor-pointer shadow-xs shrink-0"
                                         title="Hear full sentence"
                                       >

@@ -17,20 +17,6 @@ import {
   AlertCircle
 } from "lucide-react";
 
-// ─── Speak Helper ─────────────────────────────────────────────────────────────
-
-function speak(text: string) {
-  if (!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "ja-JP";
-  u.rate = 0.9;
-  const voices = window.speechSynthesis.getVoices();
-  const jpVoice = voices.find((v) => v.lang.startsWith("ja"));
-  if (jpVoice) u.voice = jpVoice;
-  window.speechSynthesis.speak(u);
-}
-
 // ─── Number & Counter Helper Logic ─────────────────────────────────────────────
 
 const COUNTERS_LIST = [
@@ -778,7 +764,7 @@ const CALENDAR_DAYS = [
 
 // ─── Component Code ────────────────────────────────────────────────────────────
 
-export default function InteractiveWorkbench({ onClose }: { onClose: () => void }) {
+export default function InteractiveWorkbench({ onClose, speakJapanese }: { onClose: () => void; speakJapanese: (phrase: string) => void }) {
   const [activeMode, setActiveMode] = useState<"counters" | "verbs" | "calendar">("counters");
 
   // 1. Counter states
@@ -1020,7 +1006,7 @@ export default function InteractiveWorkbench({ onClose }: { onClose: () => void 
                 
                 <button
                   type="button"
-                  onClick={() => speak(computedCounterResult.reading)}
+                  onClick={() => speakJapanese(computedCounterResult.reading)}
                   className="p-3 rounded-2xl bg-natural-bg hover:bg-natural-forest/10 border border-natural-border hover:border-natural-forest text-natural-forest/60 hover:text-natural-forest shadow-xs cursor-pointer transition shrink-0"
                   title="Hear pronunciation"
                 >
@@ -1117,7 +1103,7 @@ export default function InteractiveWorkbench({ onClose }: { onClose: () => void 
                 </div>
                 <button
                   type="button"
-                  onClick={() => speak(computedVerbResult.word)}
+                  onClick={() => speakJapanese(computedVerbResult.word)}
                   className="p-3 rounded-2xl bg-natural-bg hover:bg-natural-forest/10 border border-natural-border hover:border-natural-forest text-natural-forest/60 hover:text-natural-forest shadow-xs cursor-pointer transition shrink-0"
                   title="Hear pronunciation"
                 >
@@ -1230,7 +1216,7 @@ export default function InteractiveWorkbench({ onClose }: { onClose: () => void 
                 
                 <button
                   type="button"
-                  onClick={() => speak(currentDayData.reading)}
+                  onClick={() => speakJapanese(currentDayData.reading)}
                   className="p-3 rounded-2xl bg-natural-bg hover:bg-natural-forest/10 border border-natural-border hover:border-natural-forest text-natural-forest/60 hover:text-natural-forest shadow-xs cursor-pointer transition shrink-0"
                   title="Hear pronunciation"
                 >
