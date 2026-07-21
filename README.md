@@ -128,23 +128,22 @@ The home screen is Astra-chan's room — each object is a destination:
 </p>
 
 ### 📖 Grammar Dojo
-- 12 core N5 grammar patterns with full explanations
-- Expandable cards showing structure, 3 example sentences, and tips
-- Fill-in-the-blank practice quiz mode
-- Search and filter by level (Basic / Intermediate)
-- Romaji toggle for beginners who haven't mastered kanji yet
-- Pronunciation for every example sentence
+- **12 Core N5 Grammar Patterns** — detailed structural guides with full explanations, syntax breakdowns, and cultural tips
+- **Rich Media Support** — interactive audio pronunciation (🔊 TTS) for all grammar formulas and example sentences
+- **Fill-in-the-Blank Quizzes** — dynamic grammar quiz mode to test and solidify your understanding of patterns in context
+- **Search & Filter Controls** — instantly query and filter patterns by category, difficulty (Basic vs. Intermediate), or search terms
+- **Bilingual Romaji Toggle** — flexible reading displays designed to accommodate both total beginners and advanced learners
 
 ### 📊 Reference Charts
-- **Counters** — all 12 N5 counters with sound change rules
-- **Numbers** — two counting systems, the tricky 4/7/9 problem, large numbers
-- **Time** — days of week, months, irregular days of month, ふん vs ぷん
-- **Verb Groups** — all 3 groups with て-form and ます-form
-- **Adjectives** — い vs な conjugation tables with common mistakes
-- **Particles** — は/が/を/に/で/へ/の/と/も/から/まで with examples
-- Search bar, romaji toggle, and 🔊 pronunciation on every row
+- **Comprehensive N5 Tables** — beautifully laid-out reference grids covering Japanese numbers, counters, time, verb groups, adjectives, and particles
+- **Pronunciation Audio & Romaji** — quick-access audio buttons and romaji visibility options for every row
+- **Tricky Counting & Euphonic Rules** — clear explanations for complex phonetic modifications (e.g., ふん vs ぷん, irregular days of the month, and counting exceptions)
 
-![Reference Charts — Verb Groups table with readings and conjugations](docs/reference-charts.png)
+### 🛠️ Interactive Mastery Sandbox
+- **Dynamic Quantity Builder** — select any number and match it with N5 counter categories (pens, animals, people, etc.) to view automatic euphonic sound modifications and explanations
+- **Step-by-Step Verb Worksheet** — conjugate root verbs live by applying past, negative, polite, or negative-te suffixes, seeing conjugations react instantly
+- **Immersive 31-Day Ledger** — a complete interactive calendar visualizer to review irregular monthly date readings and listen to natural audio pronunciations
+- **Conjugation Speed Drills** — timed worksheet exercises to boost active recollection and speed-conjugating muscle memory
 
 ### 🔁 Spaced Repetition (SRS)
 - Add any word or kanji to your personal Review Deck
@@ -163,12 +162,12 @@ The home screen is Astra-chan's room — each object is a destination:
 - Friend system with invite codes
 - Live lobby with player avatars and online/offline status dots
 
-### 👤 Profile & Progress
-- XP system with levels
-- Study streak tracking with monthly calendar view
-- 10 mastery badges (First Steps, Survivor, Week Warrior, Deck Master, N5 Scholar, and more)
-- Progress backup — download stats as JSON, restore anytime
-- Voice picker — choose from all Japanese voices available on your device
+### 👤 Profile, Voice Control & Bilingual Support
+- **Dual-Language Interface** — complete bilingual support! Toggle the entire application interface between English and Japanese with a single click
+- **Custom TTS Engine Controls** — choose from all available Japanese voices on your device, and precisely fine-tune speech rate and voice pitch for perfect audio pacing
+- **Monthly Study Calendar** — detailed tracking calendar showing daily active study streaks, streak counts, and XP milestones
+- **Mastery Badges** — earn 10 distinct unlockable achievement badges celebrating your progress (e.g., *First Steps*, *Survivor*, *Week Warrior*, *Deck Master*, *N5 Scholar*)
+- **Durable Backup/Restore** — download all stats, vocabulary decks, and unlocked milestones to a JSON file and restore your state at any time
 
 <p align="center">
   <img src="docs/calendar-stats.png" alt="Study Calendar — XP, streak, and monthly activity" width="49%" />
@@ -176,11 +175,13 @@ The home screen is Astra-chan's room — each object is a destination:
 </p>
 
 ### 🎨 Atmosphere & Mascot
-- 5 animated background scenes with floating Japanese characters
-- 5 music tracks (天乃声, One Voice, 書き声残響, スパークル, Columbinas Lullaby)
-- Blur, opacity, and intensity controls
-- Dark/light mode + font selector (Noto Sans JP / Klee One)
-- **Astra-chan** — animated mascot with mood system, speech bubbles, and AFK reactions
+- **5 Animated Background Scenes** — dynamic visual themes depicting different times of day and seasons
+- **Tailored Weather & Magic Particles** — cozy falling snow, delicate cherry blossom (sakura) petals, glowing magical sparkles, gentle rain, and floating Japanese runes
+- **Fluid Crossfade Transitions** — a physics-based, continuous lerped canvas transition system that gracefully crossfades particle states during scene switches (no sudden jumps, especially between snow and cherry blossoms!)
+- **Auto-Cycle Scenes Mode** — a cozy toggle option to cycle through the beautiful background scenes automatically every minute, with persistence saved in local storage
+- **Atmosphere controls** — 5 gorgeous music tracks, custom background blur, opacity, and intensity controls
+- **Theme & Fonts** — seamless dark/light modes + premium typography selector (Noto Sans JP / Klee One)
+- **Astra-chan** — animated mascot with mood system, speech bubbles, and AFK reactions:
   - Goes wondering after 15 seconds of no interaction
   - Goes into deep AFK mode after 3 minutes
   - Lights up with excitement when you return
