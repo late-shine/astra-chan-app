@@ -114,6 +114,10 @@ The home screen is Astra-chan's room — each object is a destination:
 - **N5 Vocabulary** — 720+ words across 11 categories (greetings, food, places, actions, adjectives, body, weather, and more)
 - **Daily Spell** — a suggested next action shown on the home screen each session
 
+<p align="center">
+  <img src="docs/vocab-garden.png" alt="N5 Vocabulary — searchable word list with categories and SRS add buttons" width="100%" />
+</p>
+
 ### 🎯 Practice & Quiz
 - **Multiple quiz modes** — multiple choice, romaji typing, survival timer
 - **Custom character picker** — select exactly which characters to quiz on, with per-row select/deselect
@@ -124,8 +128,12 @@ The home screen is Astra-chan's room — each object is a destination:
 - **Kanji Word Family** — a deep-dive panel for select kanji, grouping real vocabulary by which reading of the kanji each word uses (e.g. 生 shown across せい in 先生, い in 生きる, なま in 生, う in 生まれる), with a short note explaining sound shifts like rendaku where it isn't obvious, plus per-word pronunciation and SRS-add buttons
 
 <p align="center">
-  <img src="docs/quiz-settings.png" alt="Quiz Settings — script, timer, and mode selector" width="49%" />
-  <img src="docs/kanji-drawing.png" alt="Kanji Drawing — stroke workspace with AI accuracy engine" width="49%" />
+  <img src="docs/quiz-settings.png" alt="Quiz Settings — script, timer, and mode selector including Survival Mode and Speed Duel" width="49%" />
+  <img src="docs/kanji-drawing.png" alt="Kanji Drawing — stroke workspace with AI accuracy engine and Word Family trigger" width="49%" />
+</p>
+
+<p align="center">
+  <img src="docs/kanji-word-family.png" alt="Kanji Word Family — reading-grouped vocabulary panel for 月 (Moon/Month)" width="70%" />
 </p>
 
 ### 📖 Grammar Dojo
@@ -135,15 +143,27 @@ The home screen is Astra-chan's room — each object is a destination:
 - **Search & Filter Controls** — instantly query and filter patterns by category, difficulty (Basic vs. Intermediate), or search terms
 - **Bilingual Romaji Toggle** — flexible reading displays designed to accommodate both total beginners and advanced learners
 
+<p align="center">
+  <img src="docs/grammar-dojo.png" alt="Grammar Dojo — N5 grammar pattern with structure blueprint and example sentences" width="100%" />
+</p>
+
 ### 📊 Reference Charts
 - **Comprehensive N5 Tables** — beautifully laid-out reference grids covering Japanese numbers, counters, time, verb groups, adjectives, and particles
 - **Pronunciation Audio & Romaji** — quick-access audio buttons and romaji visibility options for every row
 - **Tricky Counting & Euphonic Rules** — clear explanations for complex phonetic modifications (e.g., ふん vs ぷん, irregular days of the month, and counting exceptions)
 
+<p align="center">
+  <img src="docs/reference-charts.png" alt="Reference Charts — Time &amp; Date tab with days of the week and calendar months" width="100%" />
+</p>
+
 ### 🛠️ Interactive Mastery Sandbox
 - **Dynamic Quantity Builder** — select any number and match it with N5 counter categories (pens, animals, people, etc.) to view automatic euphonic sound modifications and explanations
 - **Step-by-Step Verb Worksheet** — conjugate root verbs live by applying past, negative, polite, or negative-te suffixes, seeing conjugations react instantly
 - **Immersive 31-Day Ledger** — a complete interactive calendar visualizer to review irregular monthly date readings and listen to natural audio pronunciations
+
+<p align="center">
+  <img src="docs/mastery-sandbox.png" alt="Interactive Mastery Sandbox — building a custom counter quantity in real time" width="70%" />
+</p>
 
 ### 🔁 Spaced Repetition (SRS)
 - Add any word or kanji to your personal Review Deck
@@ -170,7 +190,7 @@ The home screen is Astra-chan's room — each object is a destination:
 - **Durable Backup/Restore** — download all stats, vocabulary decks, and unlocked milestones to a JSON file and restore your state at any time
 
 <p align="center">
-  <img src="docs/calendar-stats.png" alt="Study Calendar — XP, streak, and monthly activity" width="49%" />
+  <img src="docs/calendar-stats.png" alt="Study Calendar — XP, streak, monthly activity, and mastery badges" width="49%" />
   <img src="docs/character-grid.png" alt="Character Grid — progress tracking per kana" width="49%" />
 </p>
 
@@ -181,6 +201,12 @@ The home screen is Astra-chan's room — each object is a destination:
 - **Auto-Cycle Scenes Mode** — a cozy toggle option to cycle through the beautiful background scenes automatically every minute, with persistence saved in local storage
 - **Atmosphere controls** — 5 gorgeous music tracks, custom background blur, opacity, and intensity controls
 - **Theme & Fonts** — 6 full visual themes (Light, Dark, 🔮 Cosmic Witch, 🎋 Emerald Jade, 🍁 Autumn Maple, 🌌 Cyber Tokyo), each with its own color palette and matching shift in Astra-chan's personality and dialogue, plus a premium typography selector (Noto Sans JP / Klee One)
+
+<p align="center">
+  <img src="docs/study-room.png" alt="Study Room in the Cosmic Witch theme" width="49%" />
+  <img src="docs/theme-cyber-tokyo.png" alt="The same Study Room in the Cyber Tokyo theme" width="49%" />
+</p>
+
 - **Astra-chan** — animated mascot with mood system, speech bubbles, and AFK reactions:
   - Goes wondering after 15 seconds of no interaction
   - Goes into deep AFK mode after 3 minutes
