@@ -5,7 +5,7 @@
 **Live App → [astra-kanji-tutor.vercel.app](https://astra-kanji-tutor.vercel.app)**  
 **GitHub → [github.com/late-shine/astra-chan-app](https://github.com/late-shine/astra-chan-app)**
 
-> Status: Active personal project / learning app. Some features require Firebase and Cloudflare credentials.
+> Status: Active personal project / learning app. Some features require Firebase and Google Gemini credentials.
 
 ![Astra-chan's Study Room — the atmospheric home screen](docs/study-room.png)
 
@@ -35,6 +35,7 @@ Some moments worth mentioning:
 - The multiplayer system took the longest. I verified Gemini's Firebase instructions with DeepSeek before trusting them. I used Perplexity to find out how to secure API keys. I used ChatGPT and Gemini together to guide the Vercel deployment. Nothing was done with one tool.
 - The Study Room redesign changed everything. Instead of menus and tabs, the home screen became Astra-chan's room — a Bookshelf, a Writing Desk, a Star Window. Navigation as a place to be, not a list to scroll through.
 - Astra-chan now reacts when you go AFK. She wonders about you after 15 seconds of silence, and lights up when you return. Small thing. Feels alive.
+- The kanji drawing AI went through two models. The original used Cloudflare Workers AI with LLaVA 1.5 7B — a vision model that technically worked, but gave vague or inaccurate stroke feedback. It would call a rough scribble "good proportions" or miss obvious structural problems. I switched it to **Google Gemini 3.1 Flash Lite**, which actually understands kanji structure. The first test gave Astra-chan feedback specific enough to name which stroke was off and why. That's the version running now.
 
 This is still being built. It probably always will be.
 
@@ -111,7 +112,7 @@ The home screen is Astra-chan's room — each object is a destination:
 ### 📚 Learning
 - **Hiragana & Katakana** — full character grids with pronunciation, flashcard mode, and example words
 - **Kanji** — 100 N5-level kanji with meanings, readings, stroke count, and example sentences
-- **N5 Vocabulary** — 720+ words across 11 categories (greetings, food, places, actions, adjectives, body, weather, and more)
+- **N5 Vocabulary** — 694 words across 11 categories (greetings, food, places, actions, adjectives, body, weather, and more)
 - **Daily Spell** — a suggested next action shown on the home screen each session
 
 <p align="center">
@@ -225,7 +226,7 @@ The home screen is Astra-chan's room — each object is a destination:
 | Animation | Framer Motion |
 | Database | Firebase Realtime Database |
 | Auth | Firebase Anonymous Auth |
-| AI Grading | Cloudflare Workers AI (LLaVA vision model) |
+| AI Grading | Google Gemini 3.1 Flash Lite (vision model) |
 | Deployment | Vercel (serverless functions for API proxy) |
 | Icons | Lucide React |
 
@@ -239,7 +240,7 @@ This project was built entirely through AI collaboration. I directed, tested, de
 |---|---|
 | **Claude** | Primary architect — features, logic, code review, prompting strategy |
 | **Codex** | Feature implementation, phase-based edits, handoff documents between sessions |
-| **Google AI Studio + Gemini** | Early builds, kanji/vocab data, Astra-chan image generation |
+| **Google AI Studio + Gemini** | Early builds, kanji/vocab data, Astra-chan image generation, kanji stroke AI |
 | **Kimi** | Dedicated bug finder and fixer (found and fixed 70+ bugs across sessions) |
 | **ChatGPT** | Combining design ideas, deployment guidance |
 | **DeepSeek** | Verifying AI suggestions before trusting them |
@@ -269,14 +270,14 @@ This project was built entirely through AI collaboration. I directed, tested, de
 
 ## Setup (Local Development)
 
-> **Known requirements:** multiplayer and kanji-drawing AI grading need Firebase Realtime Database, Firebase Anonymous Auth, and Cloudflare Workers AI credentials. Everything else runs without them.
+> **Known requirements:** multiplayer and kanji-drawing AI grading need Firebase Realtime Database, Firebase Anonymous Auth, and a Google Gemini API key. Everything else runs without them.
 
 ```bash
 git clone https://github.com/late-shine/astra-chan-app.git
 cd astra-chan-app
 npm install
 cp .env.example .env
-# Fill in your Firebase and Cloudflare API keys
+# Fill in your Firebase and Gemini API keys
 npm run dev
 ```
 
@@ -284,10 +285,12 @@ npm run dev
 ```
 VITE_FIREBASE_API_KEY=
 VITE_FIREBASE_DATABASE_URL=
-CLOUDFLARE_ACCOUNT_ID=
-CLOUDFLARE_API_TOKEN=
+GEMINI_API_KEY=
 ```
 
+> Get a free Gemini API key at [aistudio.google.com](https://aistudio.google.com). The free tier gives 500 requests/day and 250K tokens/day — more than enough for a personal learning app.
+
+> ⚠️ **AI drawing analysis limit:** The free Gemini tier resets daily. If Astra-chan's stroke checker stops responding, the day's quota has been reached — it'll be back the next day automatically.
 ---
 
 ## Roadmap
@@ -301,7 +304,7 @@ CLOUDFLARE_API_TOKEN=
 - [x] Streak calendar and achievement badges
 - [x] Progress backup and restore
 - [x] Astra-chan AFK reactions with 3 artwork states
-- [x] Kanji AI drawing analysis (10,000 free requests/day via Cloudflare)
+- [x] Kanji AI drawing analysis — originally Cloudflare Workers AI (LLaVA 1.5 7B), upgraded to **Gemini 3.1 Flash Lite** after accuracy issues with the original model (LLaVA gave vague stroke feedback; Gemini identifies specific structural problems and names them)
 - [x] Romaji toggle for beginners across Grammar Dojo and Reference Charts
 - [x] App component splitting (App.tsx went from 7,625 lines to 3,932 lines across 9 phases — described above)
 - [x] Interactive Mastery Sandbox (counter builder, verb conjugation worksheet, 31-day calendar ledger — built as interactive tools rather than literal user-created tables)
