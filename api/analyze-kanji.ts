@@ -3,12 +3,11 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Vercel Serverless Function — POST /api/analyze-kanji
  *
- * Proxies canvas drawing data to Cloudflare Workers AI (LLaVA 1.5 7B vision model).
+ * Proxies canvas drawing data to Google Gemini 3.1 Flash Lite (vision model).
  * Credentials live exclusively in Vercel Environment Variables — never the client.
  *
  * Required env vars (Vercel Dashboard → Project → Settings → Environment Variables):
- *   CLOUDFLARE_ACCOUNT_ID  — your Cloudflare account ID
- *   CLOUDFLARE_API_TOKEN   — Workers AI API token (Workers AI : Edit permission)
+ *   GEMINI_API_KEY  — Google AI Studio API key
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -20,15 +19,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ─── Validate credentials ─────────────────────────────────────────────────
-    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-    const apiToken  = process.env.CLOUDFLARE_API_TOKEN;
+    const apiKey = process.env.GEMINI_API_KEY;
 
-    if (!accountId || !apiToken) {
+    if (!apiKey) {
         return res.status(500).json({
             error:
                 "Oh no! Astra-chan's magical analysis core is missing its talisman energy! " +
-                "Please add CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN to your " +
-                "Vercel Environment Variables and redeploy.",
+                "Please add GEMINI_API_KEY to your Vercel Environment Variables and redeploy.",
         });
     }
 
@@ -43,7 +40,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
         // ─── Build the Astra-chan evaluation prompt ───────────────────────────
-        // Pick a random encouragement style so feedback never feels repetitive
         const styles = [
             "Be warm and sisterly, like a tutor cheering on a younger student.",
             "Be playful and magical, like a witch casting a learning spell.",
@@ -71,25 +67,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             `Reply with ONLY this JSON and nothing else:\n` +
             `{"score":<integer 0-100>,"feedbackTitle":"<creative upbeat title under 35 chars>","advice":"<your 5-6 sentence feedback>"}`;
 
-        // ─── Convert base64 image → uint8 array (Cloudflare Workers AI format) ─
+        // ─── Strip data URL prefix, keep raw base64 ──────────────────────────
         const base64Data = imageData.startsWith("data:")
             ? imageData.split(",")[1]
             : imageData;
-        const imageBytes = Array.from(Buffer.from(base64Data, "base64"));
 
-        // ─── Call Cloudflare Workers AI — LLaVA 1.5 7B ──────────────────────
+        // Detect mime type from data URL (default to png)
+        const mimeType = imageData.startsWith("data:")
+            ? imageData.split(";")[0].split(":")[1]
+            : "image/png";
+
+        // ─── Call Gemini 3.1 Flash Lite ───────────────────────────────────────
         const response = await fetch(
-            `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`,
             {
                 method: "POST",
                 headers: {
-                    "Authorization": `Bearer ${apiToken}`,
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    image: imageBytes,
-                    prompt: promptText,
-                    max_tokens: 600,
+                    contents: [
+                        {
+                            parts: [
+                                {
+                                    inline_data: {
+                                        mime_type: mimeType,
+                                        data: base64Data,
+                                    },
+                                },
+                                {
+                                    text: promptText,
+                                },
+                            ],
+                        },
+                    ],
+                    generationConfig: {
+                        maxOutputTokens: 600,
+                        temperature: 0.7,
+                    },
                 }),
             }
         );
@@ -97,17 +112,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             throw new Error(
-                errorData.errors?.[0]?.message ||
-                `Cloudflare Workers AI returned status ${response.status}`
+                errorData.error?.message ||
+                `Gemini API returned status ${response.status}`
             );
         }
 
         const responseData = await response.json();
 
-        // Cloudflare returns the text inside result.description
-        const replyText = responseData.result?.description;
+        // Gemini returns text inside candidates[0].content.parts[0].text
+        const replyText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!replyText) {
-            throw new Error("Empty response received from Cloudflare Workers AI.");
+            throw new Error("Empty response received from Gemini API.");
         }
 
         // Strip any accidental markdown fences before parsing
@@ -122,7 +137,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.json(resultObj);
 
     } catch (err: unknown) {
-        console.error("[analyze-kanji] Cloudflare Workers AI error:", err);
+        console.error("[analyze-kanji] Gemini API error:", err);
         const message =
             err instanceof Error
                 ? err.message
