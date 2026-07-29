@@ -64,12 +64,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             `70-89 = good effort, small issues with strokes or proportions\n` +
             `50-69 = recognisable but needs work on specific parts\n` +
             `below 50 = significant issues, needs more practice\n\n` +
-            `Write 2-3 sentences of specific feedback. ` +
+            `Write 5-6 sentences of specific feedback. ` +
             `Vary your language — use different encouraging phrases each time. ` +
             `Mention actual parts of the kanji that look good or need fixing. ` +
             `End with one specific actionable tip for improvement.\n\n` +
             `Reply with ONLY this JSON and nothing else:\n` +
-            `{"score":<integer 0-100>,"feedbackTitle":"<creative upbeat title under 35 chars>","advice":"<your 2-3 sentence feedback>"}`;
+            `{"score":<integer 0-100>,"feedbackTitle":"<creative upbeat title under 35 chars>","advice":"<your 5-6 sentence feedback>"}`;
 
         // ─── Convert base64 image → uint8 array (Cloudflare Workers AI format) ─
         const base64Data = imageData.startsWith("data:")
