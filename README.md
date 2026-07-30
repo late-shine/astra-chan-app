@@ -253,7 +253,6 @@ This project was built entirely through AI collaboration. I directed, tested, de
 | **Codeium** | Code assistance |
 | **OneCompiler** | Quick isolated testing |
 
-**One strategy worth sharing:** I would use one Claude session to review the codebase and write a targeted prompt — specifying exactly which files and line ranges to read — then feed that prompt to a second Claude session, or to Codex, with only those files. This made it possible to work on a 7500+ line codebase without hitting context limits. The App.tsx component split (see above) is the clearest example: 9 separate phased prompts, each one scoped to a single screen, each verified before the next began. Each AI was used for what it does best rather than relying on one for everything.
 
 ---
 

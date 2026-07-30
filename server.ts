@@ -14,7 +14,7 @@ async function startServer() {
   app.use(express.json({ limit: "15mb" }));
   app.use(express.urlencoded({ limit: "15mb", extended: true }));
 
-  // API: Analyze Kanji Drawing using OpenRouter (Gemini 2.0 Flash)
+  // API: Analyze Kanji Drawing using Google Gemini 3.1 Flash Lite
   app.post("/api/analyze-kanji", async (req, res) => {
     try {
       const { kanji, meaning, imageData } = req.body;
@@ -26,80 +26,98 @@ async function startServer() {
       }
 
       // Check key presence first
-      const apiKey = process.env.OPENROUTER_API_KEY;
+      const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
         return res.status(500).json({
           error:
-            "Oh no! Astra-chan's magical analysis core couldn't find her special secret talisman energy (missing OPENROUTER_API_KEY environment variable). Please add your OpenRouter API Key in your .env file, then try again!"
+            "Oh no! Astra-chan's magical analysis core couldn't find her special secret talisman energy (missing GEMINI_API_KEY environment variable). Please add your Gemini API Key in your .env file, then try again!"
         });
       }
 
-      const prompt = `You are Astra-chan (アストラちゃん), an enthusiastic and cute magical-girl mascot who guides students through learning Japanese.
-Analyze the user's handwritten/drawn attempt for the Kanji character "${kanji}" (which represents translation meaning: "${meaning || "unknown"}").
+      const styles = [
+        "Be warm and sisterly, like a tutor cheering on a younger student.",
+        "Be playful and magical, like a witch casting a learning spell.",
+        "Be precise and focused, like a sensei giving a lesson.",
+        "Be enthusiastic and celebratory, like a fan cheering at a match.",
+      ];
+      const style = styles[Math.floor(Math.random() * styles.length)];
 
-Compare their drawing (provided as an image) to the official structural strokes, proportions, balancing, and intersections of correct "${kanji}".
-Determine an accuracy percentage score from 0 to 100. Be fair but encouraging! (e.g. if details are slightly wavy but trace the outline, give 75-85%; if it's exceptionally drawn give 90-98%; if it's just a scribble or wrong character, give a low score).
+      const prompt =
+        `You are Astra-chan (アストラちゃん), an enthusiastic and cute magical-girl mascot who guides students through learning Japanese.\n` +
+        `Tone: ${style}\n\n` +
+        `Analyze the user's handwritten/drawn attempt for the Kanji character "${kanji}" (meaning: "${meaning || "unknown"}").\n\n` +
+        `Compare their drawing to the official structural strokes, proportions, balancing, and intersections of correct "${kanji}".\n` +
+        `Score from 0 to 100:\n` +
+        `90-100 = excellent, matches "${kanji}" very closely\n` +
+        `70-89 = good effort, small issues with strokes or proportions\n` +
+        `50-69 = recognisable but needs work on specific parts\n` +
+        `below 50 = significant issues, needs more practice\n\n` +
+        `Write 5-6 sentences of specific feedback. Mention actual parts of the kanji that look good or need fixing. ` +
+        `End with one specific actionable tip for improvement.\n` +
+        `Add a cute energetic summary title in "feedbackTitle" like "Wonderful Stroke Work!", "Terrific Effort!", or "A Tiny Bit Off-Balance!".\n\n` +
+        `Reply with ONLY this JSON and nothing else:\n` +
+        `{"score":<integer 0-100>,"feedbackTitle":"<title under 35 chars>","advice":"<your 5-6 sentence feedback>"}`;
 
-Provide detailed critique and tips (e.g., checking proportions, line lengths, brush intersections, or order) inside "advice".
-Add a cute energetic summary title in "feedbackTitle" like "Wonderful Stroke Work!", "Terrific Effort!", or "A Tiny Bit Off-Balance!".
+      // Strip data URL prefix, keep raw base64
+      const base64Data = imageData.startsWith("data:")
+        ? imageData.split(",")[1]
+        : imageData;
 
-Your response MUST be a single raw JSON-compliant object matching the requested schema.`;
+      const mimeType = imageData.startsWith("data:")
+        ? imageData.split(";")[0].split(":")[1]
+        : "image/png";
 
-      // Call OpenRouter with Structured Outputs
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://astra-kanji-tutor.vercel.app",
-          "X-Title": "Astra App"
-        },
-        body: JSON.stringify({
-          model: "google/gemma-4-31b-it:free",
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: prompt
-                },
-                {
-                  type: "image_url",
-                  image_url: {
-                    // OpenRouter parses the standard canvas Data URL string automatically
-                    url: imageData 
-                  }
-                }
-              ]
-            }
-          ],
-
-        })
-      });
+      // Call Gemini 3.1 Flash Lite
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    inline_data: {
+                      mime_type: mimeType,
+                      data: base64Data,
+                    },
+                  },
+                  { text: prompt },
+                ],
+              },
+            ],
+            generationConfig: {
+              maxOutputTokens: 600,
+              temperature: 0.7,
+            },
+          }),
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || `OpenRouter returned status ${response.status}`);
+        throw new Error(errorData.error?.message || `Gemini API returned status ${response.status}`);
       }
 
       const responseData = await response.json();
-      const replyText = responseData.choices?.[0]?.message?.content;
-      
+      const replyText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+
       if (!replyText) {
-        throw new Error("Empty response received from OpenRouter.");
+        throw new Error("Empty response received from Gemini API.");
       }
 
-      const cleaned = replyText.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "");
-const resultObj = JSON.parse(cleaned);
+      const cleaned = replyText.trim()
+        .replace(/^```json\s*/i, "")
+        .replace(/^```\s*/i, "")
+        .replace(/```\s*$/i, "");
+      const resultObj = JSON.parse(cleaned);
 
       return res.json(resultObj);
     } catch (err: any) {
-      console.error("Kanji analysis error:", err);
+      console.error("[analyze-kanji] Gemini API error:", err);
       const errMsg = err.message || "An unexpected error occurred during Astra-chan's drawing evaluation.";
-      return res.status(500).json({
-        error: errMsg,
-      });
+      return res.status(500).json({ error: errMsg });
     }
   });
 
