@@ -59,6 +59,9 @@ import {
   addFriend,
   removeFriend,
   listenToFriends,
+  listenToFriendRequests,
+  acceptFriendRequest,
+  declineFriendRequest,
   sendRoomInvite,
   listenToInvites,
   clearInvite,
@@ -68,6 +71,7 @@ import {
   type OnlineDifficulty,
   type QuizMode,
   type FriendRecord,
+  type FriendRequest,
   type RoomInvite,
 } from "./multiplayerOnline";
 import { currentUid, ensureSignedIn } from "./firebase";
@@ -790,6 +794,7 @@ export default function App() {
   const [friendNameInput, setFriendNameInput] = useState("");
   const [isAddingFriend, setIsAddingFriend] = useState(false);
   const [addFriendError, setAddFriendError] = useState<string | null>(null);
+  const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   const [incomingInvites, setIncomingInvites] = useState<RoomInvite[]>([]);
   const [showProfilePanel, setShowProfilePanel] = useState(false);
   const [showFriendsSection, setShowFriendsSection] = useState(false);
@@ -801,6 +806,7 @@ export default function App() {
   const progressUploadInputRef = useRef<HTMLInputElement>(null);
   const profileAvatarInputRef = useRef<HTMLInputElement>(null);
   const unsubscribeFriendsRef = useRef<(() => void) | null>(null);
+  const unsubscribeFriendRequestsRef = useRef<(() => void) | null>(null);
   const unsubscribeInvitesRef = useRef<(() => void) | null>(null);
   // ── END FRIEND SYSTEM STATE ────────────────────────────────────────────────
 
@@ -2504,11 +2510,15 @@ export default function App() {
     const unsubFriends = listenToFriends(setFriends);
     unsubscribeFriendsRef.current = unsubFriends;
 
+    const unsubFriendRequests = listenToFriendRequests(setFriendRequests);
+    unsubscribeFriendRequestsRef.current = unsubFriendRequests;
+
     const unsubInvites = listenToInvites(setIncomingInvites);
     unsubscribeInvitesRef.current = unsubInvites;
 
     return () => {
       if (unsubscribeFriendsRef.current) unsubscribeFriendsRef.current();
+      if (unsubscribeFriendRequestsRef.current) unsubscribeFriendRequestsRef.current();
       if (unsubscribeInvitesRef.current) unsubscribeInvitesRef.current();
     };
   }, [myUid]);
@@ -2538,14 +2548,43 @@ export default function App() {
     setAddFriendError(null);
     try {
       await ensureSignedIn();
-      await addFriend(friendUidInput.trim(), friendNameInput.trim() || "Friend");
-      showToast(`Friend added successfully!`);
+      await addFriend(friendUidInput.trim(), profileName || profileNameInput || "Astra Scholar", profileAvatar);
+      showToast(`Friend request sent!`);
       setFriendUidInput("");
       setFriendNameInput("");
     } catch (err: any) {
       setAddFriendError(err.message || "Failed to add friend");
     } finally {
       setIsAddingFriend(false);
+    }
+  };
+
+  const handleAcceptFriendRequest = async (request: FriendRequest) => {
+    try {
+      await acceptFriendRequest(request, profileName || profileNameInput || "Astra Scholar", profileAvatar);
+      showToast(`${request.fromName || "Friend"} added!`);
+    } catch (err: any) {
+      showToast(err.message || "Failed to accept friend request");
+    }
+  };
+
+  const handleDeclineFriendRequest = async (requestId: string) => {
+    try {
+      await declineFriendRequest(requestId);
+      showToast("Friend request dismissed");
+    } catch (err: any) {
+      showToast(err.message || "Failed to dismiss friend request");
+    }
+  };
+
+  const handleSendFriendRequestToPlayer = async (playerUid: string | null | undefined, playerName?: string | null) => {
+    if (!playerUid) return;
+    try {
+      await ensureSignedIn();
+      await addFriend(playerUid, profileName || profileNameInput || "Astra Scholar", profileAvatar);
+      showToast(`Friend request sent to ${playerName || "player"}!`);
+    } catch (err: any) {
+      showToast(err.message || "Failed to send friend request");
     }
   };
 
@@ -2806,6 +2845,7 @@ export default function App() {
     addFriendError,
     isAddingFriend,
     friends,
+    friendRequests,
     myUid,
     calendarOpen,
     setCalendarOpen,
@@ -2830,6 +2870,8 @@ export default function App() {
     handleSaveProfile,
     handleDownloadProgress,
     handleAddFriend,
+    handleAcceptFriendRequest,
+    handleDeclineFriendRequest,
     handleInviteFriend,
     handleRemoveFriend,
     language,
@@ -2910,6 +2952,7 @@ export default function App() {
     setOnlineQuestionCount,
     quizMode,
     friends,
+    myUid,
     showToast,
     speakJapanese,
     setCurrentScreen,
@@ -2919,6 +2962,7 @@ export default function App() {
     handleOnlineSubmitAnswer,
     handleLeaveOnlineRoom,
     handleInviteFriend,
+    handleSendFriendRequestToPlayer,
     getOnlinePlayerQuestionIndex,
     getOnlinePlayerFinished,
   };
@@ -3526,7 +3570,7 @@ export default function App() {
                     >
                       <span className="flex items-center gap-1.5">
                         <UserPlus className="w-3.5 h-3.5" />
-                        Friends ({friends.length})
+                        Friends ({friends.length}{friendRequests.length > 0 ? ` · ${friendRequests.length} request${friendRequests.length === 1 ? "" : "s"}` : ""})
                       </span>
                       <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showFriendsSection ? "rotate-90" : ""}`} />
                     </button>
@@ -3541,6 +3585,47 @@ export default function App() {
                           transition={{ duration: 0.2 }}
                           className="overflow-hidden"
                         >
+                          {friendRequests.length > 0 && (
+                            <div className="px-3 pb-2 space-y-1.5">
+                              <p className="text-[9px] font-mono font-bold text-natural-clay uppercase tracking-wider">Friend Requests</p>
+                              {friendRequests.map((request) => (
+                                <div key={request.id} className="flex items-center justify-between gap-2 p-2 bg-natural-clay/5 border border-natural-clay/20 rounded-xl">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className="w-7 h-7 rounded-full bg-natural-clay/10 border border-natural-clay/30 overflow-hidden flex items-center justify-center shrink-0">
+                                      {request.fromAvatar ? (
+                                        <img src={request.fromAvatar} alt="" className="w-full h-full object-cover" />
+                                      ) : (
+                                        <UserPlus className="w-3.5 h-3.5 text-natural-clay" />
+                                      )}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-[11px] font-bold font-serif text-natural-clay truncate">{request.fromName || "Astra Scholar"}</p>
+                                      <p className="text-[9px] font-mono text-natural-forest-light truncate">{request.fromUid.slice(0, 12)}...</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAcceptFriendRequest(request)}
+                                      className="p-1.5 rounded-lg bg-natural-forest/10 text-natural-forest hover:bg-natural-forest/20 transition cursor-pointer"
+                                      title="Accept request"
+                                    >
+                                      <CheckCircle2 className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeclineFriendRequest(request.id)}
+                                      className="p-1.5 rounded-lg bg-natural-terracotta/10 text-natural-terracotta hover:bg-natural-terracotta/20 transition cursor-pointer"
+                                      title="Decline request"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
                           {/* Add Friend Form */}
                           <div className="px-3 pb-2 space-y-1.5">
                             <div className="flex gap-1.5">
@@ -3550,13 +3635,6 @@ export default function App() {
                                 onChange={(e) => setFriendUidInput(e.target.value)}
                                 placeholder="Friend code"
                                 className="flex-1 px-2.5 py-1.5 bg-natural-bg border border-natural-border rounded-lg text-[11px] font-mono text-natural-charcoal outline-none focus:border-natural-forest"
-                              />
-                              <input
-                                type="text"
-                                value={friendNameInput}
-                                onChange={(e) => setFriendNameInput(e.target.value)}
-                                placeholder="Name (opt)"
-                                className="w-20 px-2 py-1.5 bg-natural-bg border border-natural-border rounded-lg text-[11px] font-mono text-natural-charcoal outline-none focus:border-natural-forest"
                               />
                               <button
                                 type="button"
@@ -3570,6 +3648,7 @@ export default function App() {
                             {addFriendError && (
                               <p className="text-[10px] text-natural-terracotta font-medium">{addFriendError}</p>
                             )}
+                            <p className="text-[9px] text-natural-forest-light font-mono">Sends a request. They will appear here after accepting.</p>
                           </div>
 
                           {/* Friends List */}

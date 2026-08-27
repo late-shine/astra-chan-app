@@ -1,6 +1,6 @@
 import type React from "react";
 import { motion } from "motion/react";
-import { ArrowBigRight, ChevronLeft, Clock, Copy, Globe, Loader2, LogOut, Mail, Trophy, UserPlus, Volume2, Wifi } from "lucide-react";
+import { ArrowBigRight, ChevronLeft, Clock, Copy, Globe, Loader2, LogOut, Mail, Play, Trophy, UserPlus, Volume2, Wifi } from "lucide-react";
 import type { HiraganaItem, KatakanaItem } from "../types";
 import type { FriendRecord, OnlineDifficulty, QuizMode, RoomState } from "../multiplayerOnline";
 
@@ -51,6 +51,7 @@ interface OnlineMultiplayerScreenProps {
   setOnlineQuestionCount: React.Dispatch<React.SetStateAction<number>>;
   quizMode: QuizMode;
   friends: FriendRecord[];
+  myUid: string | null;
   showToast: (message: string) => void;
   speakJapanese: (phrase: string) => void;
   setCurrentScreen: React.Dispatch<React.SetStateAction<CurrentScreen>>;
@@ -60,6 +61,7 @@ interface OnlineMultiplayerScreenProps {
   handleOnlineSubmitAnswer: (answer: string) => void;
   handleLeaveOnlineRoom: () => void;
   handleInviteFriend: (friendUid: string) => void;
+  handleSendFriendRequestToPlayer: (playerUid: string | null | undefined, playerName?: string | null) => void;
   getOnlinePlayerQuestionIndex: (room: RoomState, role: "host" | "guest") => number;
   getOnlinePlayerFinished: (room: RoomState, role: "host" | "guest") => boolean;
 }
@@ -104,6 +106,7 @@ export default function OnlineMultiplayerScreen({
   setOnlineQuestionCount,
   quizMode,
   friends,
+  myUid,
   showToast,
   speakJapanese,
   setCurrentScreen,
@@ -113,9 +116,14 @@ export default function OnlineMultiplayerScreen({
   handleOnlineSubmitAnswer,
   handleLeaveOnlineRoom,
   handleInviteFriend,
+  handleSendFriendRequestToPlayer,
   getOnlinePlayerQuestionIndex,
   getOnlinePlayerFinished,
 }: OnlineMultiplayerScreenProps) {
+  const friendUidSet = new Set(friends.map((friend) => friend.uid));
+  const canRequestFriend = (playerUid: string | null | undefined) =>
+    Boolean(playerUid && playerUid !== myUid && !friendUidSet.has(playerUid));
+
   return (<motion.div
               initial={{ opacity: 0, scale: 0.97 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -553,20 +561,20 @@ export default function OnlineMultiplayerScreen({
                     )}
                   </div>
 
-                  {/* Quick invite friends if host */}
+                  {/* Invite friends if host */}
                   {onlineRole === "host" && friends.length > 0 && (
                     <div className="w-full">
                       <p className="text-[10px] font-mono font-bold text-natural-forest-light uppercase tracking-wider mb-1.5">Invite Friends</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {friends.slice(0, 5).map((f) => (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-32 overflow-y-auto pr-1">
+                        {friends.map((f) => (
                           <button
                             key={f.uid}
                             type="button"
                             onClick={() => handleInviteFriend(f.uid)}
-                            className="flex items-center gap-1 px-2.5 py-1 bg-natural-bg border border-natural-border rounded-lg text-[10px] font-bold font-mono text-natural-forest hover:border-natural-clay hover:bg-natural-clay/5 transition cursor-pointer"
+                            className="flex items-center justify-between gap-2 px-2.5 py-1.5 bg-natural-bg border border-natural-border rounded-lg text-[10px] font-bold font-mono text-natural-forest hover:border-natural-clay hover:bg-natural-clay/5 transition cursor-pointer"
                           >
-                            <Mail className="w-2.5 h-2.5" />
-                            {f.name}
+                            <span className="truncate">{f.name}</span>
+                            <Mail className="w-2.5 h-2.5 shrink-0" />
                           </button>
                         ))}
                       </div>
@@ -609,6 +617,16 @@ export default function OnlineMultiplayerScreen({
                       </div>
                       <span className="text-xs font-serif font-bold text-natural-forest">{onlineRoomState.hostName || "Waiting..."}</span>
                       <span className="text-[9px] font-mono text-natural-forest-light uppercase font-bold">Host</span>
+                      {canRequestFriend(onlineRoomState.hostId) && (
+                        <button
+                          type="button"
+                          onClick={() => handleSendFriendRequestToPlayer(onlineRoomState.hostId, onlineRoomState.hostName)}
+                          className="mt-1 px-2 py-1 rounded-lg bg-natural-bg border border-natural-border text-[9px] font-mono font-bold text-natural-forest hover:border-natural-forest hover:bg-natural-forest/5 transition cursor-pointer flex items-center gap-1"
+                        >
+                          <UserPlus className="w-2.5 h-2.5" />
+                          Add Friend
+                        </button>
+                      )}
                     </div>
                     <div className={`p-3 rounded-xl border flex flex-col items-center gap-1 ${onlineRoomState.guestId ? "bg-natural-clay/10 border-natural-clay/40" : "bg-natural-bg border-natural-border"}`}>
                       <div className="relative w-12 h-12 rounded-full border-2 border-natural-clay/40 bg-natural-bg overflow-hidden flex items-center justify-center text-lg font-serif font-bold text-natural-clay">
@@ -621,6 +639,16 @@ export default function OnlineMultiplayerScreen({
                       </div>
                       <span className="text-xs font-serif font-bold text-natural-clay">{onlineRoomState.guestName || "Waiting..."}</span>
                       <span className="text-[9px] font-mono text-natural-forest-light uppercase font-bold">Guest</span>
+                      {canRequestFriend(onlineRoomState.guestId) && (
+                        <button
+                          type="button"
+                          onClick={() => handleSendFriendRequestToPlayer(onlineRoomState.guestId, onlineRoomState.guestName)}
+                          className="mt-1 px-2 py-1 rounded-lg bg-natural-bg border border-natural-border text-[9px] font-mono font-bold text-natural-clay hover:border-natural-clay hover:bg-natural-clay/5 transition cursor-pointer flex items-center gap-1"
+                        >
+                          <UserPlus className="w-2.5 h-2.5" />
+                          Add Friend
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -655,6 +683,29 @@ export default function OnlineMultiplayerScreen({
                     className="text-xs text-natural-terracotta hover:text-natural-terracotta/80 font-mono transition cursor-pointer flex items-center gap-1"
                   >
                     <LogOut className="w-3 h-3" /> Leave Room
+                  </button>
+                </div>
+              )}
+
+              {onlinePhase !== "menu" && onlinePhase !== "config" && onlinePhase !== "join" && !onlineRoomState && (
+                <div className="flex flex-col items-center gap-5 w-full max-w-sm text-center">
+                  <div>
+                    <p className="text-4xl mb-2">🌙</p>
+                    <h3 className="font-serif font-extrabold text-xl text-natural-forest tracking-wide">
+                      Duel Room Closed
+                    </h3>
+                    <p className="text-xs text-natural-forest-light font-mono mt-2">
+                      Your rival left or the room is no longer available.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleLeaveOnlineRoom}
+                    className="px-6 py-2.5 bg-natural-forest text-natural-bg rounded-2xl text-sm font-serif font-extrabold tracking-wider hover:bg-natural-forest/90 transition shadow-sm cursor-pointer flex items-center gap-2"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Back to Menu
                   </button>
                 </div>
               )}

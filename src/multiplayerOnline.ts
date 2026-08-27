@@ -58,7 +58,16 @@ export interface RoomState {
 export interface FriendRecord {
   uid: string;
   name: string;
+  avatar?: string;
   addedAt: number;
+}
+
+export interface FriendRequest {
+  id: string;
+  fromUid: string;
+  fromName: string;
+  fromAvatar?: string;
+  createdAt: number;
 }
 
 /** Public profile stored so friends can find your UID/name */
@@ -431,28 +440,29 @@ export async function leaveRoom(roomCode: string, role: "host" | "guest"): Promi
 //  FRIEND SYSTEM
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/** Add a friend by UID — writes to /friends/{myUid}/{friendUid} */
-export async function addFriend(friendUid: string, friendName: string): Promise<void> {
+/** Send a friend request by UID. The friendship is created when the target accepts. */
+export async function addFriend(friendUid: string, fromName: string, fromAvatar = ""): Promise<void> {
   const uid = currentUid();
   if (!uid) throw new Error("You must be signed in to manage friends.");
   const normalizedFriendUid = friendUid.trim();
   if (normalizedFriendUid === uid) throw new Error("You cannot add yourself as a friend.");
   if (!normalizedFriendUid) throw new Error("Please enter a valid UID.");
 
-  // Verify the friend UID exists by checking their auth record via public profile
   const friendProfileRef = ref(db, `userProfiles/${normalizedFriendUid}`);
   const snap = await get(friendProfileRef);
-  const profile = snap.val() as UserProfile | null;
   if (!snap.exists()) {
-    // Allow adding anyway — the UID might not have a profile yet
-    // but we should at least warn. We'll proceed.
+    throw new Error("No scholar found with that friend code.");
   }
 
-  const friendRef = ref(db, `friends/${uid}/${normalizedFriendUid}`);
-  await set(friendRef, {
-    uid: normalizedFriendUid,
-    name: friendName || profile?.name || "Friend",
-    addedAt: Date.now(),
+  const existingFriendSnap = await get(ref(db, `friends/${uid}/${normalizedFriendUid}`));
+  if (existingFriendSnap.exists()) throw new Error("You are already friends with this scholar.");
+
+  const requestRef = ref(db, `friendRequests/${normalizedFriendUid}/${uid}`);
+  await set(requestRef, {
+    fromUid: uid,
+    fromName: fromName.trim().slice(0, 24) || "Astra Scholar",
+    fromAvatar,
+    createdAt: Date.now(),
   });
 }
 
@@ -460,8 +470,10 @@ export async function addFriend(friendUid: string, friendName: string): Promise<
 export async function removeFriend(friendUid: string): Promise<void> {
   const uid = currentUid();
   if (!uid) throw new Error("You must be signed in to manage friends.");
-  const friendRef = ref(db, `friends/${uid}/${friendUid}`);
-  await remove(friendRef);
+  await Promise.all([
+    remove(ref(db, `friends/${uid}/${friendUid}`)),
+    remove(ref(db, `friends/${friendUid}/${uid}`)),
+  ]);
 }
 
 /** Listen to friends list changes */
@@ -481,6 +493,59 @@ export function listenToFriends(callback: (friends: FriendRecord[]) => void) {
     const list = Object.values(data).sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
     callback(list);
   });
+}
+
+export function listenToFriendRequests(callback: (requests: FriendRequest[]) => void) {
+  const uid = currentUid();
+  if (!uid) {
+    callback([]);
+    return () => {};
+  }
+
+  const requestsRef = ref(db, `friendRequests/${uid}`);
+  return onValue(requestsRef, (snapshot) => {
+    if (!snapshot.exists()) {
+      callback([]);
+      return;
+    }
+
+    const data = snapshot.val() as Record<string, Omit<FriendRequest, "id">>;
+    const list = Object.entries(data)
+      .map(([id, request]) => ({ id, ...request }))
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    callback(list);
+  });
+}
+
+export async function acceptFriendRequest(request: FriendRequest, myName: string, myAvatar = ""): Promise<void> {
+  const uid = currentUid();
+  if (!uid) throw new Error("You must be signed in to manage friends.");
+
+  const now = Date.now();
+  const myProfileSnap = await get(ref(db, `userProfiles/${uid}`));
+  const myProfile = myProfileSnap.val() as UserProfile | null;
+
+  await Promise.all([
+    set(ref(db, `friends/${uid}/${request.fromUid}`), {
+      uid: request.fromUid,
+      name: request.fromName || "Friend",
+      avatar: request.fromAvatar || "",
+      addedAt: now,
+    }),
+    set(ref(db, `friends/${request.fromUid}/${uid}`), {
+      uid,
+      name: myName || myProfile?.name || "Astra Scholar",
+      avatar: myAvatar || myProfile?.avatar || "",
+      addedAt: now,
+    }),
+    remove(ref(db, `friendRequests/${uid}/${request.id}`)),
+  ]);
+}
+
+export async function declineFriendRequest(requestId: string): Promise<void> {
+  const uid = currentUid();
+  if (!uid) throw new Error("You must be signed in to manage friends.");
+  await remove(ref(db, `friendRequests/${uid}/${requestId}`));
 }
 
 /** Send a room invite to a friend */

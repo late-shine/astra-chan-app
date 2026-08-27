@@ -14,6 +14,7 @@ import {
   User, 
   UserMinus, 
   UserPlus, 
+  X,
   Sparkles, 
   Shield, 
   Volume2, 
@@ -22,7 +23,7 @@ import {
   AlertCircle 
 } from "lucide-react";
 import type { HiraganaItem, KatakanaItem, KanjiItem, StudentStats, VocabularyItem } from "../types";
-import type { FriendRecord } from "../multiplayerOnline";
+import type { FriendRecord, FriendRequest } from "../multiplayerOnline";
 
 type CurrentScreen = "menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo";
 type ProfileCharSet = "hiragana" | "katakana";
@@ -64,10 +65,11 @@ const TRANSLATIONS = {
     unlocked: "Unlocked",
     locked: "Locked",
     companions: "Companions & Friends",
+    friendRequests: "Friend Requests",
     noCompanions: "No active companions. Share codes to unlock multiplayer sparring duels!",
-    addCompanionBtn: "Add Companion",
+    addCompanionBtn: "Send Request",
     companionPlaceholder: "Companion Friend Code",
-    nicknamePlaceholder: "Nickname",
+    requestHint: "They will appear as a companion after accepting.",
     masteryLedger: "Mastery Ledger Book",
     allSyllabary: "All Syllabary",
     coreSyllabary: "Core (Goijūon)",
@@ -125,10 +127,11 @@ const TRANSLATIONS = {
     unlocked: "アンロック済み",
     locked: "未解除",
     companions: "仲間とフレンド一覧",
+    friendRequests: "フレンド申請",
     noCompanions: "アクティブな仲間がいません。コードを共有して、対戦デュアルを解放しましょう！",
-    addCompanionBtn: "仲間を追加",
+    addCompanionBtn: "申請を送信",
     companionPlaceholder: "仲間のフレンドコード",
-    nicknamePlaceholder: "ニックネーム",
+    requestHint: "相手が承認すると仲間として表示されます。",
     masteryLedger: "五十音文字習得台帳",
     allSyllabary: "すべての音",
     coreSyllabary: "清音（五十音）",
@@ -172,6 +175,7 @@ interface ProfileScreenProps {
   addFriendError: string | null;
   isAddingFriend: boolean;
   friends: FriendRecord[];
+  friendRequests: FriendRequest[];
   myUid: string | null;
   calendarOpen: boolean;
   setCalendarOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -196,6 +200,8 @@ interface ProfileScreenProps {
   handleSaveProfile: () => void;
   handleDownloadProgress: () => void;
   handleAddFriend: () => void;
+  handleAcceptFriendRequest: (request: FriendRequest) => void;
+  handleDeclineFriendRequest: (requestId: string) => void;
   handleInviteFriend: (friendUid: string) => void;
   handleRemoveFriend: (friendUid: string) => void;
 
@@ -239,6 +245,7 @@ export default function ProfileScreen({
   addFriendError,
   isAddingFriend,
   friends,
+  friendRequests,
   myUid,
   calendarOpen,
   setCalendarOpen,
@@ -263,6 +270,8 @@ export default function ProfileScreen({
   handleSaveProfile,
   handleDownloadProgress,
   handleAddFriend,
+  handleAcceptFriendRequest,
+  handleDeclineFriendRequest,
   handleInviteFriend,
   handleRemoveFriend,
 
@@ -1224,9 +1233,56 @@ export default function ProfileScreen({
         <div className="flex items-center gap-2 pb-2 border-b border-white/5">
           <User className="w-5 h-5 text-natural-forest" />
           <h4 className="font-serif font-black text-sm text-natural-forest">
-            {t.companions} ({friends.length})
+            {t.companions} ({friends.length}{friendRequests.length > 0 ? ` · ${friendRequests.length}` : ""})
           </h4>
         </div>
+
+        {friendRequests.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <p className="text-[10px] font-mono font-black text-natural-clay uppercase tracking-wider">{t.friendRequests}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {friendRequests.map((request) => (
+                <div
+                  key={request.id}
+                  className="flex items-center justify-between p-3 bg-natural-clay/10 border border-natural-clay/20 rounded-xl"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-natural-clay/15 border border-natural-clay/30 overflow-hidden flex items-center justify-center shrink-0">
+                      {request.fromAvatar ? (
+                        <img src={request.fromAvatar} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <UserPlus className="w-4 h-4 text-natural-clay" />
+                      )}
+                    </div>
+                    <div className="min-w-0 text-left">
+                      <p className="text-xs font-serif font-black text-natural-clay truncate">{request.fromName || "Astra Scholar"}</p>
+                      <p className="text-[9px] font-mono text-natural-forest/50 truncate tracking-tight">{request.fromUid.slice(0, 16)}...</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleAcceptFriendRequest(request)}
+                      className="p-2 rounded-xl bg-natural-forest/10 hover:bg-natural-forest hover:text-white border border-natural-forest/20 text-natural-forest transition cursor-pointer"
+                      title="Accept Friend Request"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeclineFriendRequest(request.id)}
+                      className="p-2 rounded-xl bg-natural-terracotta/10 hover:bg-natural-terracotta hover:text-white border border-natural-terracotta/20 text-natural-terracotta transition cursor-pointer"
+                      title="Decline Friend Request"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Add Friend Form */}
         <div className="flex flex-col sm:flex-row gap-3">
@@ -1236,13 +1292,6 @@ export default function ProfileScreen({
             onChange={(e) => setFriendUidInput(e.target.value)}
             placeholder={t.companionPlaceholder}
             className="flex-1 px-3.5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-mono text-natural-charcoal outline-none focus:border-natural-forest/60 focus:ring-1 focus:ring-natural-forest/30 transition-all placeholder:text-natural-forest-light/40"
-          />
-          <input
-            type="text"
-            value={friendNameInput}
-            onChange={(e) => setFriendNameInput(e.target.value)}
-            placeholder={t.nicknamePlaceholder}
-            className="w-full sm:w-32 px-3.5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-mono text-natural-charcoal outline-none focus:border-natural-forest/60 focus:ring-1 focus:ring-natural-forest/30 transition-all placeholder:text-natural-forest-light/40"
           />
           <button
             type="button"
@@ -1260,6 +1309,7 @@ export default function ProfileScreen({
             {addFriendError}
           </p>
         )}
+        <p className="text-[10px] text-natural-forest/50 font-mono font-bold -mt-2">{t.requestHint}</p>
 
         {/* Friends grid */}
         {friends.length === 0 ? (
@@ -1274,8 +1324,12 @@ export default function ProfileScreen({
                 className="flex items-center justify-between p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all duration-300 group"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-full bg-natural-forest/15 border border-natural-forest/30 flex items-center justify-center shrink-0">
-                    <User className="w-4 h-4 text-natural-forest" />
+                  <div className="w-8 h-8 rounded-full bg-natural-forest/15 border border-natural-forest/30 overflow-hidden flex items-center justify-center shrink-0">
+                    {friend.avatar ? (
+                      <img src={friend.avatar} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-4 h-4 text-natural-forest" />
+                    )}
                   </div>
                   <div className="min-w-0 text-left">
                     <p className="text-xs font-serif font-black text-natural-charcoal truncate">{friend.name}</p>
