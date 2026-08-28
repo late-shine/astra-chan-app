@@ -2983,6 +2983,7 @@ export default function App() {
     friendSearchResults,
     friendSearchError,
     isSearchingFriends,
+    pendingFriendRequestUids,
     myUid,
     calendarOpen,
     setCalendarOpen,

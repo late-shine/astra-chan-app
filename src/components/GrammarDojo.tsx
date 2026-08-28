@@ -680,9 +680,11 @@ export default function GrammarDojo({ onBack, onAwardXP, speakJapanese }: Gramma
                               {/* Example sentences list */}
                               <div className="flex flex-col gap-2 mt-4">
                                 <p className="text-[10px] font-mono uppercase tracking-widest text-natural-forest-light/60 font-bold">Standard Formulations</p>
-                                {p.examples.map((ex, i) => (
-                                  <ExampleRow key={i} example={ex} showRomaji={showRomaji} speakJapanese={speakJapanese} />
-                                ))}
+                        {p.examples.map((ex, i) => (
+                          <div key={`${ex.japanese}-${i}`}>
+                            <ExampleRow example={ex} showRomaji={showRomaji} speakJapanese={speakJapanese} />
+                          </div>
+                        ))}
                               </div>
 
                               {/* Astra-chan's Tip Bubble */}
