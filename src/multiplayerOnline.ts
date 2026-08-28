@@ -105,6 +105,22 @@ export interface InviteResponse {
   updatedAt: number;
 }
 
+export interface MatchHistoryRecord {
+  id: string;
+  roomCode: string;
+  opponentUid: string;
+  opponentName: string;
+  opponentAvatar?: string;
+  myScore: number;
+  opponentScore: number;
+  result: "win" | "loss" | "tie";
+  quizMode: QuizMode;
+  difficulty: OnlineDifficulty;
+  multiplayerMode: "competitive" | "parallel";
+  questionCount: number;
+  playedAt: number;
+}
+
 function normalizeSearchName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 24);
 }
@@ -435,6 +451,40 @@ export async function advanceOnlineQuestion(
   });
 }
 
+export async function restartRoom(roomCode: string): Promise<void> {
+  const uid = currentUid();
+  if (!uid) throw new Error("You must be signed in to restart a duel.");
+
+  const normalizedCode = roomCode.toUpperCase();
+  const roomRef = ref(db, `rooms/${normalizedCode}`);
+  const snapshot = await get(roomRef);
+  const room = snapshot.val() as RoomState | null;
+
+  if (!room) throw new Error("This duel room is no longer available.");
+  if (room.hostId !== uid) throw new Error("Only the host can start another round.");
+  if (!room.guestId) throw new Error("Wait for your rival before starting another round.");
+
+  await runTransaction(roomRef, (currentRoom: RoomState | null) => {
+    if (!currentRoom || currentRoom.hostId !== uid) return currentRoom;
+
+    currentRoom.status = "waiting";
+    currentRoom.seed = Math.floor(Math.random() * 1000000);
+    currentRoom.currentQuestion = 0;
+    currentRoom.questionStartedAt = null;
+    currentRoom.parallelProgress = {
+      hostIndex: 0,
+      guestIndex: 0,
+      hostStartedAt: null,
+      guestStartedAt: null,
+      hostFinished: false,
+      guestFinished: false,
+    };
+    currentRoom.scores = { host: 0, guest: 0 };
+    currentRoom.answers = {};
+    return currentRoom;
+  });
+}
+
 /**
  * Handles explicit exits, canceling onDisconnect cleanups before applying changes
  */
@@ -666,6 +716,62 @@ export async function clearInviteResponse(friendUid: string): Promise<void> {
   const uid = currentUid();
   if (!uid) return;
   await remove(ref(db, `inviteResponses/${uid}/${friendUid}`));
+}
+
+export async function recordMatchHistory(roomCode: string, room: RoomState): Promise<void> {
+  const uid = currentUid();
+  if (!uid || !room.guestId || room.status !== "finished") return;
+
+  const isHost = uid === room.hostId;
+  const isGuest = uid === room.guestId;
+  if (!isHost && !isGuest) return;
+
+  const myScore = isHost ? room.scores.host : room.scores.guest;
+  const opponentScore = isHost ? room.scores.guest : room.scores.host;
+  const opponentUid = isHost ? room.guestId : room.hostId;
+  const opponentName = isHost ? room.guestName : room.hostName;
+  const opponentAvatar = isHost ? room.guestAvatar : room.hostAvatar;
+  const normalizedRoomCode = roomCode.toUpperCase();
+
+  const record: Omit<MatchHistoryRecord, "id"> = {
+    roomCode: normalizedRoomCode,
+    opponentUid,
+    opponentName: opponentName || "Astra Scholar",
+    opponentAvatar: opponentAvatar || "",
+    myScore,
+    opponentScore,
+    result: myScore === opponentScore ? "tie" : myScore > opponentScore ? "win" : "loss",
+    quizMode: room.settings.quizMode,
+    difficulty: room.settings.difficulty,
+    multiplayerMode: room.settings.multiplayerMode ?? "competitive",
+    questionCount: room.settings.questionCount || 10,
+    playedAt: Date.now(),
+  };
+
+  await set(ref(db, `matchHistory/${uid}/${normalizedRoomCode}`), record);
+}
+
+export function listenToMatchHistory(callback: (history: MatchHistoryRecord[]) => void) {
+  const uid = currentUid();
+  if (!uid) {
+    callback([]);
+    return () => {};
+  }
+
+  const historyRef = ref(db, `matchHistory/${uid}`);
+  return onValue(historyRef, (snapshot) => {
+    if (!snapshot.exists()) {
+      callback([]);
+      return;
+    }
+
+    const data = snapshot.val() as Record<string, Omit<MatchHistoryRecord, "id">>;
+    const list = Object.entries(data)
+      .map(([id, record]) => ({ id, ...record }))
+      .sort((a, b) => (b.playedAt || 0) - (a.playedAt || 0))
+      .slice(0, 20);
+    callback(list);
+  });
 }
 
 /** Create or update the current user's public friend profile */

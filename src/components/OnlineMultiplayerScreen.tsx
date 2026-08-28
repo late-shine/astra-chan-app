@@ -62,6 +62,7 @@ interface OnlineMultiplayerScreenProps {
   handleCreateOnlineRoom: () => void;
   handleJoinOnlineRoom: () => void;
   handleStartOnlineGame: () => void;
+  handlePlayAgainOnlineRoom: () => void;
   handleOnlineSubmitAnswer: (answer: string) => void;
   handleLeaveOnlineRoom: () => void;
   handleInviteFriend: (friendUid: string) => void;
@@ -122,6 +123,7 @@ export default function OnlineMultiplayerScreen({
   handleCreateOnlineRoom,
   handleJoinOnlineRoom,
   handleStartOnlineGame,
+  handlePlayAgainOnlineRoom,
   handleOnlineSubmitAnswer,
   handleLeaveOnlineRoom,
   handleInviteFriend,
@@ -1127,6 +1129,21 @@ export default function OnlineMultiplayerScreen({
                       </div>
 
                       <div className="flex gap-3 flex-wrap justify-center relative z-10">
+                        {onlineRole === "host" ? (
+                          <button
+                            type="button"
+                            onClick={handlePlayAgainOnlineRoom}
+                            disabled={onlineIsStarting}
+                            className="px-6 py-2.5 bg-natural-clay text-white rounded-2xl text-sm font-serif font-extrabold tracking-wider hover:bg-natural-clay/90 transition shadow-sm cursor-pointer flex items-center gap-2 disabled:opacity-60 disabled:cursor-wait"
+                          >
+                            {onlineIsStarting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                            Play Again
+                          </button>
+                        ) : (
+                          <div className="w-full text-center text-[10px] font-mono font-bold uppercase tracking-wider text-natural-forest-light">
+                            Waiting for host to start another round...
+                          </div>
+                        )}
                         <button
                           type="button"
                           onClick={handleLeaveOnlineRoom}
@@ -1177,6 +1194,21 @@ export default function OnlineMultiplayerScreen({
                     </div>
 
                     <div className="flex gap-3 flex-wrap justify-center relative z-10">
+                      {onlineRole === "host" ? (
+                        <button
+                          type="button"
+                          onClick={handlePlayAgainOnlineRoom}
+                          disabled={onlineIsStarting}
+                          className="px-6 py-2.5 bg-natural-clay text-white rounded-2xl text-sm font-serif font-extrabold tracking-wider hover:bg-natural-clay/90 transition shadow-sm cursor-pointer flex items-center gap-2 disabled:opacity-60 disabled:cursor-wait"
+                        >
+                          {onlineIsStarting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                          Play Again
+                        </button>
+                      ) : (
+                        <div className="w-full text-center text-[10px] font-mono font-bold uppercase tracking-wider text-natural-forest-light">
+                          Waiting for host to start another round...
+                        </div>
+                      )}
                       <button
                         type="button"
                         onClick={handleLeaveOnlineRoom}

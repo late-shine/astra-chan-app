@@ -55,6 +55,7 @@ import {
   listenToRoomStatus,
   submitOnlineAnswer,
   advanceOnlineQuestion,
+  restartRoom,
   leaveRoom,
   DURATION_MS,
   addFriend,
@@ -69,6 +70,8 @@ import {
   respondToRoomInvite,
   listenToInviteResponses,
   clearInviteResponse,
+  recordMatchHistory,
+  listenToMatchHistory,
   saveUserProfile,
   searchUserProfiles,
   type RoomState,
@@ -80,6 +83,7 @@ import {
   type FriendSearchResult,
   type InviteResponse,
   type RoomInvite,
+  type MatchHistoryRecord,
 } from "./multiplayerOnline";
 import { currentUid, ensureSignedIn } from "./firebase";
 import { HiraganaItem, KatakanaItem, KanjiItem, VocabularyItem, StudentStats, SRSCard } from "./types";
@@ -810,6 +814,7 @@ export default function App() {
   const [pendingFriendRequestUids, setPendingFriendRequestUids] = useState<Set<string>>(() => new Set());
   const [incomingInvites, setIncomingInvites] = useState<RoomInvite[]>([]);
   const [inviteResponses, setInviteResponses] = useState<InviteResponse[]>([]);
+  const [matchHistory, setMatchHistory] = useState<MatchHistoryRecord[]>([]);
   const [pendingInviteUids, setPendingInviteUids] = useState<Set<string>>(() => new Set());
   const [showProfilePanel, setShowProfilePanel] = useState(false);
   const [showFriendsSection, setShowFriendsSection] = useState(false);
@@ -824,6 +829,10 @@ export default function App() {
   const unsubscribeFriendRequestsRef = useRef<(() => void) | null>(null);
   const unsubscribeInvitesRef = useRef<(() => void) | null>(null);
   const unsubscribeInviteResponsesRef = useRef<(() => void) | null>(null);
+  const unsubscribeMatchHistoryRef = useRef<(() => void) | null>(null);
+  const seenFriendRequestIdsRef = useRef<Set<string>>(new Set());
+  const friendRequestsLoadedRef = useRef(false);
+  const recordedMatchHistoryRef = useRef<Set<string>>(new Set());
   const [onlineIsStarting, setOnlineIsStarting] = useState(false);
   // ── END FRIEND SYSTEM STATE ────────────────────────────────────────────────
 
@@ -2069,7 +2078,7 @@ export default function App() {
   };
 
   /** Clean up Firebase room listener */
-  const cleanupOnlineRoom = () => {
+  const cleanupOnlineTimers = () => {
     if (onlineTimerRef.current) {
       clearInterval(onlineTimerRef.current);
       onlineTimerRef.current = null;
@@ -2078,6 +2087,11 @@ export default function App() {
       clearTimeout(onlineAutoAdvanceRef.current);
       onlineAutoAdvanceRef.current = null;
     }
+    setOnlineIsStarting(false);
+  };
+
+  const cleanupOnlineRoom = () => {
+    cleanupOnlineTimers();
     if (unsubscribeRoomRef.current) {
       unsubscribeRoomRef.current();
       unsubscribeRoomRef.current = null;
@@ -2086,7 +2100,6 @@ export default function App() {
       unsubscribeRoomStatusRef.current();
       unsubscribeRoomStatusRef.current = null;
     }
-    setOnlineIsStarting(false);
   };
 
   const attachOnlineRoomListeners = (code: string) => {
@@ -2205,6 +2218,26 @@ export default function App() {
     } catch (err: any) {
       setOnlineIsStarting(false);
       setOnlineConnectionError(err.message || "Failed to start game");
+    }
+  };
+
+  const handlePlayAgainOnlineRoom = async () => {
+    if (!onlineRoomCode || onlineRole !== "host") return;
+    setOnlineIsStarting(true);
+    setOnlineConnectionError(null);
+    try {
+      await restartRoom(onlineRoomCode);
+      await advanceOnlineQuestion(onlineRoomCode, 0, onlineRoomState?.settings.questionCount || onlineQuestionCount);
+      setOnlineAnswerLocked(false);
+      setOnlineSelectedAnswer(null);
+      setOnlineAnswerStatus(null);
+      setOnlineWinnerName(null);
+      setOnlineShowResult(false);
+      setOnlineTypedAnswer("");
+    } catch (err: any) {
+      setOnlineConnectionError(err.message || "Failed to start another round");
+    } finally {
+      setOnlineIsStarting(false);
     }
   };
 
@@ -2341,11 +2374,22 @@ export default function App() {
 
     const prev = prevRoomRef.current;
     const wasWaiting = prev?.status === "waiting";
+    const nowWaiting = onlineRoomState.status === "waiting";
     const nowPlaying = onlineRoomState.status === "playing";
     const nowFinished = onlineRoomState.status === "finished";
 
+    if (nowWaiting && onlinePhase === "finished") {
+      setOnlinePhase("lobby");
+      setOnlineAnswerLocked(false);
+      setOnlineSelectedAnswer(null);
+      setOnlineAnswerStatus(null);
+      setOnlineWinnerName(null);
+      setOnlineShowResult(false);
+      setOnlineTypedAnswer("");
+    }
+
     // waiting → playing: game started
-    if (nowPlaying && onlinePhase !== "playing" && onlinePhase !== "finished") {
+    if (nowPlaying && onlinePhase !== "playing") {
       setOnlineIsStarting(true);
       const pool = generateOnlineQuestionPool(
         onlineRoomState.seed,
@@ -2362,8 +2406,15 @@ export default function App() {
 
     // playing → finished
     if (nowFinished && onlinePhase === "playing") {
+      const historyKey = `${onlineRoomCode}:${myUid || currentUid() || ""}:${onlineRoomState.seed}`;
+      if (!recordedMatchHistoryRef.current.has(historyKey)) {
+        recordedMatchHistoryRef.current.add(historyKey);
+        recordMatchHistory(onlineRoomCode, onlineRoomState).catch((err) => {
+          console.error("Match history save failed:", err);
+        });
+      }
       setOnlinePhase("finished");
-      cleanupOnlineRoom();
+      cleanupOnlineTimers();
     }
 
     // During play: handle question changes and answer results
@@ -2554,13 +2605,30 @@ export default function App() {
     const unsubInviteResponses = listenToInviteResponses(setInviteResponses);
     unsubscribeInviteResponsesRef.current = unsubInviteResponses;
 
+    const unsubMatchHistory = listenToMatchHistory(setMatchHistory);
+    unsubscribeMatchHistoryRef.current = unsubMatchHistory;
+
     return () => {
       if (unsubscribeFriendsRef.current) unsubscribeFriendsRef.current();
       if (unsubscribeFriendRequestsRef.current) unsubscribeFriendRequestsRef.current();
       if (unsubscribeInvitesRef.current) unsubscribeInvitesRef.current();
       if (unsubscribeInviteResponsesRef.current) unsubscribeInviteResponsesRef.current();
+      if (unsubscribeMatchHistoryRef.current) unsubscribeMatchHistoryRef.current();
     };
   }, [myUid]);
+
+  useEffect(() => {
+    const previousIds = seenFriendRequestIdsRef.current;
+    const currentIds = new Set(friendRequests.map((request) => request.id));
+    const freshRequest = friendRequests.find((request) => !previousIds.has(request.id));
+
+    if (friendRequestsLoadedRef.current && freshRequest) {
+      showToast(`${freshRequest.fromName || "Astra Scholar"} sent you a friend request.`);
+    }
+
+    seenFriendRequestIdsRef.current = currentIds;
+    friendRequestsLoadedRef.current = true;
+  }, [friendRequests]);
 
   useEffect(() => {
     if (friends.length === 0 && friendRequests.length === 0) return;
@@ -2978,6 +3046,7 @@ export default function App() {
     isAddingFriend,
     friends,
     friendRequests,
+    matchHistory,
     friendSearchInput,
     setFriendSearchInput,
     friendSearchResults,
@@ -3103,6 +3172,7 @@ export default function App() {
     handleCreateOnlineRoom,
     handleJoinOnlineRoom,
     handleStartOnlineGame,
+    handlePlayAgainOnlineRoom,
     handleOnlineSubmitAnswer,
     handleLeaveOnlineRoom,
     handleInviteFriend,
@@ -3548,9 +3618,9 @@ export default function App() {
                   <User className="w-3.5 h-3.5" />
                 )}
                 <span className="text-[11px] font-bold font-mono hidden sm:inline">Profile</span>
-                {incomingInvites.length > 0 && (
+                {(incomingInvites.length + friendRequests.length) > 0 && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 bg-natural-terracotta text-natural-bg rounded-full text-[9px] font-bold flex items-center justify-center animate-pulse">
-                    {incomingInvites.length}
+                    {incomingInvites.length + friendRequests.length}
                   </span>
                 )}
               </button>

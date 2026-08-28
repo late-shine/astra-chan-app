@@ -24,7 +24,7 @@ import {
   AlertCircle 
 } from "lucide-react";
 import type { HiraganaItem, KatakanaItem, KanjiItem, StudentStats, VocabularyItem } from "../types";
-import type { FriendRecord, FriendRequest, FriendSearchResult } from "../multiplayerOnline";
+import type { FriendRecord, FriendRequest, FriendSearchResult, MatchHistoryRecord } from "../multiplayerOnline";
 
 type CurrentScreen = "menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo";
 type ProfileCharSet = "hiragana" | "katakana";
@@ -183,6 +183,7 @@ interface ProfileScreenProps {
   isAddingFriend: boolean;
   friends: FriendRecord[];
   friendRequests: FriendRequest[];
+  matchHistory: MatchHistoryRecord[];
   friendSearchInput: string;
   setFriendSearchInput: React.Dispatch<React.SetStateAction<string>>;
   friendSearchResults: FriendSearchResult[];
@@ -261,6 +262,7 @@ export default function ProfileScreen({
   isAddingFriend,
   friends,
   friendRequests,
+  matchHistory,
   friendSearchInput,
   setFriendSearchInput,
   friendSearchResults,
@@ -1456,6 +1458,66 @@ export default function ProfileScreen({
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── RECENT ONLINE DUELS ── */}
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-5 shadow-inner backdrop-blur-md flex flex-col gap-4 text-left">
+        <div className="flex items-center justify-between gap-3 pb-2 border-b border-white/5">
+          <div className="flex items-center gap-2">
+            <Award className="w-5 h-5 text-natural-clay" />
+            <h4 className="font-serif font-black text-sm text-natural-forest">Recent Duels</h4>
+          </div>
+          <span className="text-[10px] font-mono font-black text-natural-forest/60 uppercase tracking-wider">
+            {matchHistory.length} saved
+          </span>
+        </div>
+
+        {matchHistory.length === 0 ? (
+          <p className="text-xs text-natural-forest/60 text-center py-5 font-mono font-bold uppercase tracking-wider bg-white/5 border border-white/5 rounded-xl">
+            No duel history yet. Finish an online match to save your first result.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {matchHistory.map((match) => {
+              const resultStyle = match.result === "win"
+                ? "text-natural-forest bg-natural-forest/10 border-natural-forest/25"
+                : match.result === "loss"
+                  ? "text-natural-terracotta bg-natural-terracotta/10 border-natural-terracotta/25"
+                  : "text-natural-clay bg-natural-clay/10 border-natural-clay/25";
+              const playedDate = new Date(match.playedAt || Date.now()).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+              });
+
+              return (
+                <div key={match.id} className="p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all duration-300">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-natural-clay/15 border border-natural-clay/30 overflow-hidden flex items-center justify-center shrink-0">
+                        {match.opponentAvatar ? (
+                          <img src={match.opponentAvatar} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <User className="w-4 h-4 text-natural-clay" />
+                        )}
+                      </div>
+                      <div className="min-w-0 text-left">
+                        <p className="text-xs font-serif font-black text-natural-charcoal truncate">{match.opponentName}</p>
+                        <p className="text-[9px] font-mono text-natural-forest/50 truncate tracking-tight">{playedDate} · {match.difficulty}</p>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-1 rounded-lg border text-[9px] font-mono font-black uppercase tracking-wider ${resultStyle}`}>
+                      {match.result}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-[10px] font-mono font-black text-natural-forest/60 uppercase tracking-wider">
+                    <span>{match.myScore} - {match.opponentScore}</span>
+                    <span>{match.multiplayerMode} · {match.questionCount} rounds</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
