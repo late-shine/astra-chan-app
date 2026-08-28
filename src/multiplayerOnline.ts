@@ -1,4 +1,4 @@
-import { ref, set, get, onValue, runTransaction, onDisconnect, push, remove, update } from "firebase/database";
+import { ref, set, get, onValue, runTransaction, onDisconnect, push, remove, update, query, orderByChild, startAt, endAt, limitToFirst } from "firebase/database";
 import { db, currentUid } from "./firebase";
 
 export type QuizMode = "choice" | "romaji";
@@ -70,6 +70,13 @@ export interface FriendRequest {
   createdAt: number;
 }
 
+export interface FriendSearchResult {
+  uid: string;
+  name: string;
+  avatar?: string;
+  online?: boolean;
+}
+
 /** Public profile stored so friends can find your UID/name */
 export interface UserProfile {
   uid: string;
@@ -77,6 +84,7 @@ export interface UserProfile {
   avatar?: string;
   online?: boolean;
   lastSeen?: number;
+  searchName?: string;
   updatedAt: number;
   createdAt?: number;
 }
@@ -88,6 +96,17 @@ export interface RoomInvite {
   fromName: string;
   roomCode: string;
   createdAt: number;
+}
+
+export interface InviteResponse {
+  uid: string;
+  status: "sent" | "accepted" | "declined";
+  roomCode: string;
+  updatedAt: number;
+}
+
+function normalizeSearchName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 24);
 }
 
 /** Difficulty → question duration (ms) */
@@ -525,21 +544,21 @@ export async function acceptFriendRequest(request: FriendRequest, myName: string
   const myProfileSnap = await get(ref(db, `userProfiles/${uid}`));
   const myProfile = myProfileSnap.val() as UserProfile | null;
 
-  await Promise.all([
-    set(ref(db, `friends/${uid}/${request.fromUid}`), {
+  await update(ref(db), {
+    [`friends/${uid}/${request.fromUid}`]: {
       uid: request.fromUid,
       name: request.fromName || "Friend",
       avatar: request.fromAvatar || "",
       addedAt: now,
-    }),
-    set(ref(db, `friends/${request.fromUid}/${uid}`), {
+    },
+    [`friends/${request.fromUid}/${uid}`]: {
       uid,
       name: myName || myProfile?.name || "Astra Scholar",
       avatar: myAvatar || myProfile?.avatar || "",
       addedAt: now,
-    }),
-    remove(ref(db, `friendRequests/${uid}/${request.id}`)),
-  ]);
+    },
+    [`friendRequests/${uid}/${request.id}`]: null,
+  });
 }
 
 export async function declineFriendRequest(requestId: string): Promise<void> {
@@ -552,13 +571,20 @@ export async function declineFriendRequest(requestId: string): Promise<void> {
 export async function sendRoomInvite(friendUid: string, roomCode: string, fromName: string): Promise<void> {
   const uid = currentUid();
   if (!uid) throw new Error("You must be signed in to send invites.");
+  const normalizedRoomCode = roomCode.toUpperCase();
 
   const inviteRef = push(ref(db, `invites/${friendUid}`));
   await set(inviteRef, {
     fromUid: uid,
     fromName: fromName || "Friend",
-    roomCode: roomCode.toUpperCase(),
+    roomCode: normalizedRoomCode,
     createdAt: Date.now(),
+  });
+
+  await set(ref(db, `inviteResponses/${uid}/${friendUid}`), {
+    status: "sent",
+    roomCode: normalizedRoomCode,
+    updatedAt: Date.now(),
   });
 }
 
@@ -592,6 +618,49 @@ export async function clearInvite(inviteId: string): Promise<void> {
   await remove(ref(db, `invites/${uid}/${inviteId}`));
 }
 
+export async function respondToRoomInvite(invite: RoomInvite, status: "accepted" | "declined"): Promise<void> {
+  const uid = currentUid();
+  if (!uid) throw new Error("You must be signed in to respond to invites.");
+
+  await Promise.all([
+    set(ref(db, `inviteResponses/${invite.fromUid}/${uid}`), {
+      status,
+      roomCode: invite.roomCode.toUpperCase(),
+      updatedAt: Date.now(),
+    }),
+    remove(ref(db, `invites/${uid}/${invite.id}`)),
+  ]);
+}
+
+export function listenToInviteResponses(callback: (responses: InviteResponse[]) => void) {
+  const uid = currentUid();
+  if (!uid) {
+    callback([]);
+    return () => {};
+  }
+
+  const responsesRef = ref(db, `inviteResponses/${uid}`);
+  return onValue(responsesRef, (snapshot) => {
+    if (!snapshot.exists()) {
+      callback([]);
+      return;
+    }
+
+    const data = snapshot.val() as Record<string, Omit<InviteResponse, "uid">>;
+    const cutoff = Date.now() - 5 * 60 * 1000;
+    const list: InviteResponse[] = Object.entries(data)
+      .filter(([, response]) => (response.updatedAt || 0) > cutoff)
+      .map(([uid, response]) => ({ uid, ...response }));
+    callback(list);
+  });
+}
+
+export async function clearInviteResponse(friendUid: string): Promise<void> {
+  const uid = currentUid();
+  if (!uid) return;
+  await remove(ref(db, `inviteResponses/${uid}/${friendUid}`));
+}
+
 /** Create or update the current user's public friend profile */
 export async function saveUserProfile(name: string, avatar = ""): Promise<UserProfile> {
   const uid = currentUid();
@@ -609,6 +678,7 @@ export async function saveUserProfile(name: string, avatar = ""): Promise<UserPr
     lastSeen: now,
     createdAt: snapshot.val()?.createdAt || now,
     updatedAt: now,
+    searchName: normalizeSearchName(cleanName),
   };
 
   await update(profileRef, profile);
@@ -620,4 +690,45 @@ export async function saveUserProfile(name: string, avatar = ""): Promise<UserPr
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   const snapshot = await get(ref(db, `userProfiles/${uid.trim()}`));
   return snapshot.exists() ? (snapshot.val() as UserProfile) : null;
+}
+
+export async function searchUserProfiles(searchTerm: string): Promise<FriendSearchResult[]> {
+  const uid = currentUid();
+  if (!uid) throw new Error("You must be signed in to search scholars.");
+
+  const cleanSearch = searchTerm.trim();
+  if (!cleanSearch) return [];
+
+  if (cleanSearch.length > 20) {
+    const directProfile = await getUserProfile(cleanSearch);
+    if (!directProfile || directProfile.uid === uid) return [];
+    return [{
+      uid: directProfile.uid,
+      name: directProfile.name,
+      avatar: directProfile.avatar,
+      online: directProfile.online,
+    }];
+  }
+
+  const normalized = normalizeSearchName(cleanSearch);
+  const searchRef = query(
+    ref(db, "userProfiles"),
+    orderByChild("searchName"),
+    startAt(normalized),
+    endAt(`${normalized}\uf8ff`),
+    limitToFirst(10)
+  );
+
+  const snapshot = await get(searchRef);
+  if (!snapshot.exists()) return [];
+
+  const data = snapshot.val() as Record<string, UserProfile>;
+  return Object.values(data)
+    .filter((profile) => profile.uid !== uid)
+    .map((profile) => ({
+      uid: profile.uid,
+      name: profile.name,
+      avatar: profile.avatar,
+      online: profile.online,
+    }));
 }

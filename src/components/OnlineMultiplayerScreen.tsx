@@ -2,7 +2,7 @@ import type React from "react";
 import { motion } from "motion/react";
 import { ArrowBigRight, ChevronLeft, Clock, Copy, Globe, Loader2, LogOut, Mail, Play, Trophy, UserPlus, Volume2, Wifi } from "lucide-react";
 import type { HiraganaItem, KatakanaItem } from "../types";
-import type { FriendRecord, OnlineDifficulty, QuizMode, RoomState } from "../multiplayerOnline";
+import type { FriendRecord, InviteResponse, OnlineDifficulty, QuizMode, RoomState } from "../multiplayerOnline";
 
 type CurrentScreen = "menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo";
 type OnlinePhase = "menu" | "config" | "join" | "lobby" | "playing" | "finished";
@@ -51,6 +51,7 @@ interface OnlineMultiplayerScreenProps {
   setOnlineQuestionCount: React.Dispatch<React.SetStateAction<number>>;
   quizMode: QuizMode;
   friends: FriendRecord[];
+  inviteResponses: InviteResponse[];
   myUid: string | null;
   showToast: (message: string) => void;
   speakJapanese: (phrase: string) => void;
@@ -61,6 +62,7 @@ interface OnlineMultiplayerScreenProps {
   handleOnlineSubmitAnswer: (answer: string) => void;
   handleLeaveOnlineRoom: () => void;
   handleInviteFriend: (friendUid: string) => void;
+  handleClearInviteResponse: (friendUid: string) => void;
   handleSendFriendRequestToPlayer: (playerUid: string | null | undefined, playerName?: string | null) => void;
   getOnlinePlayerQuestionIndex: (room: RoomState, role: "host" | "guest") => number;
   getOnlinePlayerFinished: (room: RoomState, role: "host" | "guest") => boolean;
@@ -106,6 +108,7 @@ export default function OnlineMultiplayerScreen({
   setOnlineQuestionCount,
   quizMode,
   friends,
+  inviteResponses,
   myUid,
   showToast,
   speakJapanese,
@@ -116,11 +119,13 @@ export default function OnlineMultiplayerScreen({
   handleOnlineSubmitAnswer,
   handleLeaveOnlineRoom,
   handleInviteFriend,
+  handleClearInviteResponse,
   handleSendFriendRequestToPlayer,
   getOnlinePlayerQuestionIndex,
   getOnlinePlayerFinished,
 }: OnlineMultiplayerScreenProps) {
   const friendUidSet = new Set(friends.map((friend) => friend.uid));
+  const inviteResponseMap = new Map(inviteResponses.map((response) => [response.uid, response]));
   const canRequestFriend = (playerUid: string | null | undefined) =>
     Boolean(playerUid && playerUid !== myUid && !friendUidSet.has(playerUid));
 
@@ -567,15 +572,45 @@ export default function OnlineMultiplayerScreen({
                       <p className="text-[10px] font-mono font-bold text-natural-forest-light uppercase tracking-wider mb-1.5">Invite Friends</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-32 overflow-y-auto pr-1">
                         {friends.map((f) => (
-                          <button
-                            key={f.uid}
-                            type="button"
-                            onClick={() => handleInviteFriend(f.uid)}
-                            className="flex items-center justify-between gap-2 px-2.5 py-1.5 bg-natural-bg border border-natural-border rounded-lg text-[10px] font-bold font-mono text-natural-forest hover:border-natural-clay hover:bg-natural-clay/5 transition cursor-pointer"
-                          >
-                            <span className="truncate">{f.name}</span>
-                            <Mail className="w-2.5 h-2.5 shrink-0" />
-                          </button>
+                          (() => {
+                            const inviteResponse = inviteResponseMap.get(f.uid);
+                            const statusLabel = inviteResponse?.status === "accepted"
+                              ? "Accepted"
+                              : inviteResponse?.status === "declined"
+                                ? "Busy"
+                                : inviteResponse?.status === "sent"
+                                  ? "Sent"
+                                  : null;
+
+                            return (
+                              <button
+                                key={f.uid}
+                                type="button"
+                                onClick={() => {
+                                  if (inviteResponse?.status === "accepted" || inviteResponse?.status === "declined") {
+                                    handleClearInviteResponse(f.uid);
+                                    return;
+                                  }
+                                  if (!inviteResponse) handleInviteFriend(f.uid);
+                                }}
+                                disabled={inviteResponse?.status === "sent"}
+                                className={`flex items-center justify-between gap-2 px-2.5 py-1.5 bg-natural-bg border rounded-lg text-[10px] font-bold font-mono transition cursor-pointer disabled:cursor-default disabled:opacity-60 ${
+                                  inviteResponse?.status === "accepted"
+                                    ? "border-natural-forest text-natural-forest"
+                                    : inviteResponse?.status === "declined"
+                                      ? "border-natural-terracotta text-natural-terracotta"
+                                      : "border-natural-border text-natural-forest hover:border-natural-clay hover:bg-natural-clay/5"
+                                }`}
+                                title={statusLabel ? `${f.name}: ${statusLabel}` : `Invite ${f.name}`}
+                              >
+                                <span className="truncate">{f.name}</span>
+                                <span className="flex items-center gap-1 shrink-0">
+                                  {statusLabel && <span>{statusLabel}</span>}
+                                  <Mail className="w-2.5 h-2.5" />
+                                </span>
+                              </button>
+                            );
+                          })()
                         ))}
                       </div>
                     </div>

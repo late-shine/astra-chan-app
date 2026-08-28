@@ -65,13 +65,19 @@ import {
   sendRoomInvite,
   listenToInvites,
   clearInvite,
+  respondToRoomInvite,
+  listenToInviteResponses,
+  clearInviteResponse,
   saveUserProfile,
+  searchUserProfiles,
   type RoomState,
   type RoomSettings,
   type OnlineDifficulty,
   type QuizMode,
   type FriendRecord,
   type FriendRequest,
+  type FriendSearchResult,
+  type InviteResponse,
   type RoomInvite,
 } from "./multiplayerOnline";
 import { currentUid, ensureSignedIn } from "./firebase";
@@ -795,7 +801,12 @@ export default function App() {
   const [isAddingFriend, setIsAddingFriend] = useState(false);
   const [addFriendError, setAddFriendError] = useState<string | null>(null);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
+  const [friendSearchInput, setFriendSearchInput] = useState("");
+  const [friendSearchResults, setFriendSearchResults] = useState<FriendSearchResult[]>([]);
+  const [friendSearchError, setFriendSearchError] = useState<string | null>(null);
+  const [isSearchingFriends, setIsSearchingFriends] = useState(false);
   const [incomingInvites, setIncomingInvites] = useState<RoomInvite[]>([]);
+  const [inviteResponses, setInviteResponses] = useState<InviteResponse[]>([]);
   const [showProfilePanel, setShowProfilePanel] = useState(false);
   const [showFriendsSection, setShowFriendsSection] = useState(false);
   const [myUid, setMyUid] = useState<string | null>(null);
@@ -808,6 +819,7 @@ export default function App() {
   const unsubscribeFriendsRef = useRef<(() => void) | null>(null);
   const unsubscribeFriendRequestsRef = useRef<(() => void) | null>(null);
   const unsubscribeInvitesRef = useRef<(() => void) | null>(null);
+  const unsubscribeInviteResponsesRef = useRef<(() => void) | null>(null);
   // ── END FRIEND SYSTEM STATE ────────────────────────────────────────────────
 
   // 1. Initial State Load & Study Streak evaluation
@@ -2516,10 +2528,14 @@ export default function App() {
     const unsubInvites = listenToInvites(setIncomingInvites);
     unsubscribeInvitesRef.current = unsubInvites;
 
+    const unsubInviteResponses = listenToInviteResponses(setInviteResponses);
+    unsubscribeInviteResponsesRef.current = unsubInviteResponses;
+
     return () => {
       if (unsubscribeFriendsRef.current) unsubscribeFriendsRef.current();
       if (unsubscribeFriendRequestsRef.current) unsubscribeFriendRequestsRef.current();
       if (unsubscribeInvitesRef.current) unsubscribeInvitesRef.current();
+      if (unsubscribeInviteResponsesRef.current) unsubscribeInviteResponsesRef.current();
     };
   }, [myUid]);
 
@@ -2556,6 +2572,42 @@ export default function App() {
       setAddFriendError(err.message || "Failed to add friend");
     } finally {
       setIsAddingFriend(false);
+    }
+  };
+
+  const handleSearchFriends = async () => {
+    const term = friendSearchInput.trim();
+    if (!term) {
+      setFriendSearchResults([]);
+      setFriendSearchError(null);
+      return;
+    }
+
+    setIsSearchingFriends(true);
+    setFriendSearchError(null);
+    try {
+      await ensureSignedIn();
+      const results = await searchUserProfiles(term);
+      setFriendSearchResults(results);
+      if (results.length === 0) {
+        setFriendSearchError("No scholars found.");
+      }
+    } catch (err: any) {
+      setFriendSearchError(err.message || "Failed to search scholars");
+    } finally {
+      setIsSearchingFriends(false);
+    }
+  };
+
+  const handleSendFriendRequestToSearchResult = async (profile: FriendSearchResult) => {
+    setFriendSearchError(null);
+    try {
+      await ensureSignedIn();
+      await addFriend(profile.uid, profileName || profileNameInput || "Astra Scholar", profileAvatar);
+      showToast(`Friend request sent to ${profile.name || "scholar"}!`);
+      setFriendSearchResults((current) => current.filter((result) => result.uid !== profile.uid));
+    } catch (err: any) {
+      setFriendSearchError(err.message || "Failed to send friend request");
     }
   };
 
@@ -2619,6 +2671,7 @@ export default function App() {
       await clearInvite(invite.id);
       const name = profileName || profileNameInput || "Shadow Guest";
       await joinRoom(invite.roomCode, name, profileAvatar);
+      await respondToRoomInvite(invite, "accepted");
       cleanupOnlineRoom();
       const unsub = listenToRoom(invite.roomCode, (room) => {
         setOnlineRoomState(room);
@@ -2639,7 +2692,18 @@ export default function App() {
 
   const handleDismissInvite = async (inviteId: string) => {
     try {
-      await clearInvite(inviteId);
+      const invite = incomingInvites.find((item) => item.id === inviteId);
+      if (invite) {
+        await respondToRoomInvite(invite, "declined");
+      } else {
+        await clearInvite(inviteId);
+      }
+    } catch { /* silent */ }
+  };
+
+  const handleClearInviteResponse = async (friendUid: string) => {
+    try {
+      await clearInviteResponse(friendUid);
     } catch { /* silent */ }
   };
 
@@ -2846,6 +2910,11 @@ export default function App() {
     isAddingFriend,
     friends,
     friendRequests,
+    friendSearchInput,
+    setFriendSearchInput,
+    friendSearchResults,
+    friendSearchError,
+    isSearchingFriends,
     myUid,
     calendarOpen,
     setCalendarOpen,
@@ -2870,6 +2939,8 @@ export default function App() {
     handleSaveProfile,
     handleDownloadProgress,
     handleAddFriend,
+    handleSearchFriends,
+    handleSendFriendRequestToSearchResult,
     handleAcceptFriendRequest,
     handleDeclineFriendRequest,
     handleInviteFriend,
@@ -2952,6 +3023,7 @@ export default function App() {
     setOnlineQuestionCount,
     quizMode,
     friends,
+    inviteResponses,
     myUid,
     showToast,
     speakJapanese,
@@ -2962,6 +3034,7 @@ export default function App() {
     handleOnlineSubmitAnswer,
     handleLeaveOnlineRoom,
     handleInviteFriend,
+    handleClearInviteResponse,
     handleSendFriendRequestToPlayer,
     getOnlinePlayerQuestionIndex,
     getOnlinePlayerFinished,

@@ -15,6 +15,7 @@ import {
   UserMinus, 
   UserPlus, 
   X,
+  Search,
   Sparkles, 
   Shield, 
   Volume2, 
@@ -23,7 +24,7 @@ import {
   AlertCircle 
 } from "lucide-react";
 import type { HiraganaItem, KatakanaItem, KanjiItem, StudentStats, VocabularyItem } from "../types";
-import type { FriendRecord, FriendRequest } from "../multiplayerOnline";
+import type { FriendRecord, FriendRequest, FriendSearchResult } from "../multiplayerOnline";
 
 type CurrentScreen = "menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo";
 type ProfileCharSet = "hiragana" | "katakana";
@@ -66,6 +67,9 @@ const TRANSLATIONS = {
     locked: "Locked",
     companions: "Companions & Friends",
     friendRequests: "Friend Requests",
+    findCompanions: "Find Companions",
+    searchPlaceholder: "Search name or paste friend code",
+    noSearchResults: "Search for a scholar to send a request.",
     noCompanions: "No active companions. Share codes to unlock multiplayer sparring duels!",
     addCompanionBtn: "Send Request",
     companionPlaceholder: "Companion Friend Code",
@@ -128,6 +132,9 @@ const TRANSLATIONS = {
     locked: "未解除",
     companions: "仲間とフレンド一覧",
     friendRequests: "フレンド申請",
+    findCompanions: "仲間を探す",
+    searchPlaceholder: "名前を検索、またはフレンドコードを貼り付け",
+    noSearchResults: "学習者を検索して申請を送れます。",
     noCompanions: "アクティブな仲間がいません。コードを共有して、対戦デュアルを解放しましょう！",
     addCompanionBtn: "申請を送信",
     companionPlaceholder: "仲間のフレンドコード",
@@ -176,6 +183,11 @@ interface ProfileScreenProps {
   isAddingFriend: boolean;
   friends: FriendRecord[];
   friendRequests: FriendRequest[];
+  friendSearchInput: string;
+  setFriendSearchInput: React.Dispatch<React.SetStateAction<string>>;
+  friendSearchResults: FriendSearchResult[];
+  friendSearchError: string | null;
+  isSearchingFriends: boolean;
   myUid: string | null;
   calendarOpen: boolean;
   setCalendarOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -200,6 +212,8 @@ interface ProfileScreenProps {
   handleSaveProfile: () => void;
   handleDownloadProgress: () => void;
   handleAddFriend: () => void;
+  handleSearchFriends: () => void;
+  handleSendFriendRequestToSearchResult: (profile: FriendSearchResult) => void;
   handleAcceptFriendRequest: (request: FriendRequest) => void;
   handleDeclineFriendRequest: (requestId: string) => void;
   handleInviteFriend: (friendUid: string) => void;
@@ -246,6 +260,11 @@ export default function ProfileScreen({
   isAddingFriend,
   friends,
   friendRequests,
+  friendSearchInput,
+  setFriendSearchInput,
+  friendSearchResults,
+  friendSearchError,
+  isSearchingFriends,
   myUid,
   calendarOpen,
   setCalendarOpen,
@@ -270,6 +289,8 @@ export default function ProfileScreen({
   handleSaveProfile,
   handleDownloadProgress,
   handleAddFriend,
+  handleSearchFriends,
+  handleSendFriendRequestToSearchResult,
   handleAcceptFriendRequest,
   handleDeclineFriendRequest,
   handleInviteFriend,
@@ -1283,6 +1304,76 @@ export default function ProfileScreen({
             </div>
           </div>
         )}
+
+        {/* Friend Search */}
+        <div className="flex flex-col gap-2">
+          <p className="text-[10px] font-mono font-black text-natural-forest uppercase tracking-wider">{t.findCompanions}</p>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              value={friendSearchInput}
+              onChange={(e) => setFriendSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSearchFriends();
+              }}
+              placeholder={t.searchPlaceholder}
+              className="flex-1 px-3.5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-mono text-natural-charcoal outline-none focus:border-natural-forest/60 focus:ring-1 focus:ring-natural-forest/30 transition-all placeholder:text-natural-forest-light/40"
+            />
+            <button
+              type="button"
+              onClick={handleSearchFriends}
+              disabled={!friendSearchInput.trim() || isSearchingFriends}
+              className="px-4 py-2.5 bg-natural-clay text-white hover:bg-natural-clay/90 rounded-xl text-xs font-black transition-all shadow-md disabled:opacity-40 cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+            >
+              {isSearchingFriends ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              <span>Search</span>
+            </button>
+          </div>
+
+          {friendSearchError && (
+            <p className="text-[10px] text-natural-terracotta bg-natural-terracotta/10 border border-natural-terracotta/20 rounded-lg p-2 font-mono font-bold">
+              {friendSearchError}
+            </p>
+          )}
+
+          {friendSearchResults.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {friendSearchResults.map((profile) => (
+                <div
+                  key={profile.uid}
+                  className="flex items-center justify-between p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all duration-300"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="relative w-8 h-8 rounded-full bg-natural-clay/15 border border-natural-clay/30 overflow-hidden flex items-center justify-center shrink-0">
+                      {profile.avatar ? (
+                        <img src={profile.avatar} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <User className="w-4 h-4 text-natural-clay" />
+                      )}
+                      <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border border-natural-card ${profile.online ? "bg-green-500" : "bg-gray-400"}`} />
+                    </div>
+                    <div className="min-w-0 text-left">
+                      <p className="text-xs font-serif font-black text-natural-charcoal truncate">{profile.name}</p>
+                      <p className="text-[9px] font-mono text-natural-forest/50 truncate tracking-tight">{profile.uid.slice(0, 16)}...</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleSendFriendRequestToSearchResult(profile)}
+                    className="p-2 rounded-xl bg-natural-forest/10 hover:bg-natural-forest hover:text-white border border-natural-forest/20 text-natural-forest transition cursor-pointer"
+                    title="Send Friend Request"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            !friendSearchError && (
+              <p className="text-[10px] text-natural-forest/50 font-mono font-bold -mt-1">{t.noSearchResults}</p>
+            )
+          )}
+        </div>
 
         {/* Add Friend Form */}
         <div className="flex flex-col sm:flex-row gap-3">
