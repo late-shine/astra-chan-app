@@ -188,6 +188,7 @@ interface ProfileScreenProps {
   friendSearchResults: FriendSearchResult[];
   friendSearchError: string | null;
   isSearchingFriends: boolean;
+  pendingFriendRequestUids: Set<string>;
   myUid: string | null;
   calendarOpen: boolean;
   setCalendarOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -265,6 +266,7 @@ export default function ProfileScreen({
   friendSearchResults,
   friendSearchError,
   isSearchingFriends,
+  pendingFriendRequestUids,
   myUid,
   calendarOpen,
   setCalendarOpen,
@@ -1339,33 +1341,39 @@ export default function ProfileScreen({
           {friendSearchResults.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {friendSearchResults.map((profile) => (
-                <div
-                  key={profile.uid}
-                  className="flex items-center justify-between p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all duration-300"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="relative w-8 h-8 rounded-full bg-natural-clay/15 border border-natural-clay/30 overflow-hidden flex items-center justify-center shrink-0">
-                      {profile.avatar ? (
-                        <img src={profile.avatar} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <User className="w-4 h-4 text-natural-clay" />
-                      )}
-                      <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border border-natural-card ${profile.online ? "bg-green-500" : "bg-gray-400"}`} />
+                (() => {
+                  const requestPending = pendingFriendRequestUids.has(profile.uid);
+                  return (
+                    <div
+                      key={profile.uid}
+                      className="flex items-center justify-between p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all duration-300"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="relative w-8 h-8 rounded-full bg-natural-clay/15 border border-natural-clay/30 overflow-hidden flex items-center justify-center shrink-0">
+                          {profile.avatar ? (
+                            <img src={profile.avatar} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <User className="w-4 h-4 text-natural-clay" />
+                          )}
+                          <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border border-natural-card ${profile.online ? "bg-green-500" : "bg-gray-400"}`} />
+                        </div>
+                        <div className="min-w-0 text-left">
+                          <p className="text-xs font-serif font-black text-natural-charcoal truncate">{profile.name}</p>
+                          <p className="text-[9px] font-mono text-natural-forest/50 truncate tracking-tight">{requestPending ? "Request sent" : `${profile.uid.slice(0, 16)}...`}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleSendFriendRequestToSearchResult(profile)}
+                        disabled={requestPending}
+                        className="p-2 rounded-xl bg-natural-forest/10 hover:bg-natural-forest hover:text-white border border-natural-forest/20 text-natural-forest transition cursor-pointer disabled:opacity-60 disabled:cursor-default"
+                        title={requestPending ? "Request Sent" : "Send Friend Request"}
+                      >
+                        {requestPending ? <CheckCircle2 className="w-3.5 h-3.5" /> : <UserPlus className="w-3.5 h-3.5" />}
+                      </button>
                     </div>
-                    <div className="min-w-0 text-left">
-                      <p className="text-xs font-serif font-black text-natural-charcoal truncate">{profile.name}</p>
-                      <p className="text-[9px] font-mono text-natural-forest/50 truncate tracking-tight">{profile.uid.slice(0, 16)}...</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleSendFriendRequestToSearchResult(profile)}
-                    className="p-2 rounded-xl bg-natural-forest/10 hover:bg-natural-forest hover:text-white border border-natural-forest/20 text-natural-forest transition cursor-pointer"
-                    title="Send Friend Request"
-                  >
-                    <UserPlus className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                  );
+                })()
               ))}
             </div>
           ) : (

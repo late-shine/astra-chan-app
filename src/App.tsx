@@ -52,6 +52,7 @@ import {
   createRoom,
   joinRoom,
   listenToRoom,
+  listenToRoomStatus,
   submitOnlineAnswer,
   advanceOnlineQuestion,
   leaveRoom,
@@ -781,6 +782,7 @@ export default function App() {
   const onlineQuestionPoolRef = useRef<(HiraganaItem | KatakanaItem)[]>([]);
   const onlineTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const onlineAutoAdvanceRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const unsubscribeRoomStatusRef = useRef<(() => void) | null>(null);
   const questionStartedAtRef = useRef<number | null>(null);
   // ── END ONLINE MULTIPLAYER STATE ───────────────────────────────────────────
 
@@ -805,8 +807,10 @@ export default function App() {
   const [friendSearchResults, setFriendSearchResults] = useState<FriendSearchResult[]>([]);
   const [friendSearchError, setFriendSearchError] = useState<string | null>(null);
   const [isSearchingFriends, setIsSearchingFriends] = useState(false);
+  const [pendingFriendRequestUids, setPendingFriendRequestUids] = useState<Set<string>>(() => new Set());
   const [incomingInvites, setIncomingInvites] = useState<RoomInvite[]>([]);
   const [inviteResponses, setInviteResponses] = useState<InviteResponse[]>([]);
+  const [pendingInviteUids, setPendingInviteUids] = useState<Set<string>>(() => new Set());
   const [showProfilePanel, setShowProfilePanel] = useState(false);
   const [showFriendsSection, setShowFriendsSection] = useState(false);
   const [myUid, setMyUid] = useState<string | null>(null);
@@ -820,6 +824,7 @@ export default function App() {
   const unsubscribeFriendRequestsRef = useRef<(() => void) | null>(null);
   const unsubscribeInvitesRef = useRef<(() => void) | null>(null);
   const unsubscribeInviteResponsesRef = useRef<(() => void) | null>(null);
+  const [onlineIsStarting, setOnlineIsStarting] = useState(false);
   // ── END FRIEND SYSTEM STATE ────────────────────────────────────────────────
 
   // 1. Initial State Load & Study Streak evaluation
@@ -2077,6 +2082,28 @@ export default function App() {
       unsubscribeRoomRef.current();
       unsubscribeRoomRef.current = null;
     }
+    if (unsubscribeRoomStatusRef.current) {
+      unsubscribeRoomStatusRef.current();
+      unsubscribeRoomStatusRef.current = null;
+    }
+    setOnlineIsStarting(false);
+  };
+
+  const attachOnlineRoomListeners = (code: string) => {
+    cleanupOnlineRoom();
+
+    unsubscribeRoomRef.current = listenToRoom(code, (room) => {
+      setOnlineRoomState(room);
+      if (room?.status === "playing") {
+        setOnlineIsStarting(true);
+      }
+    });
+
+    unsubscribeRoomStatusRef.current = listenToRoomStatus(code, (status) => {
+      if (status === "playing") {
+        setOnlineIsStarting(true);
+      }
+    });
   };
 
   /** Navigate to the online multiplayer menu */
@@ -2137,11 +2164,7 @@ export default function App() {
       setOnlineRole("host");
       setOnlinePhase("lobby");
 
-      cleanupOnlineRoom();
-      const unsub = listenToRoom(code, (room) => {
-        setOnlineRoomState(room);
-      });
-      unsubscribeRoomRef.current = unsub;
+      attachOnlineRoomListeners(code);
     } catch (err: any) {
       setOnlineConnectionError(err.message || "Failed to create room");
     } finally {
@@ -2165,11 +2188,7 @@ export default function App() {
       setOnlineRole("guest");
       setOnlinePhase("lobby");
 
-      cleanupOnlineRoom();
-      const unsub = listenToRoom(code, (room) => {
-        setOnlineRoomState(room);
-      });
-      unsubscribeRoomRef.current = unsub;
+      attachOnlineRoomListeners(code);
     } catch (err: any) {
       setOnlineConnectionError(err.message || "Failed to join room");
     } finally {
@@ -2180,9 +2199,11 @@ export default function App() {
   /** Host starts the duel */
   const handleStartOnlineGame = async () => {
     if (!onlineRoomCode || onlineRole !== "host") return;
+    setOnlineIsStarting(true);
     try {
       await advanceOnlineQuestion(onlineRoomCode, 0, onlineRoomState?.settings.questionCount || onlineQuestionCount);
     } catch (err: any) {
+      setOnlineIsStarting(false);
       setOnlineConnectionError(err.message || "Failed to start game");
     }
   };
@@ -2325,6 +2346,7 @@ export default function App() {
 
     // waiting → playing: game started
     if (nowPlaying && onlinePhase !== "playing" && onlinePhase !== "finished") {
+      setOnlineIsStarting(true);
       const pool = generateOnlineQuestionPool(
         onlineRoomState.seed,
         onlineRoomState.settings.alphabet,
@@ -2335,6 +2357,7 @@ export default function App() {
       onlineQuestionPoolRef.current = pool;
       setOnlinePhase("playing");
       resetOnlineQuestionUI(0, pool, onlineRoomState.settings);
+      setOnlineIsStarting(false);
     }
 
     // playing → finished
@@ -2539,6 +2562,27 @@ export default function App() {
     };
   }, [myUid]);
 
+  useEffect(() => {
+    if (friends.length === 0 && friendRequests.length === 0) return;
+    setPendingFriendRequestUids((current) => {
+      if (current.size === 0) return current;
+      const friendUidSet = new Set(friends.map((friend) => friend.uid));
+      const requestUidSet = new Set(friendRequests.map((request) => request.fromUid));
+      const next = new Set(Array.from(current).filter((uid) => !friendUidSet.has(uid) && !requestUidSet.has(uid)));
+      return next.size === current.size ? current : next;
+    });
+  }, [friends, friendRequests]);
+
+  useEffect(() => {
+    if (inviteResponses.length === 0) return;
+    setPendingInviteUids((current) => {
+      if (current.size === 0) return current;
+      const respondedUidSet = new Set(inviteResponses.map((response) => response.uid));
+      const next = new Set(Array.from(current).filter((uid) => !respondedUidSet.has(uid)));
+      return next.size === current.size ? current : next;
+    });
+  }, [inviteResponses]);
+
   const handleSaveProfile = async () => {
     setIsSavingProfile(true);
     setProfileError(null);
@@ -2562,13 +2606,24 @@ export default function App() {
   const handleAddFriend = async () => {
     setIsAddingFriend(true);
     setAddFriendError(null);
+    const targetUid = friendUidInput.trim();
+    if (targetUid) {
+      setPendingFriendRequestUids((current) => new Set(current).add(targetUid));
+    }
     try {
       await ensureSignedIn();
-      await addFriend(friendUidInput.trim(), profileName || profileNameInput || "Astra Scholar", profileAvatar);
+      await addFriend(targetUid, profileName || profileNameInput || "Astra Scholar", profileAvatar);
       showToast(`Friend request sent!`);
       setFriendUidInput("");
       setFriendNameInput("");
     } catch (err: any) {
+      if (targetUid) {
+        setPendingFriendRequestUids((current) => {
+          const next = new Set(current);
+          next.delete(targetUid);
+          return next;
+        });
+      }
       setAddFriendError(err.message || "Failed to add friend");
     } finally {
       setIsAddingFriend(false);
@@ -2601,12 +2656,17 @@ export default function App() {
 
   const handleSendFriendRequestToSearchResult = async (profile: FriendSearchResult) => {
     setFriendSearchError(null);
+    setPendingFriendRequestUids((current) => new Set(current).add(profile.uid));
     try {
       await ensureSignedIn();
       await addFriend(profile.uid, profileName || profileNameInput || "Astra Scholar", profileAvatar);
       showToast(`Friend request sent to ${profile.name || "scholar"}!`);
-      setFriendSearchResults((current) => current.filter((result) => result.uid !== profile.uid));
     } catch (err: any) {
+      setPendingFriendRequestUids((current) => {
+        const next = new Set(current);
+        next.delete(profile.uid);
+        return next;
+      });
       setFriendSearchError(err.message || "Failed to send friend request");
     }
   };
@@ -2631,11 +2691,17 @@ export default function App() {
 
   const handleSendFriendRequestToPlayer = async (playerUid: string | null | undefined, playerName?: string | null) => {
     if (!playerUid) return;
+    setPendingFriendRequestUids((current) => new Set(current).add(playerUid));
     try {
       await ensureSignedIn();
       await addFriend(playerUid, profileName || profileNameInput || "Astra Scholar", profileAvatar);
       showToast(`Friend request sent to ${playerName || "player"}!`);
     } catch (err: any) {
+      setPendingFriendRequestUids((current) => {
+        const next = new Set(current);
+        next.delete(playerUid);
+        return next;
+      });
       showToast(err.message || "Failed to send friend request");
     }
   };
@@ -2658,9 +2724,15 @@ export default function App() {
       const myName = onlineRole === "host"
         ? (onlineRoomState?.hostName || "Host")
         : (onlineRoomState?.guestName || "Guest");
+      setPendingInviteUids((current) => new Set(current).add(friendUid));
       await sendRoomInvite(friendUid, onlineRoomCode, myName);
       showToast("Invite sent!");
     } catch (err: any) {
+      setPendingInviteUids((current) => {
+        const next = new Set(current);
+        next.delete(friendUid);
+        return next;
+      });
       showToast(err.message || "Failed to send invite");
     }
   };
@@ -2672,11 +2744,7 @@ export default function App() {
       const name = profileName || profileNameInput || "Shadow Guest";
       await joinRoom(invite.roomCode, name, profileAvatar);
       await respondToRoomInvite(invite, "accepted");
-      cleanupOnlineRoom();
-      const unsub = listenToRoom(invite.roomCode, (room) => {
-        setOnlineRoomState(room);
-      });
-      unsubscribeRoomRef.current = unsub;
+      attachOnlineRoomListeners(invite.roomCode);
       setOnlineJoinCode(invite.roomCode);
       setOnlineJoinName(name);
       setOnlineRoomCode(invite.roomCode);
@@ -3012,6 +3080,7 @@ export default function App() {
     setOnlineMultiplayerMode,
     onlineTimerMax,
     onlineShowResult,
+    onlineIsStarting,
     onlineRomajiInputRef,
     onlineQuestionPoolRef,
     onlineAlphabet,
@@ -3024,6 +3093,8 @@ export default function App() {
     quizMode,
     friends,
     inviteResponses,
+    pendingInviteUids,
+    pendingFriendRequestUids,
     myUid,
     showToast,
     speakJapanese,

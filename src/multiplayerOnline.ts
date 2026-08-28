@@ -265,6 +265,13 @@ export function listenToRoom(roomCode: string, callback: (room: RoomState | null
   });
 }
 
+export function listenToRoomStatus(roomCode: string, callback: (status: RoomState["status"] | null) => void) {
+  const statusRef = ref(db, `rooms/${roomCode.toUpperCase()}/status`);
+  return onValue(statusRef, (snapshot) => {
+    callback(snapshot.exists() ? snapshot.val() as RoomState["status"] : null);
+  });
+}
+
 /**
  * Submits a player's answer.
  *

@@ -40,6 +40,7 @@ interface OnlineMultiplayerScreenProps {
   setOnlineMultiplayerMode: React.Dispatch<React.SetStateAction<OnlineMultiplayerMode>>;
   onlineTimerMax: number;
   onlineShowResult: boolean;
+  onlineIsStarting: boolean;
   onlineRomajiInputRef: React.RefObject<HTMLInputElement | null>;
   onlineQuestionPoolRef: React.RefObject<(HiraganaItem | KatakanaItem)[]>;
   onlineAlphabet: OnlineAlphabet;
@@ -52,6 +53,8 @@ interface OnlineMultiplayerScreenProps {
   quizMode: QuizMode;
   friends: FriendRecord[];
   inviteResponses: InviteResponse[];
+  pendingInviteUids: Set<string>;
+  pendingFriendRequestUids: Set<string>;
   myUid: string | null;
   showToast: (message: string) => void;
   speakJapanese: (phrase: string) => void;
@@ -97,6 +100,7 @@ export default function OnlineMultiplayerScreen({
   setOnlineMultiplayerMode,
   onlineTimerMax,
   onlineShowResult,
+  onlineIsStarting,
   onlineRomajiInputRef,
   onlineQuestionPoolRef,
   onlineAlphabet,
@@ -109,6 +113,8 @@ export default function OnlineMultiplayerScreen({
   quizMode,
   friends,
   inviteResponses,
+  pendingInviteUids,
+  pendingFriendRequestUids,
   myUid,
   showToast,
   speakJapanese,
@@ -126,7 +132,7 @@ export default function OnlineMultiplayerScreen({
 }: OnlineMultiplayerScreenProps) {
   const friendUidSet = new Set(friends.map((friend) => friend.uid));
   const inviteResponseMap = new Map(inviteResponses.map((response) => [response.uid, response]));
-  const canRequestFriend = (playerUid: string | null | undefined) =>
+  const shouldShowFriendAction = (playerUid: string | null | undefined) =>
     Boolean(playerUid && playerUid !== myUid && !friendUidSet.has(playerUid));
 
   return (<motion.div
@@ -578,7 +584,7 @@ export default function OnlineMultiplayerScreen({
                               ? "Accepted"
                               : inviteResponse?.status === "declined"
                                 ? "Busy"
-                                : inviteResponse?.status === "sent"
+                                : inviteResponse?.status === "sent" || pendingInviteUids.has(f.uid)
                                   ? "Sent"
                                   : null;
 
@@ -591,9 +597,9 @@ export default function OnlineMultiplayerScreen({
                                     handleClearInviteResponse(f.uid);
                                     return;
                                   }
-                                  if (!inviteResponse) handleInviteFriend(f.uid);
+                                  if (!inviteResponse && !pendingInviteUids.has(f.uid)) handleInviteFriend(f.uid);
                                 }}
-                                disabled={inviteResponse?.status === "sent"}
+                                disabled={inviteResponse?.status === "sent" || pendingInviteUids.has(f.uid)}
                                 className={`flex items-center justify-between gap-2 px-2.5 py-1.5 bg-natural-bg border rounded-lg text-[10px] font-bold font-mono transition cursor-pointer disabled:cursor-default disabled:opacity-60 ${
                                   inviteResponse?.status === "accepted"
                                     ? "border-natural-forest text-natural-forest"
@@ -652,14 +658,15 @@ export default function OnlineMultiplayerScreen({
                       </div>
                       <span className="text-xs font-serif font-bold text-natural-forest">{onlineRoomState.hostName || "Waiting..."}</span>
                       <span className="text-[9px] font-mono text-natural-forest-light uppercase font-bold">Host</span>
-                      {canRequestFriend(onlineRoomState.hostId) && (
+                      {shouldShowFriendAction(onlineRoomState.hostId) && (
                         <button
                           type="button"
                           onClick={() => handleSendFriendRequestToPlayer(onlineRoomState.hostId, onlineRoomState.hostName)}
-                          className="mt-1 px-2 py-1 rounded-lg bg-natural-bg border border-natural-border text-[9px] font-mono font-bold text-natural-forest hover:border-natural-forest hover:bg-natural-forest/5 transition cursor-pointer flex items-center gap-1"
+                          disabled={pendingFriendRequestUids.has(onlineRoomState.hostId)}
+                          className="mt-1 px-2 py-1 rounded-lg bg-natural-bg border border-natural-border text-[9px] font-mono font-bold text-natural-forest hover:border-natural-forest hover:bg-natural-forest/5 transition cursor-pointer disabled:opacity-60 disabled:cursor-default flex items-center gap-1"
                         >
-                          <UserPlus className="w-2.5 h-2.5" />
-                          Add Friend
+                          {pendingFriendRequestUids.has(onlineRoomState.hostId) ? <Mail className="w-2.5 h-2.5" /> : <UserPlus className="w-2.5 h-2.5" />}
+                          {pendingFriendRequestUids.has(onlineRoomState.hostId) ? "Request Sent" : "Add Friend"}
                         </button>
                       )}
                     </div>
@@ -674,14 +681,15 @@ export default function OnlineMultiplayerScreen({
                       </div>
                       <span className="text-xs font-serif font-bold text-natural-clay">{onlineRoomState.guestName || "Waiting..."}</span>
                       <span className="text-[9px] font-mono text-natural-forest-light uppercase font-bold">Guest</span>
-                      {canRequestFriend(onlineRoomState.guestId) && (
+                      {shouldShowFriendAction(onlineRoomState.guestId) && (
                         <button
                           type="button"
                           onClick={() => handleSendFriendRequestToPlayer(onlineRoomState.guestId, onlineRoomState.guestName)}
-                          className="mt-1 px-2 py-1 rounded-lg bg-natural-bg border border-natural-border text-[9px] font-mono font-bold text-natural-clay hover:border-natural-clay hover:bg-natural-clay/5 transition cursor-pointer flex items-center gap-1"
+                          disabled={Boolean(onlineRoomState.guestId && pendingFriendRequestUids.has(onlineRoomState.guestId))}
+                          className="mt-1 px-2 py-1 rounded-lg bg-natural-bg border border-natural-border text-[9px] font-mono font-bold text-natural-clay hover:border-natural-clay hover:bg-natural-clay/5 transition cursor-pointer disabled:opacity-60 disabled:cursor-default flex items-center gap-1"
                         >
-                          <UserPlus className="w-2.5 h-2.5" />
-                          Add Friend
+                          {onlineRoomState.guestId && pendingFriendRequestUids.has(onlineRoomState.guestId) ? <Mail className="w-2.5 h-2.5" /> : <UserPlus className="w-2.5 h-2.5" />}
+                          {onlineRoomState.guestId && pendingFriendRequestUids.has(onlineRoomState.guestId) ? "Request Sent" : "Add Friend"}
                         </button>
                       )}
                     </div>
@@ -698,17 +706,20 @@ export default function OnlineMultiplayerScreen({
                         <button
                           type="button"
                           onClick={handleStartOnlineGame}
+                          disabled={onlineIsStarting}
                           className="w-full py-3 bg-natural-forest text-natural-bg rounded-2xl font-serif font-extrabold text-sm tracking-wider hover:bg-natural-forest/90 transition shadow-sm flex items-center justify-center gap-2 cursor-pointer"
                         >
-                          <Play className="w-4 h-4" />
-                          Start Speed Duel!
+                          {onlineIsStarting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                          {onlineIsStarting ? "Starting..." : "Start Speed Duel!"}
                         </button>
                       )}
                     </>
                   ) : (
                     <div className="flex flex-col items-center gap-2 text-center">
                       <Loader2 className="w-5 h-5 animate-spin text-natural-clay" />
-                      <p className="text-xs text-natural-forest-light font-mono">Waiting for the host to start...</p>
+                      <p className="text-xs text-natural-forest-light font-mono">
+                        {onlineIsStarting ? "Starting duel..." : "Waiting for the host to start..."}
+                      </p>
                     </div>
                   )}
 
