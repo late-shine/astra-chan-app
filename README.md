@@ -135,6 +135,17 @@ The home screen is Astra-chan's room — each object is a destination:
   <img src="docs/kanji-word-family.png" alt="Kanji Word Family — reading-grouped vocabulary panel for 月 (Moon/Month)" width="70%" />
 </p>
 
+### 📖 Reading Room
+- **N5 Reading Passages** — gentle multi-sentence stories built from the app's Japanese vocabulary and grammar
+- **Guided & Immersion Modes** — reveal readings and meanings while learning, or read independently and mark unfamiliar words
+- **Tap-to-Explore Words** — inspect readings and meanings directly inside each passage
+- **Optional Reading Timer** — choose no limit or a 1 / 3 / 5 / 10 minute session
+- **Comprehension Checks** — answer questions after selected N5 passages and review your result
+- **Personal Reading Notes** — keep a session list of words you marked as difficult
+- **Review Deck Integration** — add individual missed words or all collected words to the SRS Review Deck
+- **Astra-chan Reading Companion** — Astra reads alongside you, reacts when called, and returns to her book after a short conversation
+- **Future Levels** — N4 through N1 are shown as planned levels and will unlock in future updates
+
 ### 📖 Grammar Dojo
 - **12 Core N5 Grammar Patterns** — detailed structural guides with full explanations, syntax breakdowns, and cultural tips
 - **Rich Media Support** — interactive audio pronunciation (🔊 TTS) for all grammar formulas and example sentences
@@ -214,9 +225,8 @@ The home screen is Astra-chan's room — each object is a destination:
 
 - **Astra-chan** — animated mascot with mood system, speech bubbles, and AFK reactions:
   - Goes wondering after 15 seconds of no interaction
-  - Goes into deep AFK mode after 3 minutes
   - Lights up with excitement when you return
-  - Three artwork states with smooth crossfade transitions
+  - Five artwork states with smooth crossfade transitions, including dedicated reading and reading-reaction artwork
 
 ---
 
@@ -328,6 +338,7 @@ Online multiplayer uses Firebase Anonymous Auth and these Realtime Database path
 - [x] Interactive Mastery Sandbox (counter builder, verb conjugation worksheet, 31-day calendar ledger — built as interactive tools rather than literal user-created tables)
 - [x] Kanji Word Family panel (reading-grouped vocabulary deep-dive, 13 kanji so far)
 - [x] 6-theme visual system (Light, Dark, Cosmic Witch, Emerald Jade, Autumn Maple, Cyber Tokyo)
+- [x] Reading Room with N5 passages, Guided/Immersion modes, optional timers, comprehension checks, and SRS notes
 - [x] Two-way friend request system with accept/decline flow and profile notifications
 - [x] Online duel match history
 - [x] Same-room rematch / Play Again flow
