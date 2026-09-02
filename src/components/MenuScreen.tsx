@@ -33,6 +33,7 @@ import { HiraganaItem, KatakanaItem, StudentStats, SRSCard } from "../types";
 import wonderingImg from "../assets/images/astra-wondering.jpeg";
 import excitedImg from "../assets/images/astra-excited.png.jpeg";
 import companionImg from "../assets/images/synthid-removed-Gemini_Generated_Image_csh1tcsh1tcsh1tc.png";
+import astraReadingImg from "../assets/images/Astra-reading.png";
 
 // ─── Local screen/state type aliases (mirror the unions declared inline via
 // useState<...> in App.tsx — kept local to this component's props, per the
@@ -64,7 +65,8 @@ type MascotMood =
   | "survival-danger"
   | "wondering"
   | "afk"
-  | "excited";
+  | "excited"
+  | "reading";
 
 // ─── Local audio helpers (mirror the module-scope helpers in App.tsx;
 // duplicated here rather than imported/passed as props since they are pure,
@@ -366,10 +368,18 @@ export default function MenuScreen(props: MenuScreenProps) {
                         <div className="absolute inset-x-8 top-7 h-24 rounded-b-[2rem] border border-natural-forest/20 bg-natural-forest/10" />
                         <div className="absolute bottom-5 left-8 right-8 h-16 rounded-2xl border border-natural-clay/25 bg-natural-clay/10" />
                         <img
-  src={mascotMood === "wondering" || mascotMood === "afk" ? wonderingImg : mascotMood === "excited" ? excitedImg : companionImg}
-  alt=""
-  className="relative z-10 max-h-60 object-contain drop-shadow-xl transition-opacity duration-500"
-/>
+                          src={
+                            mascotMood === "reading"
+                              ? astraReadingImg
+                              : mascotMood === "wondering" || mascotMood === "afk"
+                              ? wonderingImg
+                              : mascotMood === "excited"
+                              ? excitedImg
+                              : companionImg
+                          }
+                          alt="Astra-chan"
+                          className="relative z-10 max-h-60 object-contain drop-shadow-xl transition-opacity duration-500"
+                        />
                       </div>
                     </div>
 

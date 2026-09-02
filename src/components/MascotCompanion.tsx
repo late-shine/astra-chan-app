@@ -87,7 +87,16 @@ export default function MascotCompanion({
         return lines[Math.floor(Math.random() * lines.length)];
       }
       case "reading":
-        return "📖 Let’s read this together. Tap a word whenever you want a little help.";
+        return [
+          "📖 Let’s read this together. Tap a word whenever you want a little help.",
+          "📚 I am following along with you. Take your time with this sentence.",
+          "🌙 A quiet page and a little practice make a fine study spell.",
+          "✨ Notice one word at a time. Small discoveries add up quickly.",
+          "🍵 No need to rush. Let the meaning settle gently.",
+          "🔖 Found a difficult word? We can keep it safe for your review deck.",
+          "🌸 Read it once for the feeling, then again for the details.",
+          "📖 I like this part. Shall we see what the next sentence brings?",
+        ][Math.floor(Math.random() * 8)];
       case "idle":
       default:
         if (streak > 3) {

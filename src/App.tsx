@@ -2034,20 +2034,34 @@ export default function App() {
   }, []); // intentionally empty — all live values read through refs
 
   const handleMascotClick = () => {
-    // Pick active random trivia and set speech override
-    const randomIndex = Math.floor(Math.random() * MASCOT_TRIVIA.length);
-    const selectedText = MASCOT_TRIVIA[randomIndex];
+    const isReadingRoom = currentScreenRef.current === "reading-room";
+    const readingLines = [
+      "Ah, I was almost zoning out. Did you need me?",
+      "Oh, you caught me looking at the same sentence again. Shall we read it together?",
+      "Hmm? I am here. Was there a word that looked mysterious?",
+      "I was quietly following along. What part shall we explore next?",
+      "Ah, a little study companion check-in. You are doing wonderfully.",
+      "Did you find a tricky expression? We can keep it safe for your review deck.",
+      "I was just wondering what this sentence means too. Let us investigate it together.",
+      "You called? I have my place in the book. Shall we continue from here?",
+    ];
+    const lines = isReadingRoom ? readingLines : MASCOT_TRIVIA;
+    const randomIndex = Math.floor(Math.random() * lines.length);
+    const selectedText = lines[randomIndex];
     setMascotSpeechOverride(selectedText);
     setMascotMood("clicked");
     playChime(true);
-    showToast("Astra-chan responds to your call with native trivia!");
+    showToast(isReadingRoom ? "Astra-chan looks up from her book." : "Astra-chan responds to your call with native trivia!");
 
-    // Clear override after 8.5 seconds — clear any previous timeout first
+    // Reading reactions last longer, then return Astra to her book.
     if (mascotTimeoutRef.current) clearTimeout(mascotTimeoutRef.current);
     mascotTimeoutRef.current = setTimeout(() => {
       setMascotSpeechOverride(null);
+      if (isReadingRoom && currentScreenRef.current === "reading-room") {
+        setMascotMood("reading");
+      }
       mascotTimeoutRef.current = null;
-    }, 8500);
+    }, isReadingRoom ? 15000 : 8500);
   };
 
   // ── ONLINE MULTIPLAYER FUNCTIONS ───────────────────────────────────────────
@@ -4348,14 +4362,24 @@ export default function App() {
           {/* ================= SCREEN: READING ROOM ================= */}
           {currentScreen === "reading-room" && (
             <ReadingRoomScreen
-              onBack={() => setCurrentScreen("menu")}
+              onBack={() => {
+                setCurrentScreen("menu");
+                setMascotMood("idle");
+                setMascotSpeechOverride(null);
+              }}
               language={language}
               speakJapanese={speakJapanese}
               addCard={addCard}
               hasCard={hasCard}
               onRecordReadingMiss={handleRecordReadingMiss}
               showToast={showToast}
-              onReviewDeck={() => setCurrentScreen("review-deck")}
+              onReviewDeck={() => {
+                setCurrentScreen("review-deck");
+                setMascotMood("idle");
+                setMascotSpeechOverride(null);
+              }}
+              mascotMood={mascotMood}
+              onMascotClick={handleMascotClick}
               onReadingStarted={() => {
                 setMascotMood("reading");
                 setMascotSpeechOverride(null);
