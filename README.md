@@ -82,9 +82,7 @@ A few things made this harder than "just move the JSX":
   project-wide lint/build runs chasing unrelated pre-existing errors, do the
   edit once.
 
-End result: `App.tsx` down to **3,932 lines** (48% smaller), 9 new screen
-components, and zero behavior changes — verified phase by phase by actually
-clicking through the app, not just trusting a clean build.
+End result: `App.tsx` was cut nearly in half, with 9 new screen components and zero behavior changes — verified phase by phase by actually clicking through the app, not just trusting a clean build.
 
 ---
 
@@ -180,7 +178,11 @@ The home screen is Astra-chan's room — each object is a destination:
 - Custom character picker for online rooms
 - Configurable question count (10 / 20 / 30 / All)
 - Configurable difficulty (Easy 15s / Medium 10s / Hard 5s / Super Hard 3s)
-- Friend system with invite codes
+- Two-way friend request system with accept/decline flow
+- Friend request notifications from the profile button
+- Room invites with response tracking
+- Recent duel history saved after completed online matches
+- Play Again / rematch flow using the same room and players
 - Live lobby with player avatars and online/offline status dots
 
 ### 👤 Profile, Voice Control & Bilingual Support
@@ -189,6 +191,8 @@ The home screen is Astra-chan's room — each object is a destination:
 - **Monthly Study Calendar** — detailed tracking calendar showing daily active study streaks, streak counts, and XP milestones
 - **Mastery Badges** — earn 10 distinct unlockable achievement badges celebrating your progress (e.g., *First Steps*, *Survivor*, *Week Warrior*, *Deck Master*, *N5 Scholar*)
 - **Durable Backup/Restore** — download all stats, vocabulary decks, and unlocked milestones to a JSON file and restore your state at any time
+- **Recent Duels** — online match history showing opponent, score, result, date, difficulty, mode, and round count
+- **Friend Request Inbox** — accept/decline requests from Profile, with a visible notification badge when new requests arrive
 
 <p align="center">
   <img src="docs/calendar-stats.png" alt="Study Calendar — XP, streak, monthly activity, and mastery badges" width="49%" />
@@ -290,6 +294,21 @@ GEMINI_API_KEY=
 > Get a free Gemini API key at [aistudio.google.com](https://aistudio.google.com). The free tier gives 500 requests/day and 250K tokens/day — more than enough for a personal learning app.
 
 > ⚠️ **AI drawing analysis limit:** The free Gemini tier resets daily. If Astra-chan's stroke checker stops responding, the day's quota has been reached — it'll be back the next day automatically.
+
+### Firebase Realtime Database Paths
+
+Online multiplayer uses Firebase Anonymous Auth and these Realtime Database paths:
+
+- `rooms`
+- `friends`
+- `friendRequests`
+- `invites`
+- `inviteResponses`
+- `matchHistory`
+- `userProfiles`
+
+`matchHistory` starts recording only after a completed online duel. Older matches will not appear retroactively.
+
 ---
 
 ## Roadmap
@@ -309,6 +328,9 @@ GEMINI_API_KEY=
 - [x] Interactive Mastery Sandbox (counter builder, verb conjugation worksheet, 31-day calendar ledger — built as interactive tools rather than literal user-created tables)
 - [x] Kanji Word Family panel (reading-grouped vocabulary deep-dive, 13 kanji so far)
 - [x] 6-theme visual system (Light, Dark, Cosmic Witch, Emerald Jade, Autumn Maple, Cyber Tokyo)
+- [x] Two-way friend request system with accept/decline flow and profile notifications
+- [x] Online duel match history
+- [x] Same-room rematch / Play Again flow
 - [ ] Kanji Word Family reading drill quiz
 - [ ] N4 vocabulary expansion
 - [ ] Mobile app version
