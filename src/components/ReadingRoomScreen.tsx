@@ -229,9 +229,13 @@ export default function ReadingRoomScreen({
     }
 
     if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
+      // Some browsers keep a paused utterance in a non-resumable state.
+      // Restarting the passage is reliable and avoids a dead Resume button.
+      window.speechSynthesis.cancel();
+      speakJapanese(getPassageText(passage));
       setIsAudioPaused(false);
       setIsAudioPlaying(true);
+      setActiveSpeechTip("Playing the full audio reading again. Listen closely to the flow and intonations!");
       return;
     }
 
@@ -580,7 +584,7 @@ export default function ReadingRoomScreen({
                     className="inline-flex items-center gap-1.5 rounded-xl border border-natural-border/70 bg-natural-bg/60 px-3.5 py-2 text-xs font-serif font-bold text-natural-forest transition hover:border-natural-forest hover:bg-natural-card shadow-sm cursor-pointer"
                   >
                     {isAudioPlaying && !isAudioPaused ? <Pause className="h-4 w-4 text-natural-clay" /> : <Play className="h-4 w-4 text-natural-clay" />}
-                    <span>{isAudioPlaying && !isAudioPaused ? "Pause" : isAudioPaused ? "Resume" : "Listen"}</span>
+                    <span>{isAudioPlaying && !isAudioPaused ? "Pause" : isAudioPaused ? "Replay" : "Listen"}</span>
                   </button>
 
                   {isAudioPlaying && (

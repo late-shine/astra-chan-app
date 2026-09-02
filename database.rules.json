@@ -22,7 +22,19 @@
     "friends": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid"
+        "$friendUid": {
+          ".write": "auth != null && ((!newData.exists() && (auth.uid === $uid || auth.uid === $friendUid)) || (newData.exists() && ((auth.uid === $uid && root.child('friendRequests').child($uid).child($friendUid).exists()) || (auth.uid === $friendUid && root.child('friendRequests').child($friendUid).child($uid).exists()))))",
+          ".validate": "!newData.exists() || (newData.hasChildren(['uid', 'name', 'addedAt']) && newData.child('uid').val() === $friendUid && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 24 && newData.child('addedAt').isNumber())"
+        }
+      }
+    },
+    "friendRequests": {
+      "$targetUid": {
+        ".read": "auth != null && auth.uid === $targetUid",
+        "$fromUid": {
+          ".write": "auth != null && ((auth.uid === $fromUid && newData.exists()) || (auth.uid === $targetUid && !newData.exists()))",
+          ".validate": "!newData.exists() || (newData.hasChildren(['fromUid', 'fromName', 'createdAt']) && newData.child('fromUid').val() === $fromUid && newData.child('fromName').isString() && newData.child('fromName').val().length > 0 && newData.child('fromName').val().length <= 24 && newData.child('createdAt').isNumber())"
+        }
       }
     },
     "invites": {
@@ -31,7 +43,24 @@
         ".write": "auth != null"
       }
     },
+    "inviteResponses": {
+      "$fromUid": {
+        ".read": "auth != null && auth.uid === $fromUid",
+        "$targetUid": {
+          ".write": "auth != null && (auth.uid === $fromUid || auth.uid === $targetUid)",
+          ".validate": "!newData.exists() || (newData.hasChildren(['status', 'roomCode', 'updatedAt']) && (newData.child('status').val() === 'sent' || newData.child('status').val() === 'accepted' || newData.child('status').val() === 'declined') && newData.child('roomCode').isString() && newData.child('roomCode').val().length === 6 && newData.child('updatedAt').isNumber())"
+        }
+      }
+    },
+    "matchHistory": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
     "userProfiles": {
+      ".indexOn": ["searchName"],
+      ".read": "auth != null && query.orderByChild === 'searchName' && query.limitToFirst <= 10",
       "$uid": {
         ".read": "auth != null",
         ".write": "auth != null && auth.uid === $uid",
