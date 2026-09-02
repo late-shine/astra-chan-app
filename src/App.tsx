@@ -110,6 +110,7 @@ import bgSakuraTrain from "./assets/images/bg_sakura_train.jpg";
 import bgNightSparkler from "./assets/images/bg_night_sparkler.jpg";
 import bgRainyWindowAnime from "./assets/images/bg_rainy_window_anime.jpg";
 import astraReadingImg from "./assets/images/Astra-reading.png";
+import astraReadingClickedImg from "./assets/images/Astra-reading-clicked.png";
 
 // Native Audio Synthesizer for UI/UX feedback
 function playChime(success: boolean) {
@@ -4317,6 +4318,8 @@ export default function App() {
             selectedChar={currentScreen === "kanji-scroll" ? KANJI_DATA[currentKanjiIndex].kanji : undefined}
             speechOverride={mascotSpeechOverride}
             readingImage={astraReadingImg}
+            readingClickedImage={astraReadingClickedImg}
+            readingRoomActive={currentScreen === "reading-room"}
             onClickCompanion={handleMascotClick}
           />
         </div>

@@ -14,6 +14,8 @@ interface MascotCompanionProps {
   speechOverride?: string | null;
   onClickCompanion?: () => void;
   readingImage?: string;
+  readingClickedImage?: string;
+  readingRoomActive?: boolean;
 }
 
 export default function MascotCompanion({
@@ -24,15 +26,18 @@ export default function MascotCompanion({
   speechOverride,
   onClickCompanion,
   readingImage,
+  readingClickedImage,
+  readingRoomActive = false,
 }: MascotCompanionProps) {
 
   // Select image based on mood — soft crossfade handled by keyed motion.div below
   const currentImage = useMemo(() => {
+    if (mood === "clicked" && readingRoomActive && readingClickedImage) return readingClickedImage;
     if (mood === "reading" && readingImage) return readingImage;
     if (mood === "wondering" || mood === "afk") return wonderingImg;
     if (mood === "excited") return excitedImg;
     return companionImg;
-  }, [mood, readingImage]);
+  }, [mood, readingImage, readingClickedImage, readingRoomActive]);
   
   const speechBubbleText = useMemo(() => {
     if (speechOverride) return speechOverride;
