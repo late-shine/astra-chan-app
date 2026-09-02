@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Award, 
+  BookOpen,
   Calendar, 
   ChevronLeft, 
   ChevronRight, 
@@ -26,7 +27,7 @@ import {
 import type { HiraganaItem, KatakanaItem, KanjiItem, StudentStats, VocabularyItem } from "../types";
 import type { FriendRecord, FriendRequest, FriendSearchResult, MatchHistoryRecord } from "../multiplayerOnline";
 
-type CurrentScreen = "menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo";
+type CurrentScreen = "menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo" | "reading-room";
 type ProfileCharSet = "hiragana" | "katakana";
 type ArchiveFilter = string;
 type CalViewDate = { year: number; month: number };
@@ -1518,6 +1519,40 @@ export default function ProfileScreen({
                 </div>
               );
             })}
+          </div>
+        )}
+      </div>
+
+      {/* ── READING ROOM MISSED ITEMS ── */}
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-5 shadow-inner backdrop-blur-md flex flex-col gap-4 text-left">
+        <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-2">
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-5 h-5 text-natural-forest" />
+            <h4 className="font-serif font-black text-sm text-natural-forest">Reading Room Notes</h4>
+          </div>
+          <span className="text-[10px] font-mono font-black text-natural-forest/60 uppercase tracking-wider">
+            {(stats.readingMisses || []).length} saved
+          </span>
+        </div>
+        {(stats.readingMisses || []).length === 0 ? (
+          <p className="text-xs text-natural-forest/60 text-center py-5 font-mono font-bold uppercase tracking-wider bg-white/5 border border-white/5 rounded-xl">
+            Words you mark while reading will appear here.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {(stats.readingMisses || []).slice().sort((a, b) => b.lastSeen - a.lastSeen).map((item) => (
+              <div key={item.dictKey} className="p-3 bg-white/5 border border-white/10 rounded-xl">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-serif text-lg font-black text-natural-charcoal">{item.surface}</p>
+                    <p className="text-xs text-natural-forest/65">{item.reading} · {item.meaning}</p>
+                  </div>
+                  <span className="shrink-0 rounded-lg border border-natural-clay/25 bg-natural-clay/10 px-2 py-1 text-[9px] font-mono font-black text-natural-clay">
+                    {item.count}×
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

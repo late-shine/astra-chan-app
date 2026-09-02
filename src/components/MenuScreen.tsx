@@ -48,7 +48,8 @@ type ScreenType =
   | "vocab-quiz"
   | "kanji-quiz"
   | "charts"
-  | "grammar-dojo";
+  | "grammar-dojo"
+  | "reading-room";
 
 type MascotMood =
   | "welcome"
@@ -440,13 +441,20 @@ export default function MenuScreen(props: MenuScreenProps) {
                                             accent: "clay",
                                             action: () => setCurrentScreen("charts"),
                                           },
-                                          {
-                                            title: "Grammar Dojo",
-                                            desc: "N5 grammar patterns & practice",
-                                            icon: GraduationCap,
-                                            accent: "forest",
-                                            action: () => setCurrentScreen("grammar-dojo"),
-                                          },
+                        {
+                          title: "Grammar Dojo",
+                          desc: "N5 grammar patterns & practice",
+                          icon: GraduationCap,
+                          accent: "forest",
+                          action: () => setCurrentScreen("grammar-dojo"),
+                        },
+                        {
+                          title: "Reading Room",
+                          desc: "Read gentle N5 passages.",
+                          icon: BookOpenCheck,
+                          accent: "clay",
+                          action: () => setCurrentScreen("reading-room"),
+                        },
                                         ].map((roomItem) => {
                         const Icon = roomItem.icon;
                         const activeClass = roomItem.accent === "forest"

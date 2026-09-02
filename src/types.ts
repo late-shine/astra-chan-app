@@ -63,6 +63,16 @@ export interface SRSCard {
   itemKey: string;      // the word/kanji/kana string itself e.g. "食べる"
 }
 
+export interface ReadingMissRecord {
+  dictKey: string;
+  surface: string;
+  reading: string;
+  meaning: string;
+  firstSeen: number;
+  lastSeen: number;
+  count: number;
+}
+
 export interface StudentStats {
   xp: number;
   streakCount: number;
@@ -78,5 +88,5 @@ export interface StudentStats {
   studyDates: string[];         // "YYYY-MM-DD" strings — one per day studied
   survivalBestScore: number;    // Highest survival mode score ever achieved
   srsReviewedTotal: number;     // Cumulative SRS cards reviewed across all sessions
+  readingMisses?: ReadingMissRecord[]; // Vocabulary noticed during Reading Room sessions
 }
-

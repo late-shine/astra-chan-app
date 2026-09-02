@@ -87,10 +87,12 @@ import {
 } from "./multiplayerOnline";
 import { currentUid, ensureSignedIn } from "./firebase";
 import { HiraganaItem, KatakanaItem, KanjiItem, VocabularyItem, StudentStats, SRSCard } from "./types";
+import type { ReadingToken } from "./reading/readingData";
 import MascotCompanion from "./components/MascotCompanion";
 import AtmosphereCanvas from "./components/AtmosphereCanvas";
 import ReferenceCharts from "./components/ReferenceCharts";
 import GrammarDojo from "./components/GrammarDojo";
+import ReadingRoomScreen from "./components/ReadingRoomScreen";
 import MenuScreen from "./components/MenuScreen";
 import ResultsScreen from "./components/ResultsScreen";
 import VocabQuizScreen from "./components/VocabQuizScreen";
@@ -107,6 +109,7 @@ import bgMistySakura from "./assets/images/bg_misty_sakura.jpg";
 import bgSakuraTrain from "./assets/images/bg_sakura_train.jpg";
 import bgNightSparkler from "./assets/images/bg_night_sparkler.jpg";
 import bgRainyWindowAnime from "./assets/images/bg_rainy_window_anime.jpg";
+import astraReadingImg from "./assets/images/Astra-reading.png";
 
 // Native Audio Synthesizer for UI/UX feedback
 function playChime(success: boolean) {
@@ -187,7 +190,7 @@ function playClickTick() {
 
 export default function App() {
   // Screens navigation state
-  const [currentScreen, setCurrentScreen] = useState<"menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo">("menu");
+  const [currentScreen, setCurrentScreen] = useState<"menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo" | "reading-room">("menu");
   const [quizMode, setQuizMode] = useState<"choice" | "romaji" | "survival">("choice");
 
   // ── SRS Review Deck (hook + session state) ─────────────────────────────────
@@ -294,10 +297,11 @@ export default function App() {
     studyDates: [],
     survivalBestScore: 0,
     srsReviewedTotal: 0,
+    readingMisses: [],
   });
 
   // Mascot mood state
-  const [mascotMood, setMascotMood] = useState<"welcome" | "streak" | "success" | "failure" | "kanji" | "idle" | "clicked" | "learn-flashcard" | "learn-vocabs" | "survival-danger" | "wondering" | "afk" | "excited">("welcome");
+  const [mascotMood, setMascotMood] = useState<"welcome" | "streak" | "success" | "failure" | "kanji" | "idle" | "clicked" | "learn-flashcard" | "learn-vocabs" | "survival-danger" | "wondering" | "afk" | "excited" | "reading">("welcome");
 
   // Kanji drawing evaluation states
   const [analysisResult, setAnalysisResult] = useState<{ score: number; feedbackTitle: string; advice: string } | null>(null);
@@ -874,6 +878,7 @@ export default function App() {
           studyDates: parsed.studyDates || [],
           survivalBestScore: parsed.survivalBestScore || 0,
           srsReviewedTotal: parsed.srsReviewedTotal || 0,
+          readingMisses: Array.isArray(parsed.readingMisses) ? parsed.readingMisses : [],
         });
 
         if (currentStreak > 0) {
@@ -908,7 +913,25 @@ export default function App() {
       studyDates: Array.isArray(imported.studyDates) ? imported.studyDates : [],
       survivalBestScore: Number(imported.survivalBestScore) || 0,
       srsReviewedTotal: Number(imported.srsReviewedTotal) || 0,
+      readingMisses: Array.isArray(imported.readingMisses) ? imported.readingMisses.filter((item: any) => item && typeof item.dictKey === "string") : [],
     };
+  };
+
+  const handleRecordReadingMiss = (token: ReadingToken) => {
+    if (!token.dictKey || !token.reading || !token.meaning) return;
+    const now = Date.now();
+    setStats((previous) => {
+      const current = previous.readingMisses || [];
+      const existing = current.find((item) => item.dictKey === token.dictKey);
+      const nextMisses = existing
+        ? current.map((item) => item.dictKey === token.dictKey ? { ...item, lastSeen: now, count: item.count + 1 } : item)
+        : [...current, { dictKey: token.dictKey, surface: token.surface, reading: token.reading!, meaning: token.meaning!, firstSeen: now, lastSeen: now, count: 1 }];
+      const updated = { ...previous, readingMisses: nextMisses };
+      try {
+        localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(updated));
+      } catch { /* keep the in-memory note if storage is unavailable */ }
+      return updated;
+    });
   };
 
   const handleDownloadProgress = () => {
@@ -3537,7 +3560,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* MAIN LAYOUT WRAPPER */}
-      <div className={`w-full ${(currentScreen === "charts" || currentScreen === "grammar-dojo") ? "max-w-5xl px-2 sm:px-4" : "max-w-4xl"} mx-auto flex-grow flex flex-col z-10 relative`}>
+      <div className={`w-full ${(currentScreen === "charts" || currentScreen === "grammar-dojo" || currentScreen === "reading-room") ? "max-w-5xl px-2 sm:px-4" : "max-w-4xl"} mx-auto flex-grow flex flex-col z-10 relative`}>
 
         {/* APP HEADER */}
         <header className="flex flex-col sm:flex-row items-center justify-between gap-4 py-3 border-b border-natural-border/60 mb-4">
@@ -4271,7 +4294,7 @@ export default function App() {
         )}
 
         {/* COMPANION STATUS BOARD */}
-        {(currentScreen === "menu" || currentScreen === "kanji-scroll") && (
+        {(currentScreen === "menu" || currentScreen === "kanji-scroll" || currentScreen === "reading-room") && (
         <div id="companion-section-wrapper" className="mb-4">
           <MascotCompanion
             mood={mascotMood}
@@ -4279,6 +4302,7 @@ export default function App() {
             xp={stats.xp}
             selectedChar={currentScreen === "kanji-scroll" ? KANJI_DATA[currentKanjiIndex].kanji : undefined}
             speechOverride={mascotSpeechOverride}
+            readingImage={astraReadingImg}
             onClickCompanion={handleMascotClick}
           />
         </div>
@@ -4319,6 +4343,28 @@ export default function App() {
           {/* ================= SCREEN: GRAMMAR DOJO ================= */}
           {currentScreen === "grammar-dojo" && (
             <GrammarDojo onBack={() => setCurrentScreen("menu")} onAwardXP={(xp) => awardXPAndIncrementAttempt(true, xp)} speakJapanese={speakJapanese} />
+          )}
+
+          {/* ================= SCREEN: READING ROOM ================= */}
+          {currentScreen === "reading-room" && (
+            <ReadingRoomScreen
+              onBack={() => setCurrentScreen("menu")}
+              language={language}
+              speakJapanese={speakJapanese}
+              addCard={addCard}
+              hasCard={hasCard}
+              onRecordReadingMiss={handleRecordReadingMiss}
+              showToast={showToast}
+              onReviewDeck={() => setCurrentScreen("review-deck")}
+              onReadingStarted={() => {
+                setMascotMood("reading");
+                setMascotSpeechOverride(null);
+              }}
+              onReadingMiss={() => {
+                setMascotMood("reading");
+                setMascotSpeechOverride("That word felt difficult? It is okay. I will keep it here so we can study it together later.");
+              }}
+            />
           )}
 
           {/* ================= SCREEN: SRS REVIEW DECK ================= */}

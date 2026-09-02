@@ -7,12 +7,13 @@ import bgCatSakura from "../assets/images/bg_cat_sakura.jpg";
 import { Sparkles, Heart } from "lucide-react";
 
 interface MascotCompanionProps {
-  mood: "welcome" | "streak" | "success" | "failure" | "kanji" | "idle" | "clicked" | "learn-flashcard" | "learn-vocabs" | "survival-danger" | "wondering" | "afk" | "excited";
+  mood: "welcome" | "streak" | "success" | "failure" | "kanji" | "idle" | "clicked" | "learn-flashcard" | "learn-vocabs" | "survival-danger" | "wondering" | "afk" | "excited" | "reading";
   streak: number;
   xp: number;
   selectedChar?: string;
   speechOverride?: string | null;
   onClickCompanion?: () => void;
+  readingImage?: string;
 }
 
 export default function MascotCompanion({
@@ -21,15 +22,17 @@ export default function MascotCompanion({
   xp,
   selectedChar,
   speechOverride,
-  onClickCompanion
+  onClickCompanion,
+  readingImage,
 }: MascotCompanionProps) {
 
   // Select image based on mood — soft crossfade handled by keyed motion.div below
   const currentImage = useMemo(() => {
+    if (mood === "reading" && readingImage) return readingImage;
     if (mood === "wondering" || mood === "afk") return wonderingImg;
     if (mood === "excited") return excitedImg;
     return companionImg;
-  }, [mood]);
+  }, [mood, readingImage]);
   
   const speechBubbleText = useMemo(() => {
     if (speechOverride) return speechOverride;
@@ -83,6 +86,8 @@ export default function MascotCompanion({
         ];
         return lines[Math.floor(Math.random() * lines.length)];
       }
+      case "reading":
+        return "📖 Let’s read this together. Tap a word whenever you want a little help.";
       case "idle":
       default:
         if (streak > 3) {
