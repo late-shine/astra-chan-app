@@ -1189,7 +1189,6 @@ export const VOCABULARY_DATA: VocabularyItem[] = [
   { word: "答え", hiragana: "こたえ", romaji: "kotae", english: "Answer", category: "school" },
   { word: "黒板", hiragana: "こくばん", romaji: "kokuban", english: "Blackboard", category: "school" },
   { word: "作文", hiragana: "さくぶん", romaji: "sakubun", english: "Essay / Composition", category: "school" },
-  { word: "辞書", hiragana: "じしょ", romaji: "jisho", english: "Dictionary", category: "school" },
   { word: "ペン", hiragana: "ぺん", romaji: "pen", english: "Pen", category: "school" },
   // Additional N5 words
   { word: "おそい", hiragana: "おそい", romaji: "osoi", english: "Slow / Late", category: "adjectives" },
@@ -1233,7 +1232,6 @@ export const VOCABULARY_DATA: VocabularyItem[] = [
   { word: "置く", hiragana: "おく", romaji: "oku", english: "To place / put", category: "actions" },
   { word: "見せる", hiragana: "みせる", romaji: "miseru", english: "To show", category: "actions" },
   { word: "教える", hiragana: "おしえる", romaji: "oshieru", english: "To teach", category: "actions" },
-  { word: "習う", hiragana: "ならう", romaji: "narau", english: "To learn", category: "actions" },
   { word: "洗う", hiragana: "あらう", romaji: "arau", english: "To wash", category: "actions" },
   { word: "切る", hiragana: "きる", romaji: "kiru", english: "To cut", category: "actions" },
   { word: "送る", hiragana: "おくる", romaji: "okuru", english: "To send", category: "actions" },
@@ -1719,7 +1717,6 @@ export const VOCABULARY_DATA: VocabularyItem[] = [
   { word: "本棚",         hiragana: "ほんだな",       romaji: "hondana",      english: "Bookshelf",                        category: "objects" },
   { word: "はがき",       hiragana: "はがき",         romaji: "hagaki",       english: "Postcard",                         category: "objects" },
   { word: "封筒",         hiragana: "ふうとう",       romaji: "fuutou",       english: "Envelope",                         category: "objects" },
-  { word: "鍋",           hiragana: "なべ",           romaji: "nabe",         english: "Pot / Saucepan",                   category: "objects" },
   { word: "ティッシュ",   hiragana: "てぃっしゅ",     romaji: "tisshu",       english: "Tissue / Paper tissue",            category: "objects" },
   { word: "手袋",         hiragana: "てぶくろ",       romaji: "tebukuro",     english: "Gloves",                           category: "objects" },
   { word: "枕",           hiragana: "まくら",         romaji: "makura",       english: "Pillow",                           category: "objects" },
@@ -2649,4 +2646,3 @@ export const KATAKANA_DATA: KatakanaItem[] = [
     examples: [{ japanese: "ピョートル (ぴょーとる)", romaji: "pyo-toru", english: "Pyotr" }]
   }
 ];
-
