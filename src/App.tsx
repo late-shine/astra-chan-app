@@ -266,7 +266,13 @@ export default function App() {
   const [vocabsSearch, setVocabsSearch] = useState("");
 
   // Quiz Pronunciation Voice settings
-  const [autoPronounce, setAutoPronounce] = useState<boolean>(false);
+  const [autoPronounce, setAutoPronounce] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("astra_auto_pronounce") === "true";
+    } catch (e) {
+      return false;
+    }
+  });
   const [language, setLanguage] = useState<"en" | "ja">(() => {
     try {
       const stored = localStorage.getItem("hira_app_language");
@@ -275,7 +281,13 @@ export default function App() {
     return "en";
   });
   const [availableJapaneseVoices, setAvailableJapaneseVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [selectedJapaneseVoiceURI, setSelectedJapaneseVoiceURI] = useState<string>(() => localStorage.getItem("astra_japanese_voice_uri") || "");
+  const [selectedJapaneseVoiceURI, setSelectedJapaneseVoiceURI] = useState<string>(() => {
+    try {
+      return localStorage.getItem("astra_japanese_voice_uri") || "";
+    } catch (e) {
+      return "";
+    }
+  });
   const [isAtmosphereExpanded, setIsAtmosphereExpanded] = useState(false);
   const [isMusicExpanded, setIsMusicExpanded] = useState(false);
   const [profileAvatar, setProfileAvatar] = useState<string>(() => localStorage.getItem("astra_profile_avatar") || "");
@@ -442,6 +454,12 @@ export default function App() {
       localStorage.setItem("hira_app_language", language);
     } catch (e) { }
   }, [language]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("astra_auto_pronounce", String(autoPronounce));
+    } catch (e) { }
+  }, [autoPronounce]);
 
   // Zen Soundscape synthesizer start/stop and volume logic
   const startAmbientMusic = () => {
@@ -994,27 +1012,41 @@ export default function App() {
     const loadVoices = () => {
       const voices = window.speechSynthesis.getVoices().filter((voice) => voice.lang.toLowerCase().startsWith("ja"));
       setAvailableJapaneseVoices(voices);
-      // Browsers return an empty voice list on the very first synchronous call
-      // (the real list loads asynchronously via "voiceschanged"). Only clear the
-      // saved preference once we actually have a populated list to check against —
-      // otherwise this wipes a valid saved voice before it's ever had a chance to load.
-      if (voices.length > 0 && selectedJapaneseVoiceURI && !voices.some((voice) => voice.voiceURI === selectedJapaneseVoiceURI)) {
-        setSelectedJapaneseVoiceURI("");
-        localStorage.removeItem("astra_japanese_voice_uri");
+      // Voice lists are browser/OS-provided and often load asynchronously. Keep
+      // the saved preference until a populated list is available, then restore by
+      // URI first and by name as a fallback when a browser changes the URI.
+      if (voices.length > 0) {
+        const savedURI = localStorage.getItem("astra_japanese_voice_uri") || "";
+        const savedName = localStorage.getItem("astra_japanese_voice_name") || "";
+        const matchingVoice = voices.find((voice) => voice.voiceURI === savedURI)
+          ?? voices.find((voice) => voice.name === savedName);
+        if (matchingVoice) {
+          setSelectedJapaneseVoiceURI(matchingVoice.voiceURI);
+          localStorage.setItem("astra_japanese_voice_uri", matchingVoice.voiceURI);
+          localStorage.setItem("astra_japanese_voice_name", matchingVoice.name);
+        } else if (savedURI) {
+          // The saved voice is unavailable in this browser. Use its default
+          // without deleting the preference, so a later voiceschanged event can
+          // restore it if the voice becomes available.
+          setSelectedJapaneseVoiceURI("");
+        }
       }
     };
     loadVoices();
     window.speechSynthesis.addEventListener("voiceschanged", loadVoices);
     return () => window.speechSynthesis.removeEventListener("voiceschanged", loadVoices);
-  }, [selectedJapaneseVoiceURI]);
+  }, []);
 
   const handleSelectJapaneseVoice = (voiceURI: string) => {
     setSelectedJapaneseVoiceURI(voiceURI);
     if (voiceURI) {
       localStorage.setItem("astra_japanese_voice_uri", voiceURI);
+      const selectedVoice = availableJapaneseVoices.find((voice) => voice.voiceURI === voiceURI);
+      if (selectedVoice) localStorage.setItem("astra_japanese_voice_name", selectedVoice.name);
       showToast("Japanese voice saved.");
     } else {
       localStorage.removeItem("astra_japanese_voice_uri");
+      localStorage.removeItem("astra_japanese_voice_name");
       showToast("Using the default Japanese voice.");
     }
   };

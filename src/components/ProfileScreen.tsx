@@ -627,7 +627,7 @@ export default function ProfileScreen({
             </div>
 
             {/* Voices and pronunciation check */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 [&>*]:min-w-0">
               <div className="flex flex-col gap-2">
                 <div>
                   <label className="text-[10px] font-mono font-bold text-natural-forest/75 uppercase tracking-wider">
@@ -635,11 +635,11 @@ export default function ProfileScreen({
                   </label>
                   <p className="text-[8px] text-natural-forest/50 font-mono leading-none mt-0.5">{t.voiceDesc}</p>
                 </div>
-                <div className="flex gap-1.5">
+                <div className="flex gap-1.5 min-w-0">
                   <select
                     value={selectedJapaneseVoiceURI}
                     onChange={(e) => setSelectedJapaneseVoiceURI(e.target.value)}
-                    className="flex-1 px-3 py-2 bg-white/5 border border-white/10 text-natural-charcoal rounded-xl text-xs font-mono outline-none focus:border-natural-forest/60 transition cursor-pointer"
+                    className="w-full min-w-0 flex-1 px-3 py-2 bg-white/5 border border-white/10 text-natural-charcoal rounded-xl text-xs font-mono outline-none focus:border-natural-forest/60 transition cursor-pointer"
                   >
                     <option value="" className="bg-natural-card text-natural-forest">Default System Voice</option>
                     {availableJapaneseVoices.map((voice) => (
