@@ -11,6 +11,7 @@ import {
   X
 } from "lucide-react";
 import InteractiveWorkbench from "./InteractiveWorkbench";
+import NaturalPhrasesTab from "./NaturalPhrasesTab";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -19,7 +20,7 @@ interface ReferenceChartsProps {
   speakJapanese: (phrase: string) => void;
 }
 
-type TabId = "counters" | "numbers" | "time" | "verbs" | "adjectives" | "particles";
+type TabId = "counters" | "numbers" | "time" | "verbs" | "adjectives" | "particles" | "natural-phrases";
 
 // ─── Speak Context ────────────────────────────────────────────────────────────
 // SpeakButton is used inside several nested tab components (CountersTab,
@@ -970,6 +971,7 @@ const TABS: { id: TabId; label: string; emoji: string }[] = [
   { id: "verbs", label: "Verb Conjugations", emoji: "⚡" },
   { id: "adjectives", label: "Adjectives", emoji: "🎨" },
   { id: "particles", label: "Particles", emoji: "🔗" },
+  { id: "natural-phrases", label: "Natural Phrases", emoji: "💬" },
 ];
 
 export default function ReferenceCharts({ onBack, speakJapanese }: ReferenceChartsProps) {
@@ -1000,6 +1002,7 @@ export default function ReferenceCharts({ onBack, speakJapanese }: ReferenceChar
       case "verbs": return <VerbsTab showRomaji={showRomaji} />;
       case "adjectives": return <AdjectivesTab showRomaji={showRomaji} />;
       case "particles": return <ParticlesTab showRomaji={showRomaji} />;
+      case "natural-phrases": return <NaturalPhrasesTab speakJapanese={speakJapanese} />;
     }
   };
 
