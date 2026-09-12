@@ -135,7 +135,7 @@ The home screen is Astra-chan's room — each object is a destination:
   <img src="docs/kanji-word-family.png" alt="Kanji Word Family — reading-grouped vocabulary panel for 月 (Moon/Month)" width="70%" />
 </p>
 
-### 📖 Reading Room
+### 📗 Reading Room
 - **N5 Reading Passages** — gentle multi-sentence stories built from the app's Japanese vocabulary and grammar
 - **Guided & Immersion Modes** — reveal readings and meanings while learning, or read independently and mark unfamiliar words
 - **Tap-to-Explore Words** — inspect readings and meanings directly inside each passage
@@ -165,6 +165,9 @@ The home screen is Astra-chan's room — each object is a destination:
 - **Comprehensive N5 Tables** — beautifully laid-out reference grids covering Japanese numbers, counters, time, verb groups, adjectives, and particles
 - **Pronunciation Audio & Romaji** — quick-access audio buttons and romaji visibility options for every row
 - **Tricky Counting & Euphonic Rules** — clear explanations for complex phonetic modifications (e.g., ふん vs ぷん, irregular days of the month, and counting exceptions)
+- **Natural Conversation Phrases** — 50+ common expressions such as うん, どうしよう？, え、ほんと？, おつかれ！, やばい, and めっちゃ, with romaji, English meaning, register labels, usage notes, caution notes, and pronunciation audio
+- **Phrase Search & Filters** — search by Japanese, romaji, or meaning and filter by casual, polite, neutral, slang, or conversation category
+- **Conversation Examples** — selected phrases include short Japanese dialogues with English glosses to show how they sound in context
 
 <p align="center">
   <img src="docs/reference-charts.png" alt="Reference Charts — Time &amp; Date tab with days of the week and calendar months" width="100%" />
@@ -201,6 +204,9 @@ The home screen is Astra-chan's room — each object is a destination:
 - Live lobby with player avatars and online/offline status dots
 
 ### 👤 Profile, Voice Control & Bilingual Support
+- **Optional Cloud Account** — create an email/password account from Profile to keep study progress across browsers and devices; the existing anonymous Firebase identity is upgraded without changing the user's friend code
+- **Cloud Progress Sync** — XP, streaks, mastery, vocabulary progress, SRS cards, study dates, survival records, and reading notes sync to the user's private Firebase progress record
+- **Offline Fallback** — local browser storage remains available when the user is not signed in or temporarily offline; account preferences such as theme, font, and browser-provided voice remain device-specific
 - **Dual-Language Interface** — complete bilingual support! Toggle the entire application interface between English and Japanese with a single click
 - **Custom TTS Engine Controls** — choose from all available Japanese voices on your device, and precisely fine-tune speech rate and voice pitch for perfect audio pacing
 - **Monthly Study Calendar** — detailed tracking calendar showing daily active study streaks, streak counts, and XP milestones
@@ -244,7 +250,7 @@ The home screen is Astra-chan's room — each object is a destination:
 | Styling | TailwindCSS v4 |
 | Animation | Framer Motion |
 | Database | Firebase Realtime Database |
-| Auth | Firebase Anonymous Auth |
+| Auth | Firebase Anonymous Auth + optional Email/Password accounts |
 | AI Grading | Google Gemini 3.1 Flash Lite (vision model) |
 | Deployment | Vercel (serverless functions for API proxy) |
 | Icons | Lucide React |
@@ -288,7 +294,7 @@ This project was built entirely through AI collaboration. I directed, tested, de
 
 ## Setup (Local Development)
 
-> **Known requirements:** multiplayer and kanji-drawing AI grading need Firebase Realtime Database, Firebase Anonymous Auth, and a Google Gemini API key. Everything else runs without them.
+> **Known requirements:** multiplayer needs Firebase Realtime Database and Firebase Anonymous Auth. Cross-device progress sync additionally requires Firebase Email/Password Auth and the private `userProgress/$uid` database rule. Kanji-drawing AI grading needs a Google Gemini API key. Everything else runs without these services.
 
 ```bash
 git clone https://github.com/late-shine/astra-chan-app.git
@@ -302,17 +308,24 @@ npm run dev
 ### Environment Variables
 ```
 VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_AUTH_DOMAIN=
+VITE_FIREBASE_PROJECT_ID=
 VITE_FIREBASE_DATABASE_URL=
+VITE_FIREBASE_STORAGE_BUCKET=
+VITE_FIREBASE_MESSAGING_SENDER_ID=
+VITE_FIREBASE_APP_ID=
 GEMINI_API_KEY=
 ```
 
-> Get a free Gemini API key at [aistudio.google.com](https://aistudio.google.com). The free tier gives 500 requests/day and 250K tokens/day — more than enough for a personal learning app.
+Enable **Email/Password** under Firebase Console → **Authentication → Sign-in method** if you want account creation and cloud progress sync. Apply the complete rules from `database.rules.json` to Firebase Realtime Database. The `userProgress/$uid` path is private to the authenticated owner.
+
+> Get a free Gemini API key at [aistudio.google.com](https://aistudio.google.com). The free tier is generous enough for a personal project like this — check [ai.google.dev/gemini-api/docs/rate-limits](https://ai.google.dev/gemini-api/docs/rate-limits) for current daily limits, since Google adjusts these periodically.
 
 > ⚠️ **AI drawing analysis limit:** The free Gemini tier resets daily. If Astra-chan's stroke checker stops responding, the day's quota has been reached — it'll be back the next day automatically.
 
 ### Firebase Realtime Database Paths
 
-Online multiplayer uses Firebase Anonymous Auth and these Realtime Database paths:
+Online multiplayer and account sync use Firebase Authentication and these Realtime Database paths:
 
 - `rooms`
 - `friends`
@@ -321,6 +334,7 @@ Online multiplayer uses Firebase Anonymous Auth and these Realtime Database path
 - `inviteResponses`
 - `matchHistory`
 - `userProfiles`
+- `userProgress` — private study-progress record for each signed-in account
 
 `matchHistory` starts recording only after a completed online duel. Older matches will not appear retroactively.
 
@@ -330,13 +344,15 @@ Online multiplayer uses Firebase Anonymous Auth and these Realtime Database path
 
 - [x] Study Room visual redesign (navigation as Astra-chan's room)
 - [x] Reference Charts (counters, particles, verb groups, adjectives, time)
+- [x] Natural Conversation Phrases in Reference Charts with register filters and usage examples
 - [x] Grammar Dojo with N5 patterns and fill-in-the-blank practice
 - [x] Spaced Repetition System (SRS)
 - [x] Online multiplayer — competitive and parallel modes
+- [x] Optional email/password accounts with Firebase cloud progress sync
 - [x] Vocab and Kanji quiz modes with custom picker
 - [x] Streak calendar and achievement badges
 - [x] Progress backup and restore
-- [x] Astra-chan AFK reactions with 3 artwork states
+- [x] Astra-chan AFK reactions with 5 artwork states, including dedicated reading and reading-reaction artwork
 - [x] Kanji AI drawing analysis — originally Cloudflare Workers AI (LLaVA 1.5 7B), upgraded to **Gemini 3.1 Flash Lite** after accuracy issues with the original model (LLaVA gave vague stroke feedback; Gemini identifies specific structural problems and names them)
 - [x] Romaji toggle for beginners across Grammar Dojo and Reference Charts
 - [x] App component splitting (App.tsx went from 7,625 lines to 3,932 lines across 9 phases — described above)
