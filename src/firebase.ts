@@ -115,13 +115,23 @@ export async function createOrLinkGoogleAccount(): Promise<User> {
             const linked = await linkWithPopup(currentUser, provider);
             return linked.user;
         } catch (error: any) {
-            // If this Google account already belongs to an Astra account,
-            // finish the sign-in with the credential Firebase returned instead
-            // of leaving the user with an opaque linking error.
-            if (error?.code !== "auth/credential-already-in-use") throw error;
+            // A fresh browser starts as an anonymous Firebase user. If the
+            // selected Google identity already belongs to Astra, linking can
+            // return either of these provider-conflict codes depending on the
+            // Firebase SDK/browser path. Complete the operation as a normal
+            // Google sign-in instead of showing an account-creation error.
+            const existingAccountCodes = new Set([
+                "auth/credential-already-in-use",
+                "auth/email-already-in-use",
+                "auth/account-exists-with-different-credential",
+            ]);
+            if (!existingAccountCodes.has(error?.code)) throw error;
             const credential = GoogleAuthProvider.credentialFromError(error);
-            if (!credential) throw error;
-            const signedIn = await signInWithCredential(auth, credential);
+            if (credential) {
+                const signedIn = await signInWithCredential(auth, credential);
+                return signedIn.user;
+            }
+            const signedIn = await signInWithPopup(auth, provider);
             return signedIn.user;
         }
     }

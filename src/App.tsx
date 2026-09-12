@@ -205,7 +205,7 @@ function playClickTick() {
 function accountErrorMessage(error: any, fallback: string): string {
   switch (error?.code) {
     case "auth/email-already-in-use":
-      return "That email already has an Astra account. Switch to Sign in.";
+      return "That email is already registered. Use Sign in, or choose Continue with Google to enter the existing account.";
     case "auth/invalid-credential":
     case "auth/wrong-password":
     case "auth/user-not-found":
