@@ -111,7 +111,7 @@ The home screen is Astra-chan's room — each object is a destination:
 
 ### 📚 Learning
 - **Hiragana & Katakana** — full character grids with pronunciation, flashcard mode, and example words
-- **Kanji** — 100 N5-level kanji with meanings, readings, stroke count, and example sentences
+- **Kanji** — 146 N5-level kanji with meanings, readings, stroke count, and example sentences
 - **N5 Vocabulary** — 694 words across 11 categories (greetings, food, places, actions, adjectives, body, weather, and more)
 - **Daily Spell** — a suggested next action shown on the home screen each session
 
