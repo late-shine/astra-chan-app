@@ -414,7 +414,7 @@ export default function App() {
   const [mascotMood, setMascotMood] = useState<"welcome" | "streak" | "success" | "failure" | "kanji" | "idle" | "clicked" | "learn-flashcard" | "learn-vocabs" | "survival-danger" | "wondering" | "afk" | "excited" | "reading">("welcome");
 
   // Kanji drawing evaluation states
-  const [analysisResult, setAnalysisResult] = useState<{ score: number; feedbackTitle: string; advice: string } | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<{ score: number; feedbackTitle: string; advice: string; validDrawing?: boolean } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
@@ -2097,28 +2097,39 @@ export default function App() {
         throw new Error(data.error || "Failed to analyze your strokes.");
       }
 
-      setAnalysisResult(data);
+      const score = Number.isFinite(Number(data.score))
+        ? Math.max(0, Math.min(100, Math.round(Number(data.score))))
+        : 0;
+      const validDrawing = data.validDrawing === true;
+      const normalizedResult = { ...data, score: validDrawing ? score : 0, validDrawing };
+      setAnalysisResult(normalizedResult);
+
+      if (!validDrawing) {
+        setMascotMood("idle");
+        showToast(`0% — ${normalizedResult.feedbackTitle || "Astra needs real ink strokes"}. No practice XP this time.`);
+        return;
+      }
 
       // Award XP increments depending on accuracy milestones
       let earnedXp = 10;
-      if (data.score >= 85) {
+      if (score >= 85) {
         earnedXp = 40;
         setMascotMood("success");
         playChime(true);
-        showToast(`Perfect! Astra-chan graded ${data.score}%: ${data.feedbackTitle}. +40 XP awarded!`);
-      } else if (data.score >= 70) {
+        showToast(`Perfect! Astra-chan graded ${score}%: ${normalizedResult.feedbackTitle}. +40 XP awarded!`);
+      } else if (score >= 70) {
         earnedXp = 25;
         setMascotMood("success");
         playChime(true);
-        showToast(`Great! Astra-chan graded ${data.score}%: ${data.feedbackTitle}. +25 XP awarded!`);
-      } else if (data.score >= 50) {
+        showToast(`Great! Astra-chan graded ${score}%: ${normalizedResult.feedbackTitle}. +25 XP awarded!`);
+      } else if (score >= 50) {
         earnedXp = 15;
         setMascotMood("idle");
-        showToast(`Good try! Astra-chan graded ${data.score}%: ${data.feedbackTitle}. +15 XP awarded!`);
+        showToast(`Good try! Astra-chan graded ${score}%: ${normalizedResult.feedbackTitle}. +15 XP awarded!`);
       } else {
         earnedXp = 10;
         setMascotMood("failure");
-        showToast(`Keep tracing! Astra-chan graded ${data.score}%: ${data.feedbackTitle}. +10 XP practice points!`);
+        showToast(`Keep tracing! Astra-chan graded ${score}%: ${normalizedResult.feedbackTitle}. +10 XP practice points!`);
       }
 
       // FIX: Use functional update to prevent stale-closure XP loss

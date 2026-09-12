@@ -51,6 +51,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const promptText =
             `You are evaluating a student's handwritten drawing of the Japanese kanji "${kanji}" (meaning: "${meaning || "unknown"}").\n` +
             `Tone: ${style}\n\n` +
+            `First, decide whether the image contains a genuine handwritten or mouse-drawn attempt at the requested kanji. ` +
+            `A blank canvas, typed text, a chat message, a screenshot of text, an unrelated image, or an almost-empty mark is NOT a valid drawing.\n` +
+            `If it is not a valid drawing, set "validDrawing" to false and score it exactly 0. ` +
+            `This is a gentle boundary, not a punishment: do not award practice points for a non-drawing, and invite the student to draw inside the grid.\n` +
+            `If it is a genuine drawing, set "validDrawing" to true and grade the handwriting normally from 0 to 100. ` +
+            `A real but very weak attempt may receive a low score; reserve 0 for no usable drawing at all.\n\n` +
             `Look at the image and evaluate these points:\n` +
             `- Do the strokes match the correct structure of "${kanji}"?\n` +
             `- Are the proportions and balance correct?\n` +
@@ -60,12 +66,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             `70-89 = good effort, small issues with strokes or proportions\n` +
             `50-69 = recognisable but needs work on specific parts\n` +
             `below 50 = significant issues, needs more practice\n\n` +
-            `Write 5-6 sentences of specific feedback. ` +
+            `For a valid drawing, write 5-6 sentences of specific feedback. ` +
             `Vary your language — use different encouraging phrases each time. ` +
             `Mention actual parts of the kanji that look good or need fixing. ` +
             `End with one specific actionable tip for improvement.\n\n` +
+            `For an invalid drawing, write only 2-4 gentle, playful sentences and choose one of these ideas (rewrite it naturally rather than copying it exactly):\n` +
+            `- "Astra's ink sprites found a message instead of brush strokes. Please draw the kanji in the grid!"\n` +
+            `- "Cute attempt to chat with Astra, scholar, but the brushwork exam needs actual handwriting."\n` +
+            `- "The little ink station is waiting for your strokes. Give me a real try and I will inspect it happily!"\n` +
+            `- "No grade this time — my calligraphy crystal needs to see your pen or mouse strokes first."\n` +
+            `Keep the rejection warm, never scolding, and clearly explain that the student can try again.\n\n` +
             `Reply with ONLY this JSON and nothing else:\n` +
-            `{"score":<integer 0-100>,"feedbackTitle":"<creative upbeat title under 35 chars>","advice":"<your 5-6 sentence feedback>"}`;
+            `{"validDrawing":<true-or-false>,"score":<integer 0-100>,"feedbackTitle":"<creative title under 35 chars>","advice":"<feedback>"}`;
 
         // ─── Strip data URL prefix, keep raw base64 ──────────────────────────
         const base64Data = imageData.startsWith("data:")
@@ -132,9 +144,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .replace(/\s*```$/, "");
 
         const resultObj = JSON.parse(cleanText);
+        const validDrawing = resultObj.validDrawing === true;
+        const rawScore = Number(resultObj.score);
+        const score = validDrawing
+            ? Number.isFinite(rawScore)
+                ? Math.max(0, Math.min(100, Math.round(rawScore)))
+                : 0
+            : 0;
 
-        // Returns identical shape to original — frontend code unchanged
-        return res.json(resultObj);
+        // Invalid submissions always use the explicit 0% boundary, even if
+        // the model accidentally returned a non-zero score.
+        return res.json({
+            ...resultObj,
+            validDrawing,
+            score,
+        });
 
     } catch (err: unknown) {
         console.error("[analyze-kanji] Gemini API error:", err);

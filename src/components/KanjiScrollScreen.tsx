@@ -25,7 +25,7 @@ import type { KanjiItem, KanjiWordEntry, SRSCard } from "../types";
 import companionImg from "../assets/images/synthid-removed-Gemini_Generated_Image_csh1tcsh1tcsh1tc.png";
 
 type CurrentScreen = "menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo";
-type AnalysisResult = { score: number; feedbackTitle: string; advice: string } | null;
+type AnalysisResult = { score: number; feedbackTitle: string; advice: string; validDrawing?: boolean } | null;
 
 interface KanjiScrollScreenProps {
   currentKanjiIndex: number;
@@ -831,6 +831,11 @@ export default function KanjiScrollScreen({
                     <h5 className="font-serif font-extrabold text-xs text-natural-forest leading-tight mt-0.5">
                       {analysisResult.feedbackTitle}
                     </h5>
+                    {!analysisResult.validDrawing && (
+                      <span className="block text-[9px] text-natural-forest-light mt-1 font-medium">
+                        0% means Astra did not detect a gradeable ink attempt — try again inside the grid.
+                      </span>
+                    )}
                   </div>
                 </div>
 
