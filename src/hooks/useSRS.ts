@@ -69,8 +69,16 @@ function persistCards(cards: Record<string, SRSCard>): void {
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useSRS() {
+export function useSRS(onCardsChanged?: (cards: Record<string, SRSCard>) => void) {
   const [srsCards, setSrsCards] = useState<Record<string, SRSCard>>(loadCards);
+
+  const publishCards = useCallback(
+    (cards: Record<string, SRSCard>) => {
+      persistCards(cards);
+      onCardsChanged?.(cards);
+    },
+    [onCardsChanged]
+  );
 
   // ── addCard ────────────────────────────────────────────────────────────────
   /**
@@ -89,11 +97,11 @@ export function useSRS() {
           itemKey,
         };
         const next = { ...prev, [itemKey]: card };
-        persistCards(next);
+        publishCards(next);
         return next;
       });
     },
-    [] // no external deps — functional updater reads prev internally
+    [publishCards]
   );
 
   // ── getDueCards ────────────────────────────────────────────────────────────
@@ -142,11 +150,11 @@ export function useSRS() {
           ...prev,
           [itemKey]: { ...card, level: newLevel, nextReview: newNextReview },
         };
-        persistCards(next);
+        publishCards(next);
         return next;
       });
     },
-    [] // functional updater — no external deps needed
+    [publishCards]
   );
 
   // ── removeCard ─────────────────────────────────────────────────────────────
@@ -157,10 +165,23 @@ export function useSRS() {
 
       const next = { ...prev };
       delete next[itemKey];
-      persistCards(next);
+      publishCards(next);
       return next;
     });
-  }, []);
+  }, [publishCards]);
+
+  /**
+   * Replace the local deck after cloud hydration (for example, when the user
+   * signs in on a new browser or phone).
+   */
+  const replaceCards = useCallback(
+    (cards: Record<string, SRSCard>) => {
+      const next = { ...cards };
+      setSrsCards(next);
+      publishCards(next);
+    },
+    [publishCards]
+  );
 
   // ── hasCard ────────────────────────────────────────────────────────────────
   /** Returns true if a card with the given itemKey already exists in the deck. */
@@ -183,6 +204,7 @@ export function useSRS() {
     getTotalCards,
     answerCard,
     removeCard,
+    replaceCards,
     dueCount,
     totalCount,
   };

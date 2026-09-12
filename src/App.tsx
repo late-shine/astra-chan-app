@@ -227,21 +227,80 @@ function accountErrorMessage(error: any, fallback: string): string {
   }
 }
 
+/**
+ * Preserve the newest known schedule when local and cloud progress differ.
+ * This is especially important for older app versions that updated the SRS
+ * hook/localStorage but could save a stale srsCards map to the cloud.
+ */
+function mergeSrsCards(
+  localCards: Record<string, SRSCard>,
+  cloudCards: Record<string, SRSCard>
+): Record<string, SRSCard> {
+  const merged: Record<string, SRSCard> = { ...cloudCards };
+  const now = Date.now();
+
+  Object.entries(localCards).forEach(([itemKey, localCard]) => {
+    const cloudCard = merged[itemKey];
+    if (!cloudCard) {
+      merged[itemKey] = localCard;
+      return;
+    }
+
+    // A future local schedule beats a cloud copy that still says the card is
+    // due. Otherwise, use the later schedule as the best available signal of
+    // which copy was reviewed most recently.
+    if (
+      (localCard.nextReview > now && cloudCard.nextReview <= now) ||
+      localCard.nextReview > cloudCard.nextReview
+    ) {
+      merged[itemKey] = localCard;
+    }
+  });
+
+  return merged;
+}
+
 export default function App() {
   // Screens navigation state
   const [currentScreen, setCurrentScreen] = useState<"menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo" | "reading-room">("menu");
   const [quizMode, setQuizMode] = useState<"choice" | "romaji" | "survival">("choice");
 
+  // Student Statistics State (with Local Storage Persistence)
+  const [stats, setStats] = useState<StudentStats>({
+    xp: 0,
+    streakCount: 0,
+    lastActiveDate: null,
+    correctCount: 0,
+    totalAttempts: 0,
+    masteredChars: [],
+    characterProgress: {},
+    vocabularyProgress: {},
+    favoriteCategory: "basic",
+    srsCards: {},
+    studyDates: [],
+    survivalBestScore: 0,
+    srsReviewedTotal: 0,
+    readingMisses: [],
+  });
+
   // ── SRS Review Deck (hook + session state) ─────────────────────────────────
-  const { addCard, hasCard, getDueCards, answerCard, dueCount, totalCount } = useSRS();
+  const handleSrsCardsChanged = useCallback((cards: Record<string, SRSCard>) => {
+    setStats((previous) => ({ ...previous, srsCards: cards }));
+  }, []);
+  const {
+    addCard,
+    hasCard,
+    getDueCards,
+    answerCard,
+    replaceCards,
+    dueCount,
+    totalCount,
+  } = useSRS(handleSrsCardsChanged);
   const [srsQueue, setSrsQueue]       = useState<SRSCard[]>([]);
   const [srsQueueIndex, setSrsQueueIndex] = useState(0);
   const [srsRevealed, setSrsRevealed]   = useState(false);
 
-  /**
-   * Awards XP for SRS reviews without clobbering the srsCards field that the
-   * useSRS hook manages independently in localStorage.
-   */
+  /** Awards XP for an SRS review while preserving the synchronized card map. */
   const awardSRSXP = useCallback((xp: number) => {
     setStats((prev) => ({
       ...prev,
@@ -350,24 +409,6 @@ export default function App() {
 
   // Mascot dynamic overrides
   const [mascotSpeechOverride, setMascotSpeechOverride] = useState<string | null>(null);
-
-  // Student Statistics State (with Local Storage Persistence)
-  const [stats, setStats] = useState<StudentStats>({
-    xp: 0,
-    streakCount: 0,
-    lastActiveDate: null,
-    correctCount: 0,
-    totalAttempts: 0,
-    masteredChars: [],
-    characterProgress: {},
-    vocabularyProgress: {},
-    favoriteCategory: "basic",
-    srsCards: {},
-    studyDates: [],
-    survivalBestScore: 0,
-    srsReviewedTotal: 0,
-    readingMisses: [],
-  });
 
   // Mascot mood state
   const [mascotMood, setMascotMood] = useState<"welcome" | "streak" | "success" | "failure" | "kanji" | "idle" | "clicked" | "learn-flashcard" | "learn-vocabs" | "survival-danger" | "wondering" | "afk" | "excited" | "reading">("welcome");
@@ -990,8 +1031,13 @@ export default function App() {
           const cloudStats = await loadCloudStats(user.uid);
           if (cancelled) return;
           if (cloudStats) {
-            setStats(cloudStats);
-            localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(cloudStats));
+            const hydratedStats = {
+              ...cloudStats,
+              srsCards: mergeSrsCards(stats.srsCards || {}, cloudStats.srsCards || {}),
+            };
+            setStats(hydratedStats);
+            replaceCards(hydratedStats.srsCards);
+            localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(hydratedStats));
           } else {
             await saveCloudStats(stats, user.uid);
           }
@@ -2943,8 +2989,13 @@ export default function App() {
       setAccountEmail(user.email);
       setIsAccountUser(true);
       if (cloudStats) {
-        setStats(cloudStats);
-        localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(cloudStats));
+        const hydratedStats = {
+          ...cloudStats,
+          srsCards: mergeSrsCards(stats.srsCards || {}, cloudStats.srsCards || {}),
+        };
+        setStats(hydratedStats);
+        replaceCards(hydratedStats.srsCards);
+        localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(hydratedStats));
       } else {
         await saveCloudStats(stats, user.uid);
       }
@@ -2967,8 +3018,13 @@ export default function App() {
       setAccountEmail(user.email);
       setIsAccountUser(true);
       if (cloudStats) {
-        setStats(cloudStats);
-        localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(cloudStats));
+        const hydratedStats = {
+          ...cloudStats,
+          srsCards: mergeSrsCards(stats.srsCards || {}, cloudStats.srsCards || {}),
+        };
+        setStats(hydratedStats);
+        replaceCards(hydratedStats.srsCards);
+        localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(hydratedStats));
       } else {
         await saveCloudStats(stats, user.uid);
       }
