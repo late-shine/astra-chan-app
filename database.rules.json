@@ -4,8 +4,9 @@
     ".write": false,
     "rooms": {
       "$roomCode": {
-        ".read": "auth != null",
+        ".read": "auth != null && (!data.exists() || data.child('status').val() === 'waiting' || data.child('hostId').val() === auth.uid || data.child('guestId').val() === auth.uid)",
         ".write": "auth != null && ((!data.exists() && newData.child('hostId').val() === auth.uid) || data.child('hostId').val() === auth.uid || data.child('guestId').val() === auth.uid)",
+        ".validate": "(!data.exists() && newData.child('hostId').val() === auth.uid && newData.child('guestId').val() === null) || (data.exists() && newData.child('hostId').val() === data.child('hostId').val() && (newData.child('guestId').val() === data.child('guestId').val() || (data.child('guestId').val() === null && data.child('status').val() === 'waiting' && newData.child('guestId').val() === auth.uid && newData.child('guestId').val() !== newData.child('hostId').val())))",
         "guestId": {
           ".write": "auth != null && data.parent().child('status').val() === 'waiting' && data.parent().child('hostId').val() !== auth.uid && (!data.exists() || data.val() === auth.uid) && newData.val() === auth.uid"
         },
@@ -40,7 +41,10 @@
     "invites": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null"
+        "$inviteId": {
+          ".write": "auth != null && ((!newData.exists() && auth.uid === $uid) || (newData.exists() && newData.child('fromUid').val() === auth.uid && root.child('friends').child(auth.uid).child($uid).exists()))",
+          ".validate": "!newData.exists() || (newData.hasChildren(['fromUid', 'fromName', 'roomCode', 'createdAt']) && newData.child('fromUid').val() === auth.uid && newData.child('fromName').isString() && newData.child('fromName').val().length > 0 && newData.child('fromName').val().length <= 24 && newData.child('roomCode').isString() && newData.child('roomCode').val().length === 6 && newData.child('createdAt').isNumber())"
+        }
       }
     },
     "inviteResponses": {
@@ -65,6 +69,13 @@
         ".read": "auth != null",
         ".write": "auth != null && auth.uid === $uid",
         ".validate": "newData.hasChildren(['uid', 'name', 'updatedAt']) && newData.child('uid').val() === $uid && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 24"
+      }
+    },
+    "userProgress": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.hasChildren(['stats', 'updatedAt']) && newData.child('updatedAt').isNumber()"
       }
     }
   }

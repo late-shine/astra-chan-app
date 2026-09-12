@@ -22,7 +22,10 @@ import {
   Volume2, 
   Trash2, 
   CheckCircle2, 
-  AlertCircle 
+  AlertCircle,
+  Cloud,
+  LogIn,
+  LogOut,
 } from "lucide-react";
 import type { HiraganaItem, KatakanaItem, KanjiItem, StudentStats, VocabularyItem } from "../types";
 import type { FriendRecord, FriendRequest, FriendSearchResult, MatchHistoryRecord } from "../multiplayerOnline";
@@ -213,6 +216,13 @@ interface ProfileScreenProps {
   speakJapanese: (phrase: string) => void;
   handleRemoveAvatar: () => void;
   handleSaveProfile: () => void;
+  accountEmail: string | null;
+  isAccountUser: boolean;
+  accountBusy: boolean;
+  accountError: string | null;
+  handleCreateAccount: (email: string, password: string) => Promise<void>;
+  handleSignInAccount: (email: string, password: string) => Promise<void>;
+  handleSignOutAccount: () => Promise<void>;
   handleDownloadProgress: () => void;
   handleAddFriend: () => void;
   handleSearchFriends: () => void;
@@ -292,6 +302,13 @@ export default function ProfileScreen({
   speakJapanese,
   handleRemoveAvatar,
   handleSaveProfile,
+  accountEmail,
+  isAccountUser,
+  accountBusy,
+  accountError,
+  handleCreateAccount,
+  handleSignInAccount,
+  handleSignOutAccount,
   handleDownloadProgress,
   handleAddFriend,
   handleSearchFriends,
@@ -326,7 +343,18 @@ export default function ProfileScreen({
   
   const [isAtmosphereExpanded, setIsAtmosphereExpanded] = useState(false);
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(true);
+  const [accountMode, setAccountMode] = useState<"create" | "signin">("create");
+  const [accountEmailInput, setAccountEmailInput] = useState("");
+  const [accountPasswordInput, setAccountPasswordInput] = useState("");
   const t = TRANSLATIONS[language] || TRANSLATIONS.en;
+
+  const submitAccountForm = () => {
+    if (accountMode === "create") {
+      void handleCreateAccount(accountEmailInput, accountPasswordInput);
+    } else {
+      void handleSignInAccount(accountEmailInput, accountPasswordInput);
+    }
+  };
 
   return (
     <motion.div
@@ -486,6 +514,53 @@ export default function ProfileScreen({
             <span>{t.importBtn}</span>
           </button>
         </div>
+      </div>
+
+      {/* ── OPTIONAL CLOUD ACCOUNT ── */}
+      <div className="bg-natural-forest/5 border border-natural-forest/20 rounded-2xl p-5 shadow-inner backdrop-blur-md flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-2.5">
+            <Cloud className="w-5 h-5 text-natural-forest mt-0.5 shrink-0" />
+            <div>
+              <h4 className="font-serif font-black text-sm text-natural-forest">Cloud Progress Account</h4>
+              <p className="text-[10px] text-natural-forest/60 font-mono mt-0.5 leading-relaxed">
+                Keep your study progress when you change browsers or devices. Local storage remains available offline.
+              </p>
+            </div>
+          </div>
+          {isAccountUser && <span className="text-[9px] rounded-full border border-natural-forest/30 bg-natural-forest/10 text-natural-forest px-2 py-1 font-mono font-black uppercase">Sync active</span>}
+        </div>
+
+        {isAccountUser ? (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/5 border border-white/10 rounded-xl p-3">
+            <div>
+              <p className="text-xs font-bold text-natural-charcoal">{accountEmail || "Signed-in Astra account"}</p>
+              <p className="text-[10px] text-natural-forest/60 font-mono mt-0.5">Progress automatically syncs to Firebase.</p>
+            </div>
+            <button type="button" onClick={() => void handleSignOutAccount()} disabled={accountBusy} className="px-3 py-2 rounded-xl border border-natural-terracotta/30 bg-natural-terracotta/10 text-natural-terracotta text-xs font-bold hover:bg-natural-terracotta/20 transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5">
+              <LogOut className="w-3.5 h-3.5" /> Sign out
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2 items-end">
+            <label className="flex flex-col gap-1 text-[10px] font-mono font-bold text-natural-forest/70 uppercase tracking-wider">
+              Email
+              <input type="email" value={accountEmailInput} onChange={(event) => setAccountEmailInput(event.target.value)} placeholder="you@example.com" autoComplete="email" className="px-3 py-2.5 rounded-xl border border-white/10 bg-white/5 text-xs font-sans font-normal normal-case tracking-normal text-natural-charcoal outline-none focus:border-natural-forest/60" />
+            </label>
+            <label className="flex flex-col gap-1 text-[10px] font-mono font-bold text-natural-forest/70 uppercase tracking-wider">
+              Password
+              <input type="password" value={accountPasswordInput} onChange={(event) => setAccountPasswordInput(event.target.value)} placeholder="At least 6 characters" autoComplete={accountMode === "create" ? "new-password" : "current-password"} className="px-3 py-2.5 rounded-xl border border-white/10 bg-white/5 text-xs font-sans font-normal normal-case tracking-normal text-natural-charcoal outline-none focus:border-natural-forest/60" />
+            </label>
+            <button type="button" onClick={submitAccountForm} disabled={accountBusy || !accountEmailInput.trim() || accountPasswordInput.length < 6} className="px-4 py-2.5 rounded-xl bg-natural-forest text-natural-bg text-xs font-black hover:bg-natural-forest-light transition cursor-pointer disabled:opacity-40 flex items-center justify-center gap-1.5 whitespace-nowrap">
+              {accountMode === "create" ? <><UserPlus className="w-3.5 h-3.5" /> Create account</> : <><LogIn className="w-3.5 h-3.5" /> Sign in</>}
+            </button>
+          </div>
+        )}
+
+        {!isAccountUser && <button type="button" onClick={() => setAccountMode((mode) => mode === "create" ? "signin" : "create")} className="self-start text-[10px] font-mono text-natural-forest hover:underline cursor-pointer">
+          {accountMode === "create" ? "Already have an account? Sign in" : "Need an account? Create one"}
+        </button>}
+        {accountError && <p className="text-[11px] text-natural-terracotta bg-natural-terracotta/10 border border-natural-terracotta/20 rounded-xl p-2.5 font-mono leading-relaxed">{accountError}</p>}
       </div>
 
       {/* ── WITCH'S GRIMOIRE WORKSHOP & ENVIRONMENT SETTINGS ── */}

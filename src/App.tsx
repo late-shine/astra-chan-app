@@ -85,7 +85,15 @@ import {
   type RoomInvite,
   type MatchHistoryRecord,
 } from "./multiplayerOnline";
-import { currentUid, ensureSignedIn } from "./firebase";
+import {
+  createOrLinkEmailAccount,
+  currentUid,
+  ensureSignedIn,
+  loadCloudStats,
+  saveCloudStats,
+  signInEmailAccount,
+  signOutAccount,
+} from "./firebase";
 import { HiraganaItem, KatakanaItem, KanjiItem, VocabularyItem, StudentStats, SRSCard } from "./types";
 import type { ReadingToken } from "./reading/readingData";
 import MascotCompanion from "./components/MascotCompanion";
@@ -846,6 +854,12 @@ export default function App() {
   const [profileNameInput, setProfileNameInput] = useState("Astra Scholar");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [accountEmail, setAccountEmail] = useState<string | null>(null);
+  const [isAccountUser, setIsAccountUser] = useState(false);
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [statsHydrated, setStatsHydrated] = useState(false);
+  const [cloudStatsHydrated, setCloudStatsHydrated] = useState(false);
   const progressUploadInputRef = useRef<HTMLInputElement>(null);
   const profileAvatarInputRef = useRef<HTMLInputElement>(null);
   const unsubscribeFriendsRef = useRef<(() => void) | null>(null);
@@ -906,8 +920,60 @@ export default function App() {
       } catch (err) {
         console.error("Failed to parse saved credentials", err);
       }
+      setStatsHydrated(true);
     }
+    if (!saved) setStatsHydrated(true);
   }, []);
+
+  // Sign in anonymously first so existing multiplayer features keep working.
+  // When the user creates an account, Firebase links that anonymous identity to
+  // email/password, preserving the existing UID, friend code, and profile.
+  useEffect(() => {
+    if (!statsHydrated) return;
+    let cancelled = false;
+    setCloudStatsHydrated(false);
+    ensureSignedIn()
+      .then(async (user) => {
+        if (cancelled) return;
+        setMyUid(user.uid);
+        setAccountEmail(user.email);
+        setIsAccountUser(!user.isAnonymous);
+        if (!user.isAnonymous) {
+          const cloudStats = await loadCloudStats(user.uid);
+          if (cancelled) return;
+          if (cloudStats) {
+            setStats(cloudStats);
+            localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(cloudStats));
+          } else {
+            await saveCloudStats(stats, user.uid);
+          }
+        }
+        if (!cancelled) setCloudStatsHydrated(true);
+      })
+      .catch((err: any) => {
+        if (!cancelled) {
+          setAccountError(err.message || "Firebase sign-in failed");
+          setCloudStatsHydrated(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+    // The initial local stats must be loaded before cloud hydration begins.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statsHydrated]);
+
+  // Keep account progress synchronized without writing on every keystroke or
+  // rapid quiz state update.
+  useEffect(() => {
+    if (!isAccountUser || !myUid || !cloudStatsHydrated) return;
+    const timer = window.setTimeout(() => {
+      saveCloudStats(stats, myUid).catch((err: any) => {
+        setAccountError(err.message || "Cloud progress sync failed");
+      });
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [cloudStatsHydrated, isAccountUser, myUid, stats]);
 
   // Sync state with LocalStorage triggers
   const saveStats = (newStats: StudentStats) => {
@@ -2741,6 +2807,67 @@ export default function App() {
     }
   };
 
+  const handleCreateAccount = async (email: string, password: string) => {
+    setAccountBusy(true);
+    setAccountError(null);
+    try {
+      const user = await createOrLinkEmailAccount(email, password);
+      setMyUid(user.uid);
+      setAccountEmail(user.email);
+      setIsAccountUser(true);
+      await saveUserProfile(profileName || profileNameInput || "Astra Scholar", profileAvatar);
+      await saveCloudStats(stats, user.uid);
+      setCloudStatsHydrated(true);
+      showToast("Astra account created. Progress sync is now active.");
+    } catch (err: any) {
+      setAccountError(err.message || "Account creation failed");
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
+  const handleSignInAccount = async (email: string, password: string) => {
+    setAccountBusy(true);
+    setAccountError(null);
+    try {
+      const user = await signInEmailAccount(email, password);
+      const cloudStats = await loadCloudStats(user.uid);
+      setMyUid(user.uid);
+      setAccountEmail(user.email);
+      setIsAccountUser(true);
+      if (cloudStats) {
+        setStats(cloudStats);
+        localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(cloudStats));
+      } else {
+        await saveCloudStats(stats, user.uid);
+      }
+      setCloudStatsHydrated(true);
+      showToast("Signed in. Cloud progress loaded.");
+    } catch (err: any) {
+      setAccountError(err.message || "Sign-in failed");
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
+  const handleSignOutAccount = async () => {
+    setAccountBusy(true);
+    setAccountError(null);
+    try {
+      await signOutAccount();
+      const user = currentUid();
+      setMyUid(user);
+      setAccountEmail(null);
+      setIsAccountUser(false);
+      setCloudStatsHydrated(true);
+      showToast("Signed out. This browser remains available offline.");
+    } catch (err: any) {
+      setAccountError(err.message || "Sign-out failed");
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
   const handleAddFriend = async () => {
     setIsAddingFriend(true);
     setAddFriendError(null);
@@ -3145,6 +3272,13 @@ export default function App() {
     speakJapanese,
     handleRemoveAvatar,
     handleSaveProfile,
+    accountEmail,
+    isAccountUser,
+    accountBusy,
+    accountError,
+    handleCreateAccount,
+    handleSignInAccount,
+    handleSignOutAccount,
     handleDownloadProgress,
     handleAddFriend,
     handleSearchFriends,
