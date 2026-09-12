@@ -135,7 +135,7 @@ The home screen is Astra-chan's room — each object is a destination:
   <img src="docs/kanji-word-family.png" alt="Kanji Word Family — reading-grouped vocabulary panel for 月 (Moon/Month)" width="70%" />
 </p>
 
-### 📗 Reading Room
+### 📖 Reading Room
 - **N5 Reading Passages** — gentle multi-sentence stories built from the app's Japanese vocabulary and grammar
 - **Guided & Immersion Modes** — reveal readings and meanings while learning, or read independently and mark unfamiliar words
 - **Tap-to-Explore Words** — inspect readings and meanings directly inside each passage
@@ -204,11 +204,12 @@ The home screen is Astra-chan's room — each object is a destination:
 - Live lobby with player avatars and online/offline status dots
 
 ### 👤 Profile, Voice Control & Bilingual Support
-- **Optional Cloud Account** — create an email/password account from Profile to keep study progress across browsers and devices; the existing anonymous Firebase identity is upgraded without changing the user's friend code
+- **Optional Cloud Account** — create an account with email/password or Google from the visible account shortcut or Profile; the existing anonymous Firebase identity is upgraded without changing the user's friend code when possible
 - **Cloud Progress Sync** — XP, streaks, mastery, vocabulary progress, SRS cards, study dates, survival records, and reading notes sync to the user's private Firebase progress record
+- **Account Recovery** — email/password users can request a Firebase password-reset link without visiting the Firebase Console
 - **Offline Fallback** — local browser storage remains available when the user is not signed in or temporarily offline; account preferences such as theme, font, and browser-provided voice remain device-specific
 - **Dual-Language Interface** — complete bilingual support! Toggle the entire application interface between English and Japanese with a single click
-- **Custom TTS Engine Controls** — choose from all available Japanese voices on your device, and precisely fine-tune speech rate and voice pitch for perfect audio pacing
+- **Hybrid Japanese Voice Engine** — choose fixed Gemini Japanese voices from Astra's catalog, or use browser voices for free/offline playback; Gemini audio falls back to the browser engine when unavailable
 - **Monthly Study Calendar** — detailed tracking calendar showing daily active study streaks, streak counts, and XP milestones
 - **Mastery Badges** — earn 10 distinct unlockable achievement badges celebrating your progress (e.g., *First Steps*, *Survivor*, *Week Warrior*, *Deck Master*, *N5 Scholar*)
 - **Durable Backup/Restore** — download all stats, vocabulary decks, and unlocked milestones to a JSON file and restore your state at any time
@@ -250,7 +251,8 @@ The home screen is Astra-chan's room — each object is a destination:
 | Styling | TailwindCSS v4 |
 | Animation | Framer Motion |
 | Database | Firebase Realtime Database |
-| Auth | Firebase Anonymous Auth + optional Email/Password accounts |
+| Auth | Firebase Anonymous Auth + optional Email/Password and Google accounts |
+| Voice | Browser Speech Synthesis + optional Gemini TTS |
 | AI Grading | Google Gemini 3.1 Flash Lite (vision model) |
 | Deployment | Vercel (serverless functions for API proxy) |
 | Icons | Lucide React |
@@ -294,7 +296,7 @@ This project was built entirely through AI collaboration. I directed, tested, de
 
 ## Setup (Local Development)
 
-> **Known requirements:** multiplayer needs Firebase Realtime Database and Firebase Anonymous Auth. Cross-device progress sync additionally requires Firebase Email/Password Auth and the private `userProgress/$uid` database rule. Kanji-drawing AI grading needs a Google Gemini API key. Everything else runs without these services.
+> **Known requirements:** multiplayer needs Firebase Realtime Database and Firebase Anonymous Auth. Cross-device progress sync additionally requires Firebase Email/Password or Google Auth and the private `userProgress/$uid` database rule. Kanji-drawing AI grading and the optional fixed Gemini voice catalog use the server-side Google Gemini API key; browser voices remain available without it.
 
 ```bash
 git clone https://github.com/late-shine/astra-chan-app.git
@@ -315,11 +317,14 @@ VITE_FIREBASE_STORAGE_BUCKET=
 VITE_FIREBASE_MESSAGING_SENDER_ID=
 VITE_FIREBASE_APP_ID=
 GEMINI_API_KEY=
+GEMINI_TTS_MODEL=gemini-2.5-flash-preview-tts
 ```
 
-Enable **Email/Password** under Firebase Console → **Authentication → Sign-in method** if you want account creation and cloud progress sync. Apply the complete rules from `database.rules.json` to Firebase Realtime Database. The `userProgress/$uid` path is private to the authenticated owner.
+Enable **Email/Password** and **Google** under Firebase Console → **Authentication → Sign-in method** if you want account creation and cloud progress sync. Password-reset emails use Firebase Authentication's built-in email action and can be customized under **Authentication → Templates**. Apply the complete rules from `database.rules.json` to Firebase Realtime Database. The `userProgress/$uid` path is private to the authenticated owner.
 
-> Get a free Gemini API key at [aistudio.google.com](https://aistudio.google.com). The free tier is generous enough for a personal project like this — check [ai.google.dev/gemini-api/docs/rate-limits](https://ai.google.dev/gemini-api/docs/rate-limits) for current daily limits, since Google adjusts these periodically.
+For the fixed Astra Gemini voice catalog, add the same server-side `GEMINI_API_KEY` to the local `.env` file and Vercel Environment Variables. `GEMINI_TTS_MODEL` is optional and defaults to `gemini-2.5-flash-preview-tts`. Never use a `VITE_` prefix for the Gemini key. If Gemini TTS is unavailable or its quota is reached, Astra automatically falls back to the browser voice engine.
+
+> Get a free Gemini API key at [aistudio.google.com](https://aistudio.google.com). Gemini limits vary by model, project, and time window; if the voice quota is reached, Astra automatically uses the browser voice instead.
 
 > ⚠️ **AI drawing analysis limit:** The free Gemini tier resets daily. If Astra-chan's stroke checker stops responding, the day's quota has been reached — it'll be back the next day automatically.
 
@@ -348,11 +353,12 @@ Online multiplayer and account sync use Firebase Authentication and these Realti
 - [x] Grammar Dojo with N5 patterns and fill-in-the-blank practice
 - [x] Spaced Repetition System (SRS)
 - [x] Online multiplayer — competitive and parallel modes
-- [x] Optional email/password accounts with Firebase cloud progress sync
+- [x] Optional email/password and Google accounts with Firebase cloud progress sync and password recovery
+- [x] Hybrid Japanese voice system with fixed Gemini TTS voices and browser fallback
 - [x] Vocab and Kanji quiz modes with custom picker
 - [x] Streak calendar and achievement badges
 - [x] Progress backup and restore
-- [x] Astra-chan AFK reactions with 5 artwork states, including dedicated reading and reading-reaction artwork
+- [x] Astra-chan AFK reactions with 3 artwork states
 - [x] Kanji AI drawing analysis — originally Cloudflare Workers AI (LLaVA 1.5 7B), upgraded to **Gemini 3.1 Flash Lite** after accuracy issues with the original model (LLaVA gave vague stroke feedback; Gemini identifies specific structural problems and names them)
 - [x] Romaji toggle for beginners across Grammar Dojo and Reference Charts
 - [x] App component splitting (App.tsx went from 7,625 lines to 3,932 lines across 9 phases — described above)

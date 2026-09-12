@@ -105,6 +105,7 @@ import AtmosphereCanvas from "./components/AtmosphereCanvas";
 import ReferenceCharts from "./components/ReferenceCharts";
 import GrammarDojo from "./components/GrammarDojo";
 import ReadingRoomScreen from "./components/ReadingRoomScreen";
+import { DEFAULT_CLOUD_JAPANESE_VOICE, getCloudJapaneseVoice } from "./voiceCatalog";
 import MenuScreen from "./components/MenuScreen";
 import ResultsScreen from "./components/ResultsScreen";
 import VocabQuizScreen from "./components/VocabQuizScreen";
@@ -325,6 +326,24 @@ export default function App() {
       return "";
     }
   });
+  const [speechVoiceMode, setSpeechVoiceMode] = useState<"browser" | "cloud">(() => {
+    try {
+      return localStorage.getItem("astra_speech_voice_mode") === "cloud" ? "cloud" : "browser";
+    } catch (e) {
+      return "browser";
+    }
+  });
+  const [selectedCloudVoiceId, setSelectedCloudVoiceId] = useState(() => {
+    try {
+      return localStorage.getItem("astra_cloud_voice_id") || DEFAULT_CLOUD_JAPANESE_VOICE;
+    } catch (e) {
+      return DEFAULT_CLOUD_JAPANESE_VOICE;
+    }
+  });
+  const cloudAudioCacheRef = useRef<Map<string, string>>(new Map());
+  const cloudAudioRef = useRef<HTMLAudioElement | null>(null);
+  const cloudSpeechRequestRef = useRef(0);
+  const cloudFallbackNoticeRef = useRef(false);
   const [isAtmosphereExpanded, setIsAtmosphereExpanded] = useState(false);
   const [isMusicExpanded, setIsMusicExpanded] = useState(false);
   const [profileAvatar, setProfileAvatar] = useState<string>(() => localStorage.getItem("astra_profile_avatar") || "");
@@ -1146,6 +1165,21 @@ export default function App() {
     }
   };
 
+  const handleSelectSpeechVoiceMode = (mode: "browser" | "cloud") => {
+    setSpeechVoiceMode(mode);
+    localStorage.setItem("astra_speech_voice_mode", mode);
+    cloudFallbackNoticeRef.current = false;
+    showToast(mode === "cloud" ? "Gemini Japanese voices selected." : "Browser voices selected.");
+  };
+
+  const handleSelectCloudVoice = (voiceId: string) => {
+    const voice = getCloudJapaneseVoice(voiceId);
+    if (!voice) return;
+    setSelectedCloudVoiceId(voice.id);
+    localStorage.setItem("astra_cloud_voice_id", voice.id);
+    showToast(`${voice.label} Gemini voice saved.`);
+  };
+
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -1184,8 +1218,7 @@ export default function App() {
     return uid || "";
   };
 
-  // Speaks actual letters vocally via Japanese Web Voice Engine
-  const speakJapanese = (phrase: string) => {
+  const speakWithBrowserVoice = (phrase: string) => {
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(phrase);
@@ -1195,7 +1228,59 @@ export default function App() {
       if (selectedVoice) utterance.voice = selectedVoice;
       window.speechSynthesis.speak(utterance);
     } else {
-      showToast("Sound synthesis is not supported on your server device.");
+      showToast("Sound synthesis is not supported on this device.");
+    }
+  };
+
+  const speakWithCloudVoice = async (phrase: string) => {
+    const requestId = ++cloudSpeechRequestRef.current;
+    window.speechSynthesis?.cancel();
+    cloudAudioRef.current?.pause();
+
+    const cacheKey = `${selectedCloudVoiceId}|${phrase}|0.8`;
+    try {
+      let audioUrl = cloudAudioCacheRef.current.get(cacheKey);
+      if (!audioUrl) {
+        const response = await fetch("/api/synthesize-speech", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: phrase,
+            voiceId: selectedCloudVoiceId,
+            speakingRate: 0.8,
+          }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.audioContent) {
+          throw new Error(payload.error || "Gemini voice request failed.");
+        }
+        audioUrl = `data:${payload.mimeType || "audio/wav"};base64,${payload.audioContent}`;
+        cloudAudioCacheRef.current.set(cacheKey, audioUrl);
+      }
+
+      if (requestId !== cloudSpeechRequestRef.current) return;
+      const audio = new Audio(audioUrl);
+      cloudAudioRef.current = audio;
+      await audio.play();
+    } catch (error) {
+      console.warn("Gemini Japanese voice unavailable; using browser fallback.", error);
+      if (!cloudFallbackNoticeRef.current) {
+        cloudFallbackNoticeRef.current = true;
+        showToast("Gemini voice unavailable. Using your browser voice instead.");
+      }
+      speakWithBrowserVoice(phrase);
+    }
+  };
+
+  // Uses the selected Gemini voice when requested, with the browser voice
+  // engine as a free/offline fallback.
+  const speakJapanese = (phrase: string) => {
+    if (speechVoiceMode === "cloud") {
+      void speakWithCloudVoice(phrase);
+    } else {
+      cloudSpeechRequestRef.current += 1;
+      cloudAudioRef.current?.pause();
+      speakWithBrowserVoice(phrase);
     }
   };
 
@@ -3375,6 +3460,10 @@ export default function App() {
     availableJapaneseVoices,
     selectedJapaneseVoiceURI,
     setSelectedJapaneseVoiceURI,
+    speechVoiceMode,
+    handleSelectSpeechVoiceMode,
+    selectedCloudVoiceId,
+    handleSelectCloudVoice,
     activeBgScene,
     setActiveBgScene,
   };

@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
+import { synthesizeGeminiJapaneseSpeech } from "./src/geminiTts";
 
 // Ensure environment variables are loaded
 dotenv.config();
@@ -9,10 +10,74 @@ dotenv.config();
 async function startServer() {
   const app = express();
   const PORT = 3000;
+  const cloudSpeechCache = new Map<string, { audioContent: string; createdAt: number }>();
+  const cloudSpeechRateWindows = new Map<string, { startedAt: number; count: number }>();
 
   // Support high-resolution drawing submissions
   app.use(express.json({ limit: "15mb" }));
   app.use(express.urlencoded({ limit: "15mb", extended: true }));
+
+  // API: Gemini Japanese TTS. The Gemini credential remains server-side; the
+  // browser only receives generated audio bytes.
+  app.post("/api/synthesize-speech", async (req, res) => {
+    try {
+      const { text, voiceId, speakingRate } = req.body ?? {};
+      const cleanText = typeof text === "string" ? text.trim() : "";
+
+      if (!cleanText || cleanText.length > 240) {
+        return res.status(400).json({ error: "Speech text must contain between 1 and 240 characters." });
+      }
+
+      const parsedRate = typeof speakingRate === "number" ? speakingRate : 0.8;
+      const clientAddress = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown")
+        .split(",")[0]
+        .trim();
+      const now = Date.now();
+      const rateWindow = cloudSpeechRateWindows.get(clientAddress);
+      if (!rateWindow || now - rateWindow.startedAt >= 60_000) {
+        cloudSpeechRateWindows.set(clientAddress, { startedAt: now, count: 1 });
+      } else if (rateWindow.count >= 30) {
+        return res.status(429).json({ error: "Astra's Gemini voice is resting briefly. Try again in a moment." });
+      } else {
+        rateWindow.count += 1;
+      }
+
+      const cacheKey = `${voiceId}|${cleanText}|${parsedRate}`;
+      const cached = cloudSpeechCache.get(cacheKey);
+      if (cached) {
+        return res.json({
+          audioContent: cached.audioContent,
+          mimeType: "audio/wav",
+          voiceId,
+          cached: true,
+        });
+      }
+
+      const result = await synthesizeGeminiJapaneseSpeech({
+        text: cleanText,
+        voiceId: typeof voiceId === "string" ? voiceId : "",
+        speakingRate: parsedRate,
+      });
+
+      if (cloudSpeechCache.size >= 500) {
+        const oldestKey = cloudSpeechCache.keys().next().value;
+        if (oldestKey) cloudSpeechCache.delete(oldestKey);
+      }
+      cloudSpeechCache.set(cacheKey, { audioContent: result.audioContent, createdAt: now });
+
+      return res.json({
+        audioContent: result.audioContent,
+        mimeType: result.mimeType,
+        voiceId: result.voiceId,
+        model: result.model,
+      });
+    } catch (err: any) {
+      console.error("[synthesize-speech] Gemini TTS error:", err);
+      return res.status(err?.statusCode || 502).json({
+        error: err.message || "Astra could not reach Gemini's voice service.",
+      });
+    }
+  });
 
   // API: Analyze Kanji Drawing using Google Gemini 3.1 Flash Lite
   app.post("/api/analyze-kanji", async (req, res) => {

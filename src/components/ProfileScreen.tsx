@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import type { HiraganaItem, KatakanaItem, KanjiItem, StudentStats, VocabularyItem } from "../types";
 import type { FriendRecord, FriendRequest, FriendSearchResult, MatchHistoryRecord } from "../multiplayerOnline";
+import { CLOUD_JAPANESE_VOICES } from "../voiceCatalog";
 
 type CurrentScreen = "menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo" | "reading-room";
 type ProfileCharSet = "hiragana" | "katakana";
@@ -253,6 +254,10 @@ interface ProfileScreenProps {
   availableJapaneseVoices: SpeechSynthesisVoice[];
   selectedJapaneseVoiceURI: string;
   setSelectedJapaneseVoiceURI: (voiceURI: string) => void;
+  speechVoiceMode: "browser" | "cloud";
+  handleSelectSpeechVoiceMode: (mode: "browser" | "cloud") => void;
+  selectedCloudVoiceId: string;
+  handleSelectCloudVoice: (voiceId: string) => void;
   activeBgScene: number;
   setActiveBgScene: React.Dispatch<React.SetStateAction<number>>;
 }
@@ -341,6 +346,10 @@ export default function ProfileScreen({
   availableJapaneseVoices,
   selectedJapaneseVoiceURI,
   setSelectedJapaneseVoiceURI,
+  speechVoiceMode,
+  handleSelectSpeechVoiceMode,
+  selectedCloudVoiceId,
+  handleSelectCloudVoice,
   activeBgScene,
   setActiveBgScene,
 }: ProfileScreenProps) {
@@ -768,28 +777,72 @@ export default function ProfileScreen({
                   </label>
                   <p className="text-[8px] text-natural-forest/50 font-mono leading-none mt-0.5">{t.voiceDesc}</p>
                 </div>
-                <div className="flex gap-1.5 min-w-0">
-                  <select
-                    value={selectedJapaneseVoiceURI}
-                    onChange={(e) => setSelectedJapaneseVoiceURI(e.target.value)}
-                    className="w-full min-w-0 flex-1 px-3 py-2 bg-white/5 border border-white/10 text-natural-charcoal rounded-xl text-xs font-mono outline-none focus:border-natural-forest/60 transition cursor-pointer"
-                  >
-                    <option value="" className="bg-natural-card text-natural-forest">Default System Voice</option>
-                    {availableJapaneseVoices.map((voice) => (
-                      <option key={voice.voiceURI} value={voice.voiceURI} className="bg-natural-card text-natural-forest">
-                        {voice.name} ({voice.lang})
-                      </option>
-                    ))}
-                  </select>
+                <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-xl p-1">
                   <button
                     type="button"
-                    onClick={() => speakJapanese("あきこ")}
-                    className="p-2.5 bg-natural-forest/15 text-natural-forest border border-natural-forest/40 rounded-xl hover:bg-natural-forest hover:text-natural-bg transition cursor-pointer shrink-0"
-                    title="Test Voice Speak"
+                    onClick={() => handleSelectSpeechVoiceMode("browser")}
+                    className={`flex-1 px-2 py-1.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${speechVoiceMode === "browser" ? "bg-natural-forest text-natural-bg" : "text-natural-forest/60 hover:bg-white/10"}`}
                   >
-                    <Volume2 className="w-4 h-4" />
+                    Browser · Free
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectSpeechVoiceMode("cloud")}
+                    className={`flex-1 px-2 py-1.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${speechVoiceMode === "cloud" ? "bg-natural-clay text-natural-bg" : "text-natural-forest/60 hover:bg-white/10"}`}
+                  >
+                    Astra · Gemini
                   </button>
                 </div>
+
+                {speechVoiceMode === "browser" ? (
+                  <div className="flex gap-1.5 min-w-0">
+                    <select
+                      value={selectedJapaneseVoiceURI}
+                      onChange={(e) => setSelectedJapaneseVoiceURI(e.target.value)}
+                      className="w-full min-w-0 flex-1 px-3 py-2 bg-white/5 border border-white/10 text-natural-charcoal rounded-xl text-xs font-mono outline-none focus:border-natural-forest/60 transition cursor-pointer"
+                    >
+                      <option value="" className="bg-natural-card text-natural-forest">Default System Voice</option>
+                      {availableJapaneseVoices.map((voice) => (
+                        <option key={voice.voiceURI} value={voice.voiceURI} className="bg-natural-card text-natural-forest">
+                          {voice.name} ({voice.lang})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => speakJapanese("あきこ")}
+                      className="p-2.5 bg-natural-forest/15 text-natural-forest border border-natural-forest/40 rounded-xl hover:bg-natural-forest hover:text-natural-bg transition cursor-pointer shrink-0"
+                      title="Test browser voice"
+                    >
+                      <Volume2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
+                      {CLOUD_JAPANESE_VOICES.map((voice) => (
+                        <button
+                          key={voice.id}
+                          type="button"
+                          onClick={() => handleSelectCloudVoice(voice.id)}
+                          className={`text-left px-2.5 py-2 rounded-xl border transition cursor-pointer ${selectedCloudVoiceId === voice.id ? "bg-natural-clay/15 border-natural-clay/60 text-natural-clay" : "bg-white/5 border-white/10 text-natural-forest/70 hover:border-natural-clay/40"}`}
+                        >
+                          <span className="block text-[10px] font-bold">{voice.label} · {voice.style}</span>
+                          <span className="block text-[8px] font-mono opacity-70">{voice.tier} · {voice.description}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => speakJapanese("あきこ")}
+                      className="w-full p-2.5 bg-natural-clay/15 text-natural-clay border border-natural-clay/40 rounded-xl hover:bg-natural-clay hover:text-natural-bg transition cursor-pointer flex items-center justify-center gap-2 text-[10px] font-bold"
+                      title="Test Gemini voice"
+                    >
+                      <Volume2 className="w-4 h-4" />
+                      Preview selected Gemini voice
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-col gap-2">
