@@ -2505,12 +2505,8 @@ export default function App() {
     setOnlineAnswerStatus(isCorrect ? "correct" : "incorrect");
     playChime(isCorrect);
 
-    const myName = onlineRole === "host"
-      ? (onlineRoomState.hostName || "Host")
-      : (onlineRoomState.guestName || "Guest");
-
     try {
-      await submitOnlineAnswer(onlineRoomCode, onlineRole, currentQIdx, isCorrect, myName, questionStartedAtRef.current);
+      await submitOnlineAnswer(onlineRoomCode, currentQIdx, isCorrect, questionStartedAtRef.current);
     } catch (err: any) {
       console.error("Submit answer failed:", err);
     }
@@ -2758,10 +2754,7 @@ export default function App() {
         if (!answers || answers[myTimeKey] === undefined) {
           setOnlineAnswerLocked(true);
           // Submit a wrong answer to signal timeout
-          const myName = onlineRole === "host"
-            ? (onlineRoomState?.hostName || "Host")
-            : (onlineRoomState?.guestName || "Guest");
-          submitOnlineAnswer(onlineRoomCode, onlineRole!, qIdx, false, myName, questionStartedAtRef.current).catch(() => { });
+          submitOnlineAnswer(onlineRoomCode, qIdx, false, questionStartedAtRef.current).catch(() => { });
         }
 
         // Competitive mode still uses host-driven shared auto-advance.

@@ -298,17 +298,29 @@ export function listenToRoomStatus(roomCode: string, callback: (status: RoomStat
  */
 export async function submitOnlineAnswer(
   roomCode: string,
-  role: "host" | "guest",
   questionIndex: number,
   isCorrect: boolean,
-  playerName: string,
   startedAt?: number | null
 ): Promise<void> {
+  const uid = currentUid();
+  if (!uid) throw new Error("You must be signed in to submit an online answer.");
+
   const roomRef = ref(db, `rooms/${roomCode.toUpperCase()}`);
   const clickTime = Date.now();
 
   await runTransaction(roomRef, (room: RoomState | null) => {
     if (!room) return room;
+
+    // Never trust a role or display name supplied by the browser. Derive both
+    // from the authenticated Firebase UID and the room's authoritative IDs.
+    const role: "host" | "guest" | null = room.hostId === uid
+      ? "host"
+      : room.guestId === uid
+        ? "guest"
+        : null;
+    if (!role) return room;
+    const playerName = role === "host" ? (room.hostName || "Host") : (room.guestName || "Guest");
+
     if (!room.answers) room.answers = {};
     if (!room.answers[questionIndex]) {
       room.answers[questionIndex] = {};
