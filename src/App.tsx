@@ -3421,6 +3421,7 @@ export default function App() {
     isAccountUser,
     accountBusy,
     accountError,
+    clearAccountError: () => setAccountError(null),
     handleCreateAccount,
     handleSignInAccount,
     handleGoogleAccount,

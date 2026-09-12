@@ -221,6 +221,7 @@ interface ProfileScreenProps {
   isAccountUser: boolean;
   accountBusy: boolean;
   accountError: string | null;
+  clearAccountError: () => void;
   handleCreateAccount: (email: string, password: string) => Promise<void>;
   handleSignInAccount: (email: string, password: string) => Promise<void>;
   handleGoogleAccount: () => Promise<void>;
@@ -313,6 +314,7 @@ export default function ProfileScreen({
   isAccountUser,
   accountBusy,
   accountError,
+  clearAccountError,
   handleCreateAccount,
   handleSignInAccount,
   handleGoogleAccount,
@@ -591,7 +593,7 @@ export default function ProfileScreen({
 
         {!isAccountUser && (
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <button type="button" onClick={() => { setAccountMode((mode) => mode === "create" ? "signin" : "create"); setShowResetPassword(false); }} className="self-start text-[10px] font-mono text-natural-forest hover:underline cursor-pointer">
+            <button type="button" onClick={() => { setAccountMode((mode) => mode === "create" ? "signin" : "create"); setShowResetPassword(false); clearAccountError(); }} className="self-start text-[10px] font-mono text-natural-forest hover:underline cursor-pointer">
               {accountMode === "create" ? "Already have an account? Sign in" : "Need an account? Create one"}
             </button>
             {accountMode === "signin" && (
