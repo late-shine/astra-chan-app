@@ -222,6 +222,8 @@ interface ProfileScreenProps {
   accountError: string | null;
   handleCreateAccount: (email: string, password: string) => Promise<void>;
   handleSignInAccount: (email: string, password: string) => Promise<void>;
+  handleGoogleAccount: () => Promise<void>;
+  handleResetPassword: (email: string) => Promise<void>;
   handleSignOutAccount: () => Promise<void>;
   handleDownloadProgress: () => void;
   handleAddFriend: () => void;
@@ -308,6 +310,8 @@ export default function ProfileScreen({
   accountError,
   handleCreateAccount,
   handleSignInAccount,
+  handleGoogleAccount,
+  handleResetPassword,
   handleSignOutAccount,
   handleDownloadProgress,
   handleAddFriend,
@@ -346,6 +350,7 @@ export default function ProfileScreen({
   const [accountMode, setAccountMode] = useState<"create" | "signin">("create");
   const [accountEmailInput, setAccountEmailInput] = useState("");
   const [accountPasswordInput, setAccountPasswordInput] = useState("");
+  const [showResetPassword, setShowResetPassword] = useState(false);
   const t = TRANSLATIONS[language] || TRANSLATIONS.en;
 
   const submitAccountForm = () => {
@@ -542,6 +547,23 @@ export default function ProfileScreen({
             </button>
           </div>
         ) : (
+          <>
+          <button
+            type="button"
+            onClick={() => void handleGoogleAccount()}
+            disabled={accountBusy}
+            className="w-full px-4 py-2.5 rounded-xl bg-white text-[#2f2f2f] border border-black/10 shadow-sm text-xs font-black hover:bg-white/90 transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            <span className="w-4 h-4 rounded-full border border-[#4285f4] text-[#4285f4] font-sans font-black text-[11px] leading-4">G</span>
+            Continue with Google
+          </button>
+
+          <div className="flex items-center gap-2 my-3 text-[9px] font-mono text-natural-forest/45 uppercase tracking-widest">
+            <span className="h-px bg-natural-forest/15 flex-1" />
+            <span>or use email</span>
+            <span className="h-px bg-natural-forest/15 flex-1" />
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2 items-end">
             <label className="flex flex-col gap-1 text-[10px] font-mono font-bold text-natural-forest/70 uppercase tracking-wider">
               Email
@@ -555,11 +577,47 @@ export default function ProfileScreen({
               {accountMode === "create" ? <><UserPlus className="w-3.5 h-3.5" /> Create account</> : <><LogIn className="w-3.5 h-3.5" /> Sign in</>}
             </button>
           </div>
+          </>
         )}
 
-        {!isAccountUser && <button type="button" onClick={() => setAccountMode((mode) => mode === "create" ? "signin" : "create")} className="self-start text-[10px] font-mono text-natural-forest hover:underline cursor-pointer">
-          {accountMode === "create" ? "Already have an account? Sign in" : "Need an account? Create one"}
-        </button>}
+        {!isAccountUser && (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <button type="button" onClick={() => { setAccountMode((mode) => mode === "create" ? "signin" : "create"); setShowResetPassword(false); }} className="self-start text-[10px] font-mono text-natural-forest hover:underline cursor-pointer">
+              {accountMode === "create" ? "Already have an account? Sign in" : "Need an account? Create one"}
+            </button>
+            {accountMode === "signin" && (
+              <button type="button" onClick={() => setShowResetPassword((visible) => !visible)} className="text-[10px] font-mono text-natural-clay hover:underline cursor-pointer">
+                Forgot password?
+              </button>
+            )}
+          </div>
+        )}
+
+        {!isAccountUser && accountMode === "signin" && showResetPassword && (
+          <div className="rounded-xl border border-natural-clay/25 bg-natural-clay/5 p-3 space-y-2">
+            <p className="text-[10px] text-natural-forest/70 font-mono leading-relaxed">
+              Enter your email and Astra will send a secure password-reset link.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="email"
+                value={accountEmailInput}
+                onChange={(event) => setAccountEmailInput(event.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-white/10 bg-white/5 text-xs font-sans text-natural-charcoal outline-none focus:border-natural-clay/60"
+              />
+              <button
+                type="button"
+                onClick={() => void handleResetPassword(accountEmailInput)}
+                disabled={accountBusy || !accountEmailInput.trim()}
+                className="px-3 py-2 rounded-xl bg-natural-clay text-natural-bg text-[10px] font-black hover:bg-natural-clay/90 transition cursor-pointer disabled:opacity-40 whitespace-nowrap"
+              >
+                Send link
+              </button>
+            </div>
+          </div>
+        )}
         {accountError && <p className="text-[11px] text-natural-terracotta bg-natural-terracotta/10 border border-natural-terracotta/20 rounded-xl p-2.5 font-mono leading-relaxed">{accountError}</p>}
       </div>
 

@@ -1,6 +1,6 @@
 // src/firebase.ts
 // ─────────────────────────────────────────────────────────────────────────────
-// Firebase initialisation — Realtime Database + Anonymous Auth
+// Firebase initialisation — Realtime Database + Firebase Auth
 //
 // SETUP (one-time):
 //   1. Open your Firebase console → Project Settings → General → Your apps
@@ -14,11 +14,16 @@ import { get, getDatabase, ref, set } from "firebase/database";
 import {
     createUserWithEmailAndPassword,
     EmailAuthProvider,
+    GoogleAuthProvider,
     getAuth,
     linkWithCredential,
+    linkWithPopup,
     onAuthStateChanged,
     signInAnonymously,
+    signInWithCredential,
     signInWithEmailAndPassword,
+    signInWithPopup,
+    sendPasswordResetEmail,
     signOut,
 } from "firebase/auth";
 import type { User } from "firebase/auth";
@@ -93,6 +98,43 @@ export async function createOrLinkEmailAccount(email: string, password: string):
 export async function signInEmailAccount(email: string, password: string): Promise<User> {
     const result = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
     return result.user;
+}
+
+/**
+ * Upgrade the current anonymous browser identity to Google when possible.
+ * This preserves the existing Firebase UID, friend code, and cloud record for
+ * a first-time account connection. If the browser is already signed in with a
+ * non-anonymous provider, use the normal Google sign-in flow instead.
+ */
+export async function createOrLinkGoogleAccount(): Promise<User> {
+    const provider = new GoogleAuthProvider();
+    const currentUser = auth.currentUser;
+
+    if (currentUser?.isAnonymous) {
+        try {
+            const linked = await linkWithPopup(currentUser, provider);
+            return linked.user;
+        } catch (error: any) {
+            // If this Google account already belongs to an Astra account,
+            // finish the sign-in with the credential Firebase returned instead
+            // of leaving the user with an opaque linking error.
+            if (error?.code !== "auth/credential-already-in-use") throw error;
+            const credential = GoogleAuthProvider.credentialFromError(error);
+            if (!credential) throw error;
+            const signedIn = await signInWithCredential(auth, credential);
+            return signedIn.user;
+        }
+    }
+
+    const result = await signInWithPopup(auth, provider);
+    return result.user;
+}
+
+/** Send Firebase's secure password-reset link to an email address. */
+export async function sendPasswordReset(email: string): Promise<void> {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) throw new Error("Enter your account email first.");
+    await sendPasswordResetEmail(auth, cleanEmail);
 }
 
 export async function signOutAccount(): Promise<void> {

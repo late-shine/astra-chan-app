@@ -45,6 +45,8 @@ import {
   Upload,
   Table2,
   GraduationCap,
+  Cloud,
+  LogIn,
 } from "lucide-react";
 
 import { HIRAGANA_DATA, KATAKANA_DATA, KANJI_DATA, VOCABULARY_DATA } from "./data";
@@ -87,10 +89,12 @@ import {
 } from "./multiplayerOnline";
 import {
   createOrLinkEmailAccount,
+  createOrLinkGoogleAccount,
   currentUid,
   ensureSignedIn,
   loadCloudStats,
   saveCloudStats,
+  sendPasswordReset,
   signInEmailAccount,
   signOutAccount,
 } from "./firebase";
@@ -195,6 +199,31 @@ function playClickTick() {
     osc.start(now);
     osc.stop(now + 0.015);
   } catch (err) { }
+}
+
+function accountErrorMessage(error: any, fallback: string): string {
+  switch (error?.code) {
+    case "auth/email-already-in-use":
+      return "That email already has an Astra account. Switch to Sign in.";
+    case "auth/invalid-credential":
+    case "auth/wrong-password":
+    case "auth/user-not-found":
+      return "That email or password is not correct.";
+    case "auth/weak-password":
+      return "Choose a stronger password with at least six characters.";
+    case "auth/popup-closed-by-user":
+      return "The Google sign-in window was closed before it finished.";
+    case "auth/popup-blocked":
+      return "Your browser blocked the Google sign-in window. Allow pop-ups and try again.";
+    case "auth/account-exists-with-different-credential":
+      return "An Astra account already exists with another sign-in method. Use that method first.";
+    case "auth/too-many-requests":
+      return "Too many attempts. Please wait a little and try again.";
+    case "auth/invalid-email":
+      return "Enter a valid email address.";
+    default:
+      return error?.message || fallback;
+  }
 }
 
 export default function App() {
@@ -2820,7 +2849,7 @@ export default function App() {
       setCloudStatsHydrated(true);
       showToast("Astra account created. Progress sync is now active.");
     } catch (err: any) {
-      setAccountError(err.message || "Account creation failed");
+      setAccountError(accountErrorMessage(err, "Account creation failed"));
     } finally {
       setAccountBusy(false);
     }
@@ -2844,7 +2873,45 @@ export default function App() {
       setCloudStatsHydrated(true);
       showToast("Signed in. Cloud progress loaded.");
     } catch (err: any) {
-      setAccountError(err.message || "Sign-in failed");
+      setAccountError(accountErrorMessage(err, "Sign-in failed"));
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
+  const handleGoogleAccount = async () => {
+    setAccountBusy(true);
+    setAccountError(null);
+    try {
+      const user = await createOrLinkGoogleAccount();
+      const cloudStats = await loadCloudStats(user.uid);
+      setMyUid(user.uid);
+      setAccountEmail(user.email);
+      setIsAccountUser(true);
+      if (cloudStats) {
+        setStats(cloudStats);
+        localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(cloudStats));
+      } else {
+        await saveCloudStats(stats, user.uid);
+      }
+      await saveUserProfile(profileName || profileNameInput || "Astra Scholar", profileAvatar);
+      setCloudStatsHydrated(true);
+      showToast("Google account connected. Cloud progress sync is active.");
+    } catch (err: any) {
+      setAccountError(accountErrorMessage(err, "Google sign-in failed"));
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
+  const handleResetPassword = async (email: string) => {
+    setAccountBusy(true);
+    setAccountError(null);
+    try {
+      await sendPasswordReset(email);
+      showToast("Password reset link sent. Check your email.");
+    } catch (err: any) {
+      setAccountError(accountErrorMessage(err, "Could not send the password reset email"));
     } finally {
       setAccountBusy(false);
     }
@@ -3278,6 +3345,8 @@ export default function App() {
     accountError,
     handleCreateAccount,
     handleSignInAccount,
+    handleGoogleAccount,
+    handleResetPassword,
     handleSignOutAccount,
     handleDownloadProgress,
     handleAddFriend,
@@ -3801,6 +3870,24 @@ export default function App() {
                 </span>
               </div>
             </div>
+
+            {/* Account shortcut — visible outside the Profile panel */}
+            <button
+              type="button"
+              onClick={() => {
+                setCurrentScreen("profile");
+                setShowProfilePanel(false);
+                playClickTick();
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-sm transition cursor-pointer ${isAccountUser
+                ? "bg-natural-forest/10 border-natural-forest/35 text-natural-forest"
+                : "bg-natural-clay/10 border-natural-clay/45 text-natural-clay hover:bg-natural-clay/20"
+                }`}
+              title={isAccountUser ? "Account sync is active" : "Sign in or create an Astra account"}
+            >
+              {isAccountUser ? <Cloud className="w-3.5 h-3.5" /> : <LogIn className="w-3.5 h-3.5" />}
+              <span className="text-[11px] font-bold font-mono hidden sm:inline">{isAccountUser ? "Synced" : "Sign in"}</span>
+            </button>
 
             {/* Profile & Friends Corner Button */}
             <div className="relative">
