@@ -1,20 +1,26 @@
 Copyright (c) 2026 Shahriya
 
-All Rights Reserved.
+All Rights Reserved — Personal Use Permitted.
 
 This repository and all of its contents — including but not limited to
 source code, design, documentation, artwork, and assets — are the
-exclusive property of the copyright holder(s) named above.
+property of the copyright holder(s) named above.
 
-No part of this repository may be copied, modified, merged, published,
-distributed, sublicensed, deployed, or sold, in whole or in part,
-without prior written permission from the copyright holder(s).
+Permitted, without asking:
+- Cloning this repository and running it on your own device for
+  personal, non-commercial use.
+- Modifying your own local copy for yourself.
 
-Public visibility of this source code (e.g. on GitHub) does not
-constitute permission to use, copy, or redistribute it. Viewing the
-code and the deployed application for personal, non-commercial
-reference is fine — reproducing, rebranding, or redistributing it is
-not, without explicit consent.
+Not permitted, without prior written permission from the copyright
+holder(s):
+- Publishing, redistributing, deploying, or hosting this code —
+  modified or unmodified — anywhere else, under any name.
+- Claiming authorship of this project, in whole or in part, or
+  removing or altering credit to the original authors.
+- Using this code, or any derivative of it, for commercial purposes.
+
+Any public reference to, mention of, or discussion of this project
+must credit the original authors listed above.
 
 For permission requests, please contact the copyright holder(s) at
 lateshine13@gmail.com.
