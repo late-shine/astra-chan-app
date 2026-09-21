@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { motion, AnimatePresence, useTransform } from "motion/react";
+import { motion, AnimatePresence, useTransform, useReducedMotion } from "motion/react";
 import {
   Flame,
   Volume2,
@@ -261,6 +261,21 @@ function mergeSrsCards(
   return merged;
 }
 
+/* ===== PHASE 3A: DIRECTION-AWARE 3D SCREEN TRANSITIONS ===== */
+// `custom` carries the direction sign: +1 going deeper (menu -> room), -1 coming back.
+const SCREEN_VARIANTS = {
+  enter: (direction: number) => ({ rotateY: 15 * direction, opacity: 0, scale: 0.95 }),
+  center: { rotateY: 0, opacity: 1, scale: 1 },
+  exit: (direction: number) => ({ rotateY: -15 * direction, opacity: 0, scale: 0.95 }),
+};
+
+// Vestibular-safe fallback: no rotation, no scale, just a short fade.
+const SCREEN_VARIANTS_REDUCED = {
+  enter: { opacity: 0 },
+  center: { opacity: 1 },
+  exit: { opacity: 0 },
+};
+
 export default function App() {
   const { x: parallaxX, y: parallaxY } = useMouseParallax();
   const bgParallaxX = useTransform(parallaxX, (v) => v * -16);
@@ -268,6 +283,35 @@ export default function App() {
   // Screens navigation state
   const [currentScreen, setCurrentScreen] = useState<"menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo" | "reading-room">("menu");
   const [quizMode, setQuizMode] = useState<"choice" | "romaji" | "survival">("choice");
+
+  /* ===== PHASE 3A: SCREEN TRANSITION STATE ===== */
+  const prefersReducedMotion = useReducedMotion();
+  // Perspective is armed only while a transition runs — a permanent perspective on
+  // <main> would make it the containing block for the fixed-position Star Chart drawer.
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const prevScreenRef = useRef(currentScreen);
+  const screenDirectionRef = useRef(1);
+  const screenMountedRef = useRef(false);
+  // Depth model: "menu" is depth 0, every other screen is depth 1.
+  // Computed during render so the sign is correct on the very frame the swap happens.
+  if (prevScreenRef.current !== currentScreen) {
+    screenDirectionRef.current = currentScreen === "menu" ? -1 : 1;
+    prevScreenRef.current = currentScreen;
+  }
+  const screenDirection = screenDirectionRef.current;
+
+  useEffect(() => {
+    // Skip the very first mount: AnimatePresence has initial={false}, so nothing
+    // animates in and onAnimationComplete would never arrive to clear the flag.
+    if (!screenMountedRef.current) {
+      screenMountedRef.current = true;
+      return;
+    }
+    setIsTransitioning(true);
+    // Failsafe so perspective can never get stuck on if a completion callback is missed.
+    const failsafe = window.setTimeout(() => setIsTransitioning(false), 1200);
+    return () => window.clearTimeout(failsafe);
+  }, [currentScreen]);
 
   // Student Statistics State (with Local Storage Persistence)
   const [stats, setStats] = useState<StudentStats>({
@@ -4733,7 +4777,29 @@ export default function App() {
         )}
 
         {/* MAIN ROUTER SWITCH CONTAINER */}
-        <main className="flex-grow flex flex-col justify-center">
+        <main
+          className="flex-grow flex flex-col justify-center"
+          style={isTransitioning && !prefersReducedMotion ? { perspective: "1200px" } : undefined}
+        >
+        <AnimatePresence
+          mode="wait"
+          initial={false}
+          custom={screenDirection}
+          onExitComplete={() => window.scrollTo({ top: 0 })}
+        >
+        <motion.div
+          key={currentScreen}
+          className="flex-grow flex flex-col justify-center"
+          custom={screenDirection}
+          variants={prefersReducedMotion ? SCREEN_VARIANTS_REDUCED : SCREEN_VARIANTS}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={prefersReducedMotion ? { duration: 0.2, ease: "easeInOut" } : { duration: 0.35, ease: "easeInOut" }}
+          onAnimationComplete={(definition) => {
+            if (definition === "center") setIsTransitioning(false);
+          }}
+        >
 
           {/* ================= SCREEN 1: MENU ================= */}
           {currentScreen === "menu" && <MenuScreen {...menuScreenProps} />}
@@ -4805,6 +4871,8 @@ export default function App() {
           {currentScreen === "review-deck" && <ReviewDeckScreen {...reviewDeckScreenProps} />}
 
 
+        </motion.div>
+        </AnimatePresence>
         </main>
 
         {/* FOOTER METRICS AND CREDITS */}
