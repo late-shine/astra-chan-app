@@ -469,10 +469,10 @@ export default function MenuScreen(props: MenuScreenProps) {
                                         ].map((roomItem) => {
                         const Icon = roomItem.icon;
                         const accentHoverBorder = roomItem.accent === "forest"
-                          ? "hover:border-natural-forest/70"
+                          ? "hover:border-natural-forest/70!"
                           : roomItem.accent === "clay"
-                            ? "hover:border-natural-clay/70"
-                            : "hover:border-natural-border";
+                            ? "hover:border-natural-clay/70!"
+                            : "hover:border-natural-border!";
                         const accentTextColor = roomItem.accent === "forest"
                           ? "text-natural-forest"
                           : roomItem.accent === "clay"

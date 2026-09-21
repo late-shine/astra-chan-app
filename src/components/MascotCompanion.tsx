@@ -5,6 +5,8 @@ import wonderingImg from "../assets/images/astra-wondering.jpeg";
 import excitedImg from "../assets/images/astra-excited.png.jpeg";
 import bgCatSakura from "../assets/images/bg_cat_sakura.jpg";
 import { Sparkles, Heart } from "lucide-react";
+import { useMouseParallax } from "../hooks/useMouseParallax";
+import { useTransform } from "motion/react";
 
 interface MascotCompanionProps {
   mood: "welcome" | "streak" | "success" | "failure" | "kanji" | "idle" | "clicked" | "learn-flashcard" | "learn-vocabs" | "survival-danger" | "wondering" | "afk" | "excited" | "reading";
@@ -29,6 +31,9 @@ export default function MascotCompanion({
   readingClickedImage,
   readingRoomActive = false,
 }: MascotCompanionProps) {
+  const { x: parallaxX, y: parallaxY } = useMouseParallax();
+  const avatarX = useTransform(parallaxX, v => v * 8);
+  const avatarY = useTransform(parallaxY, v => v * 4);
 
   // Select image based on mood — soft crossfade handled by keyed motion.div below
   const currentImage = useMemo(() => {
@@ -137,6 +142,7 @@ export default function MascotCompanion({
         whileTap={{ rotate: [0, -10, 10, -5, 5, 0], scale: 0.95 }}
       >
         <motion.div 
+          style={{ x: avatarX, y: avatarY }}
           animate={{
             y: [0, -6, 0],
           }}

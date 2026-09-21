@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, useTransform } from "motion/react";
 import {
   Flame,
   Volume2,
@@ -102,6 +102,7 @@ import { HiraganaItem, KatakanaItem, KanjiItem, VocabularyItem, StudentStats, SR
 import type { ReadingToken } from "./reading/readingData";
 import MascotCompanion from "./components/MascotCompanion";
 import AtmosphereCanvas from "./components/AtmosphereCanvas";
+import { useMouseParallax } from "./hooks/useMouseParallax";
 import ReferenceCharts from "./components/ReferenceCharts";
 import GrammarDojo from "./components/GrammarDojo";
 import ReadingRoomScreen from "./components/ReadingRoomScreen";
@@ -261,6 +262,9 @@ function mergeSrsCards(
 }
 
 export default function App() {
+  const { x: parallaxX, y: parallaxY } = useMouseParallax();
+  const bgParallaxX = useTransform(parallaxX, (v) => v * -16);
+  const bgParallaxY = useTransform(parallaxY, (v) => v * -10);
   // Screens navigation state
   const [currentScreen, setCurrentScreen] = useState<"menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo" | "reading-room">("menu");
   const [quizMode, setQuizMode] = useState<"choice" | "romaji" | "survival">("choice");
@@ -3622,7 +3626,7 @@ export default function App() {
         className="hidden"
       />
       {/* ===== FIXED MULTI-SCENE BACKGROUNDS (position:fixed prevents twitching on clicks) ===== */}
-      <div className="fixed inset-0 pointer-events-none select-none z-0 overflow-hidden">
+      <motion.div className="fixed inset-0 pointer-events-none select-none z-0 overflow-hidden" style={{ x: bgParallaxX, y: bgParallaxY, scale: 1.05 }}>
         {/* Scene 0 — Misty Sakura Path */}
         <div
           className="absolute inset-0 transition-opacity duration-[3000ms] ease-in-out"
@@ -3683,7 +3687,7 @@ export default function App() {
             opacity: 0.45,
           }}
         />
-      </div>
+      </motion.div>
 
       {/* 2. Interactive animated magical witch rain & floating runes background atmosphere */}
       <AtmosphereCanvas
