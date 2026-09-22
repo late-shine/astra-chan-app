@@ -343,6 +343,19 @@ export async function submitOnlineAnswer(
 
     // ── PARALLEL MODE ──────────────────────────────────────────────────────────
     // No real-time points. Each player advances independently.
+    //
+    // This only records what happened on THIS question — it deliberately does
+    // NOT touch parallelProgress.hostIndex/guestIndex anymore. Advancing used
+    // to happen right here, in the same transaction as the answer, which meant
+    // the next question could load before the player had even seen whether
+    // they were right, and — since this transaction runs on the same shared
+    // room node the other player is also writing to, and Firebase retries a
+    // transaction if it collides with a concurrent write — an answer could be
+    // recorded more than once, each retry recomputing the index-advance and
+    // re-triggering a UI reset on the client, which is what was wiping out
+    // text already typed for the next question.
+    // See advanceParallelPlayerQuestion() below for the actual advance, which
+    // the client now calls separately, on its own short pause.
     if (room.settings?.multiplayerMode === "parallel") {
       qAns.questionStartedAt =
         qAns.questionStartedAt ||
@@ -355,8 +368,6 @@ export async function submitOnlineAnswer(
         qAns.questionLocked = true;
       }
 
-      const totalQuestions = Math.max(1, room.settings.questionCount || 10);
-      const nextIndex = questionIndex + 1;
       if (!room.parallelProgress) {
         room.parallelProgress = {
           hostIndex: room.currentQuestion || 0,
@@ -366,20 +377,6 @@ export async function submitOnlineAnswer(
           hostFinished: false,
           guestFinished: false,
         };
-      }
-
-      if (role === "host") {
-        room.parallelProgress.hostIndex = Math.min(nextIndex, totalQuestions);
-        room.parallelProgress.hostFinished = nextIndex >= totalQuestions;
-        room.parallelProgress.hostStartedAt = nextIndex >= totalQuestions ? null : Date.now();
-      } else {
-        room.parallelProgress.guestIndex = Math.min(nextIndex, totalQuestions);
-        room.parallelProgress.guestFinished = nextIndex >= totalQuestions;
-        room.parallelProgress.guestStartedAt = nextIndex >= totalQuestions ? null : Date.now();
-      }
-
-      if (room.parallelProgress.hostFinished && room.parallelProgress.guestFinished) {
-        room.status = "finished";
       }
 
       return room;
@@ -456,6 +453,63 @@ export async function advanceOnlineQuestion(
     }
 
     if (nextIndex >= totalQuestions) {
+      room.status = "finished";
+    }
+
+    return room;
+  });
+}
+
+/**
+ * advanceParallelPlayerQuestion — moves ONE player to their next question in
+ * parallel mode. Called by the client after a short, deliberate pause once
+ * that player has answered or timed out, so they get a moment to see whether
+ * they were right before the next question replaces it.
+ *
+ * `fromIndex` is the question we expect this player to still be sitting on —
+ * this makes the call idempotent. If a duplicate or retried call arrives
+ * after the index has already moved past fromIndex, it's a no-op rather than
+ * advancing a second time.
+ */
+export async function advanceParallelPlayerQuestion(
+  roomCode: string,
+  role: "host" | "guest",
+  fromIndex: number,
+  totalQuestions: number
+): Promise<void> {
+  const uid = currentUid();
+  if (!uid) throw new Error("You must be signed in to continue a duel.");
+  const roomRef = ref(db, `rooms/${roomCode.toUpperCase()}`);
+
+  await runTransaction(roomRef, (room: RoomState | null) => {
+    if (!room) return room;
+
+    // Never trust the role the browser claims — derive it from the
+    // authenticated UID, same as submitOnlineAnswer does.
+    const myRole: "host" | "guest" | null = room.hostId === uid
+      ? "host"
+      : room.guestId === uid
+        ? "guest"
+        : null;
+    if (!myRole || myRole !== role || !room.parallelProgress) return room;
+
+    const currentIdx = role === "host" ? room.parallelProgress.hostIndex : room.parallelProgress.guestIndex;
+    if (currentIdx !== fromIndex) return room; // already advanced — ignore
+
+    const nextIndex = fromIndex + 1;
+    const finished = nextIndex >= totalQuestions;
+
+    if (role === "host") {
+      room.parallelProgress.hostIndex = Math.min(nextIndex, totalQuestions);
+      room.parallelProgress.hostFinished = finished;
+      room.parallelProgress.hostStartedAt = finished ? null : Date.now();
+    } else {
+      room.parallelProgress.guestIndex = Math.min(nextIndex, totalQuestions);
+      room.parallelProgress.guestFinished = finished;
+      room.parallelProgress.guestStartedAt = finished ? null : Date.now();
+    }
+
+    if (room.parallelProgress.hostFinished && room.parallelProgress.guestFinished) {
       room.status = "finished";
     }
 

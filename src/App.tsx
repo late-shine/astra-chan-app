@@ -57,6 +57,7 @@ import {
   listenToRoomStatus,
   submitOnlineAnswer,
   advanceOnlineQuestion,
+  advanceParallelPlayerQuestion,
   restartRoom,
   leaveRoom,
   DURATION_MS,
@@ -954,6 +955,10 @@ export default function App() {
   const onlineQuestionPoolRef = useRef<(HiraganaItem | KatakanaItem)[]>([]);
   const onlineTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const onlineAutoAdvanceRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Parallel mode's own per-player "show the result, then move on" pause —
+  // separate from onlineAutoAdvanceRef because parallel mode advances each
+  // player independently rather than waiting on a shared host-driven clock.
+  const onlineParallelAdvanceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unsubscribeRoomStatusRef = useRef<(() => void) | null>(null);
   const questionStartedAtRef = useRef<number | null>(null);
   // ── END ONLINE MULTIPLAYER STATE ───────────────────────────────────────────
@@ -2442,6 +2447,10 @@ export default function App() {
       clearTimeout(onlineAutoAdvanceRef.current);
       onlineAutoAdvanceRef.current = null;
     }
+    if (onlineParallelAdvanceRef.current) {
+      clearTimeout(onlineParallelAdvanceRef.current);
+      onlineParallelAdvanceRef.current = null;
+    }
     setOnlineIsStarting(false);
   };
 
@@ -2615,6 +2624,26 @@ export default function App() {
     } catch (err: any) {
       console.error("Submit answer failed:", err);
     }
+
+    const isParallel = (onlineRoomState.settings.multiplayerMode ?? "competitive") === "parallel";
+    if (isParallel) {
+      scheduleParallelAdvance(currentQIdx, onlineRoomState.settings.questionCount || 10);
+    }
+  };
+
+  /**
+   * Parallel mode: give the player a moment to see "Correct!" / "Incorrect"
+   * before moving them to their next question, instead of advancing the
+   * instant the answer transaction resolves.
+   */
+  const scheduleParallelAdvance = (fromIndex: number, totalQuestions: number) => {
+    if (!onlineRoomCode || !onlineRole) return;
+    if (onlineParallelAdvanceRef.current) clearTimeout(onlineParallelAdvanceRef.current);
+    onlineParallelAdvanceRef.current = setTimeout(() => {
+      advanceParallelPlayerQuestion(onlineRoomCode, onlineRole, fromIndex, totalQuestions).catch((err) => {
+        console.error("Parallel advance failed:", err);
+      });
+    }, 1500);
   };
 
   /** Advance to next question — only host calls this */
@@ -2675,6 +2704,16 @@ export default function App() {
         setOnlineQuestionChoices(generateChoices(pool[qIdx], sourceDeck, numChoices));
       }
     }
+
+    // Start MY countdown the instant I actually see this question, rather than
+    // from a timestamp broadcast by whoever wrote it (previously the host, in
+    // competitive mode). Firebase applies a player's own writes to their own
+    // client instantly, so deriving the timer from a shared write always gave
+    // that writer a head start — and the other player's visible countdown
+    // could already be a few hundred ms into elapsing before it ever appeared.
+    // Timing locally from "when I rendered this question" is symmetric for
+    // both players and removes that structural advantage.
+    questionStartedAtRef.current = Date.now();
 
     // Start local timer synced from Firebase
     const durationMs = settings.questionDuration || 10000;
@@ -2813,19 +2852,16 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onlineRoomState, onlinePhase, onlineRole, onlineRoomCode]);
 
-  // ── Synchronized countdown timer ──
+  // ── Countdown safety net ──
+  // questionStartedAtRef is now set locally inside resetOnlineQuestionUI, the
+  // moment each player's own screen shows a question (see the comment there
+  // for why). This effect just guards against a stale ref lingering if the
+  // room disappears from under us (opponent left, connection dropped, etc.).
   useEffect(() => {
     if (!onlineRoomState || !onlineRole) {
       questionStartedAtRef.current = null;
-      return;
     }
-    questionStartedAtRef.current = getOnlinePlayerStartedAt(onlineRoomState, onlineRole) ?? null;
-  }, [
-    onlineRoomState?.questionStartedAt,
-    onlineRoomState?.parallelProgress?.hostStartedAt,
-    onlineRoomState?.parallelProgress?.guestStartedAt,
-    onlineRole,
-  ]);
+  }, [onlineRoomState, onlineRole]);
 
   useEffect(() => {
     if (onlinePhase !== "playing" || !questionStartedAtRef.current) return;
@@ -2858,8 +2894,15 @@ export default function App() {
 
         if (!answers || answers[myTimeKey] === undefined) {
           setOnlineAnswerLocked(true);
+          if (isParallel) setOnlineAnswerStatus("incorrect");
           // Submit a wrong answer to signal timeout
           submitOnlineAnswer(onlineRoomCode, qIdx, false, questionStartedAtRef.current).catch(() => { });
+
+          // Parallel mode: this player moves on independently, on their own
+          // short pause, same as when they answer manually.
+          if (isParallel && onlineRoomState) {
+            scheduleParallelAdvance(qIdx, onlineRoomState.settings.questionCount || 10);
+          }
         }
 
         // Competitive mode still uses host-driven shared auto-advance.
