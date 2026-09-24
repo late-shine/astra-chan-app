@@ -295,3 +295,73 @@ input, select, textarea, button {
 .glass-glow:hover::after {
   opacity: 1;
 }
+
+/* ── Kanji Panel Visual Roles (Phase A1) ───────────────────────────────────
+   Panel-specific surface / border / emphasis / type roles for the kanji study
+   screen, the word-family modal, and the drawing workspace.
+
+   Everything here is derived from the existing --color-natural-* variables, so
+   all themes (natural, light, dark-cosmic, dark-emerald, dark-maple, dark-cyber)
+   keep working with no per-theme overrides. Do NOT add hex values here.
+   Spacing and radius roles are documented in docs/kanji-visual-baseline/README.md
+   as Tailwind steps (they are layout utilities, not variables).
+   Values below intentionally match what the screen already renders, so adopting
+   them is visually a no-op; later phases (A2–A5) adopt them as they touch each area.
+───────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* Borders */
+  --kz-border-hairline: color-mix(in srgb, var(--color-natural-border) 50%, transparent); /* inner dividers */
+  --kz-border-soft: color-mix(in srgb, var(--color-natural-border) 70%, transparent);     /* card outlines */
+  --kz-border-strong: var(--color-natural-border);                                       /* controls, double rule */
+  --kz-border-accent: color-mix(in srgb, var(--color-natural-clay) 30%, transparent);     /* accent chips */
+
+  /* Surfaces */
+  --kz-surface-specimen: var(--color-natural-card-light);                                 /* the big kanji card */
+  --kz-surface-card: var(--color-natural-card);                                           /* side panels, modal */
+  --kz-surface-inset: color-mix(in srgb, var(--color-natural-bg) 50%, transparent);       /* lists / wells inside a card */
+  --kz-surface-accent: color-mix(in srgb, var(--color-natural-clay) 10%, transparent);    /* soft accent fill */
+
+  /* Emphasis + text */
+  --kz-ink: var(--color-natural-charcoal);                                                /* primary text, Japanese specimen */
+  --kz-ink-muted: var(--color-natural-forest-light);                                      /* labels, secondary text */
+  --kz-ink-quiet: color-mix(in srgb, var(--color-natural-forest-light) 75%, transparent); /* faint meta; floor for small text */
+  --kz-primary: var(--color-natural-forest);                                              /* primary action, onyomi-neutral emphasis */
+  --kz-accent: var(--color-natural-clay);                                                 /* study emphasis, recall, progress */
+  --kz-danger: var(--color-natural-terracotta);                                           /* errors, destructive */
+  --kz-on-accent: var(--color-natural-bg);                                                /* text on a solid clay fill (contrast in every theme) */
+  --kz-scrim: color-mix(in srgb, black 60%, transparent);                                 /* modal backdrop */
+}
+
+@layer components {
+  /* Surface roles. Padding is left to Tailwind utilities (see docs). */
+  .kz-specimen {
+    background: var(--kz-surface-specimen);
+    border: 2px solid var(--kz-border-soft);
+    border-radius: 2rem;
+  }
+  .kz-panel {
+    background: var(--kz-surface-card);
+    border: 1px solid var(--kz-border-soft);
+    border-radius: 1.5rem;
+  }
+  .kz-inset {
+    background: var(--kz-surface-inset);
+    border: 1px solid var(--kz-border-soft);
+    border-radius: 1rem;
+  }
+
+  /* Type role: small mono caps label (section / field labels). Min size 10px. */
+  .kz-label {
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    line-height: 1.2;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--kz-ink-muted);
+  }
+
+  /* Emphasis helpers */
+  .kz-on-accent { color: var(--kz-on-accent); }
+  .kz-scrim { background-color: var(--kz-scrim); }
+}

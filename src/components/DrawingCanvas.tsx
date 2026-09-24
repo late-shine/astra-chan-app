@@ -10,10 +10,23 @@ interface DrawingCanvasProps {
   referenceChar?: string;
 }
 
+// Ink palette. These are *pixel* colors written into the canvas and exported to the
+// AI checker as a PNG, so they are deliberately concrete hex values rather than theme
+// variables (a canvas cannot read CSS variables at draw time, and changing them would
+// change the pixels the evaluator sees). Phase A1: kept identical to the previous
+// values, just declared once. Do not "theme" these without checking api/analyze-kanji.ts.
+const INK_PALETTE = [
+  { id: "color-charcoal", value: "#22C55E", title: "Green Grass brush" },
+  { id: "color-forest", value: "#2E3A2F", title: "Forest Moss Ink" },
+  { id: "color-clay", value: "#C27D56", title: "Earthy Clay brush" },
+  { id: "color-terracotta", value: "#CA5E4B", title: "Sienna Clay brush" },
+] as const;
+const DEFAULT_INK = "#2E3A2F"; // Emerald Forest Ink
+
 export default function DrawingCanvas({ referenceChar }: DrawingCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [brushColor, setBrushColor] = useState("#2E3A2F"); // Emerald Forest Ink
+  const [brushColor, setBrushColor] = useState<string>(DEFAULT_INK);
   const [brushWidth, setBrushWidth] = useState(6);
   const [strokes, setStrokes] = useState<ImageData[]>([]);
 
@@ -178,54 +191,21 @@ export default function DrawingCanvas({ referenceChar }: DrawingCanvasProps) {
         <div className="flex items-center justify-between w-full gap-2">
           <div className="flex items-center gap-1.5">
             {/* Elegant Nature Inspired Presets */}
-            <button
-              type="button"
-              id="color-charcoal"
-              onClick={() => setBrushColor("#22C55E")}
-              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition ${
-                brushColor === "#22C55E"
-                  ? "border-natural-forest scale-115 shadow-sm"
-                  : "border-transparent opacity-70 hover:opacity-100"
-              }`}
-              style={{ backgroundColor: "#22C55E" }}
-              title="Green Grass brush"
-            />
-            <button
-              type="button"
-              id="color-forest"
-              onClick={() => setBrushColor("#2E3A2F")}
-              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition ${
-                brushColor === "#2E3A2F"
-                  ? "border-natural-forest scale-115 shadow-sm"
-                  : "border-transparent opacity-70 hover:opacity-100"
-              }`}
-              style={{ backgroundColor: "#2E3A2F" }}
-              title="Forest Moss Ink"
-            />
-            <button
-              type="button"
-              id="color-clay"
-              onClick={() => setBrushColor("#C27D56")}
-              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition ${
-                brushColor === "#C27D56"
-                  ? "border-natural-forest scale-115 shadow-sm"
-                  : "border-transparent opacity-70 hover:opacity-100"
-              }`}
-              style={{ backgroundColor: "#C27D56" }}
-              title="Earthy Clay brush"
-            />
-            <button
-              type="button"
-              id="color-terracotta"
-              onClick={() => setBrushColor("#CA5E4B")}
-              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition ${
-                brushColor === "#CA5E4B"
-                  ? "border-natural-forest scale-115 shadow-sm"
-                  : "border-transparent opacity-70 hover:opacity-100"
-              }`}
-              style={{ backgroundColor: "#CA5E4B" }}
-              title="Sienna Clay brush"
-            />
+            {INK_PALETTE.map((ink) => (
+              <button
+                key={ink.id}
+                type="button"
+                id={ink.id}
+                onClick={() => setBrushColor(ink.value)}
+                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition ${
+                  brushColor === ink.value
+                    ? "border-natural-forest scale-115 shadow-sm"
+                    : "border-transparent opacity-70 hover:opacity-100"
+                }`}
+                style={{ backgroundColor: ink.value }}
+                title={ink.title}
+              />
+            ))}
           </div>
 
           {/* Thickness selectors */}

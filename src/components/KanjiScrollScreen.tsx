@@ -13,13 +13,15 @@ import {
   EyeOff, 
   HelpCircle, 
   Lightbulb, 
-  Layers, 
   Compass, 
   ListPlus,
   BookmarkCheck
 } from "lucide-react";
 import DrawingCanvas from "./DrawingCanvas";
 import KanjiWordFamilyPanel from "./KanjiWordFamilyPanel";
+import KanjiSpecimen from "./KanjiSpecimen";
+import ReadingSummary from "./ReadingSummary";
+import RecallMask from "./RecallMask";
 import { KANJI_WORD_FAMILIES } from "../kanjiWordFamilies";
 import type { KanjiItem, KanjiWordEntry, SRSCard } from "../types";
 import companionImg from "../assets/images/synthid-removed-Gemini_Generated_Image_csh1tcsh1tcsh1tc.png";
@@ -330,6 +332,60 @@ function getKanjiDeconstruction(kanji: string): { radicals: KanjiRadical[]; mnem
   };
 }
 
+// ─── On-card word preview helpers (Phase A2) ─────────────────────────────────
+interface PreviewWord {
+  word: string;
+  reading: string;
+  meaning: string;
+  /** The sound this kanji makes in the word. Only present for curated families. */
+  kanjiReading?: string;
+}
+
+const PREVIEW_LIMIT = 3;
+const COMMONNESS_RANK: Record<KanjiWordEntry["commonness"], number> = { common: 0, moderate: 1, rare: 2 };
+
+// Strongest pattern first: the reading group with the most common words (ties keep
+// curated order), common words before rare ones. Small groups are topped up from the
+// next-strongest groups so the preview is never a single lonely row.
+function pickPreviewFromFamily(entries: KanjiWordEntry[]): PreviewWord[] {
+  const groups = new Map<string, KanjiWordEntry[]>();
+  entries.forEach((entry) => {
+    const group = groups.get(entry.kanjiReading);
+    if (group) group.push(entry);
+    else groups.set(entry.kanjiReading, [entry]);
+  });
+  const commonCount = (group: KanjiWordEntry[]) => group.filter((e) => e.commonness === "common").length;
+  return [...groups.values()]
+    .sort((a, b) => commonCount(b) - commonCount(a) || b.length - a.length)
+    .flatMap((group) => [...group].sort((a, b) => COMMONNESS_RANK[a.commonness] - COMMONNESS_RANK[b.commonness]))
+    .slice(0, PREVIEW_LIMIT)
+    .map((entry) => ({
+      word: entry.word,
+      reading: entry.reading,
+      meaning: entry.meaning,
+      kanjiReading: entry.kanjiReading,
+    }));
+}
+
+// Fallback for kanji without a curated family: the card's own examples ("食べる (たべる)").
+// No reading chip here on purpose: legacy examples don't say which sound the kanji contributes.
+function previewFromExamples(kanji: KanjiItem): PreviewWord[] {
+  return (kanji.examples || []).slice(0, PREVIEW_LIMIT).map((ex) => {
+    const match = ex.japanese.match(/^([^(（]+)(?:[(（]([^)）]+)[)）])?/);
+    return {
+      word: match ? match[1].trim() : ex.japanese,
+      reading: match && match[2] ? match[2].trim() : "",
+      meaning: ex.english,
+    };
+  });
+}
+
+// "High / Tall / Expensive" → primary "High", also ["Tall", "Expensive"].
+function splitMeaning(meaning: string): { primary: string; also: string[] } {
+  const parts = meaning.split(/\s+\/\s+/).map((part) => part.trim()).filter(Boolean);
+  return { primary: parts[0] ?? meaning, also: parts.slice(1) };
+}
+
 export default function KanjiScrollScreen({
   currentKanjiIndex,
   kanjiData,
@@ -366,26 +422,14 @@ export default function KanjiScrollScreen({
   // Curated word-family data (grouped-by-reading source, powers the deep-dive panel)
   const curatedWordFamily: KanjiWordEntry[] = KANJI_WORD_FAMILIES[currentKanji.kanji] || [];
   const hasCuratedWordFamily = curatedWordFamily.length > 0;
+  const curatedReadingCount = new Set(curatedWordFamily.map((entry) => entry.kanjiReading)).size;
 
-  // Extract manually curated word family or parse from examples (quick on-card glance list)
-  const rawWordFamily = curatedWordFamily;
-  const wordFamily: KanjiWordEntry[] = rawWordFamily.length > 0 
-    ? rawWordFamily 
-    : (currentKanji.examples || []).map((ex) => {
-        const match = ex.japanese.match(/^([^(（]+)(?:[(（]([^)）]+)[)）])?/);
-        const word = match ? match[1].trim() : ex.japanese;
-        const reading = match && match[2] ? match[2].trim() : "";
-        return {
-          word,
-          reading,
-          meaning: ex.english,
-          kanjiReading: currentKanji.kanji,
-          readingType: ex.japanese.includes(currentKanji.onyomi) ? "onyomi" : "kunyomi",
-          commonness: "common"
-        } as KanjiWordEntry;
-      });
-
-  const hasWordFamily = wordFamily.length > 0;
+  // Concise on-card preview (strongest pattern) instead of a scrollable copy of the family
+  const previewWords: PreviewWord[] = hasCuratedWordFamily
+    ? pickPreviewFromFamily(curatedWordFamily)
+    : previewFromExamples(currentKanji);
+  const hasPreview = previewWords.length > 0;
+  const { primary: primaryMeaning, also: alsoMeanings } = splitMeaning(currentKanji.meaning);
   const deconstruction = getKanjiDeconstruction(currentKanji.kanji);
 
   // Difficulty Star Calculator (Based on stroke count & index)
@@ -432,7 +476,7 @@ export default function KanjiScrollScreen({
                 }}
                 className={`p-1.5 px-3 rounded-xl text-xs font-mono font-extrabold tracking-wider transition-all flex items-center gap-1.5 cursor-pointer border ${
                   isRecallMode 
-                    ? "bg-natural-clay text-white border-transparent shadow-md" 
+                    ? "bg-natural-clay kz-on-accent border-transparent shadow-md" 
                     : "bg-natural-bg hover:bg-natural-clay/10 border-natural-border text-natural-clay"
                 }`}
                 title="Toggle Active Recall Flashcard Mode"
@@ -443,151 +487,71 @@ export default function KanjiScrollScreen({
             </div>
           </div>
 
-          {/* 🏯 TRADITIONAL JAPANESE KANJI CARD CONTAINER */}
-          <div className="relative overflow-hidden rounded-[2rem] border-2 border-natural-border/70 bg-natural-card-light p-6 shadow-md md:p-8 flex flex-col gap-6 select-none">
-            
-            {/* Elegant Sun / Traditional Watermark Background under character */}
-            <div className="absolute inset-0 pointer-events-none opacity-[0.03] flex items-center justify-center">
-              <div className="w-[18rem] h-[18rem] rounded-full border-[10px] border-natural-forest-light flex items-center justify-center">
-                <div className="w-[12rem] h-[12rem] rounded-full border-[4px] border-natural-forest-light"></div>
-              </div>
-            </div>
+          {/* 🏯 KANJI CARD — hierarchy: specimen → meaning → readings → key words → footer */}
+          <div className="kz-specimen relative overflow-hidden p-6 shadow-md md:p-8 flex flex-col gap-5 select-none">
 
             {/* Card Header Stamp */}
             <div className="flex items-center justify-between border-b border-natural-border/50 pb-2 relative z-10">
-              <span className="text-[10.5px] text-natural-forest-light/70 font-serif font-extrabold tracking-[0.18em] uppercase">
+              <span className="kz-label text-natural-forest-light/75">
                 Japanese Kanji Card
               </span>
-              <span className="text-[10px] text-natural-clay font-mono tracking-widest uppercase font-extrabold">
+              <span className="kz-label text-natural-clay">
                 Card {currentKanjiIndex + 1} of {kanjiData.length}
               </span>
             </div>
 
-            {/* Giant Central Serif Kanji */}
-            <div className="flex flex-col items-center justify-center py-4 relative z-10">
-              <motion.span 
-                key={currentKanji.kanji}
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="text-[6.5rem] md:text-[8rem] font-serif font-black text-natural-charcoal leading-none select-text filter drop-shadow-sm tracking-normal"
-                title="Hold or double click to highlight"
-              >
-                {currentKanji.kanji}
-              </motion.span>
-            </div>
+            {/* 1 · Kanji specimen: fixed-size stage with a local Digital / Written / Compare control */}
+            <KanjiSpecimen kanji={currentKanji.kanji} onSpeak={() => speakJapanese(currentKanji.kanji)} />
 
-            {/* Middle Divider: Double fine lines */}
+            {/* Middle Divider: the card's one ornamental rule */}
             <div className="w-full border-t-2 border-double border-natural-border relative z-10"></div>
 
-            {/* Readings and Meanings Block split vertically */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 divide-y md:divide-y-0 md:divide-x divide-natural-border/60 relative z-10">
-              
-              {/* Meaning Column */}
-              <div className="flex flex-col items-center justify-center pb-3 md:pb-0 md:pr-4">
-                <span className="text-[10px] text-natural-forest-light/60 font-mono uppercase tracking-wider block mb-1 font-extrabold">
-                  Meaning
-                </span>
-
-                {isRecallMode && !revealMeaning ? (
-                  <button
-                    type="button"
-                    onClick={() => setRevealMeaning(true)}
-                    className="px-4 py-2 bg-natural-clay/10 border border-dashed border-natural-clay/40 text-natural-clay hover:bg-natural-clay/20 text-xs font-serif font-extrabold tracking-wide rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm"
-                  >
-                    <Lightbulb className="w-3.5 h-3.5 animate-pulse" />
-                    Reveal Meaning
-                  </button>
-                ) : (
-                  <motion.h3 
-                    initial={{ opacity: isRecallMode ? 0 : 1 }}
-                    animate={{ opacity: 1 }}
-                    className="text-2xl font-serif font-extrabold text-natural-charcoal text-center"
-                  >
-                    {currentKanji.meaning}
-                  </motion.h3>
-                )}
+            {/* 2 · Core meaning  |  3 · Readings */}
+            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-4 divide-y md:divide-y-0 md:divide-x divide-natural-border/60 relative z-10">
+              <div className="flex flex-col items-center justify-center gap-1.5 pb-4 md:pb-0 md:pr-5 text-center">
+                <span className="kz-label">Meaning</span>
+                <RecallMask
+                  masked={isRecallMode && !revealMeaning}
+                  onReveal={() => setRevealMeaning(true)}
+                  label="Reveal Meaning"
+                  icon={<Lightbulb className="w-3.5 h-3.5" />}
+                  tone="accent"
+                  className="flex min-h-[3rem] min-w-[10rem] flex-col items-center justify-center"
+                >
+                  <h3 className="text-2xl font-serif font-extrabold text-natural-charcoal text-center text-balance leading-tight">
+                    {primaryMeaning}
+                  </h3>
+                  {alsoMeanings.length > 0 && (
+                    <p className="mt-1 text-xs font-medium text-natural-forest-light text-center">
+                      also: {alsoMeanings.join(" · ")}
+                    </p>
+                  )}
+                </RecallMask>
               </div>
 
-              {/* Readings Column */}
-              <div className="flex flex-col gap-3 justify-center pt-3 md:pt-0 md:pl-6 text-center md:text-left">
-                {isRecallMode && !revealReadings ? (
-                  <div className="flex justify-center md:justify-start">
-                    <button
-                      type="button"
-                      onClick={() => setRevealReadings(true)}
-                      className="px-4 py-2 bg-natural-sage/10 border border-dashed border-natural-sage/40 text-natural-forest-light hover:bg-natural-sage/20 text-xs font-serif font-extrabold tracking-wide rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm"
-                    >
-                      <Layers className="w-3.5 h-3.5 animate-pulse" />
-                      Reveal Readings
-                    </button>
-                  </div>
-                ) : (
-                  <motion.div 
-                    initial={{ opacity: isRecallMode ? 0 : 1 }}
-                    animate={{ opacity: 1 }}
-                    className="grid grid-cols-2 gap-4 text-xs"
-                  >
-                    <div>
-                      <span className="text-[10px] text-natural-clay font-mono uppercase tracking-wider block mb-0.5 font-bold">
-                        On: {currentKanji.onyomiRomaji}
-                      </span>
-                      <span className="font-serif font-bold text-[15px] text-natural-charcoal">
-                        {currentKanji.onyomi}
-                      </span>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] text-natural-sage font-mono uppercase tracking-wider block mb-0.5 font-bold">
-                        Kun: {currentKanji.kunyomiRomaji}
-                      </span>
-                      <span className="font-serif font-bold text-[15px] text-natural-forest">
-                        {currentKanji.kunyomi}
-                      </span>
-                    </div>
-                  </motion.div>
-                )}
+              <div className="pt-4 md:pt-0 md:pl-5">
+                <ReadingSummary
+                  kanji={currentKanji}
+                  masked={isRecallMode && !revealReadings}
+                  onReveal={() => setRevealReadings(true)}
+                />
               </div>
             </div>
 
-            {/* 📖 VOCABULARY COMPOUNDS GRID (Directly on the Card) */}
-            {hasWordFamily && (
-              <div className="flex flex-col gap-2.5 relative z-10 mt-2">
+            {/* 4 · Key words: a short preview of the strongest pattern */}
+            {hasPreview && (
+              <div className="flex flex-col gap-2 relative z-10">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-natural-forest-light/60 font-mono uppercase tracking-widest font-extrabold">
-                    Vocabulary Compounds
-                  </span>
+                  <span className="kz-label">Key Words</span>
                   <span className="h-px flex-1 bg-natural-border/50"></span>
-                  {hasCuratedWordFamily && (
-                    <button
-                      type="button"
-                      onClick={() => setIsWordFamilyOpen(true)}
-                      className="px-2.5 py-1 bg-natural-clay/10 hover:bg-natural-clay/20 border border-natural-clay/30 rounded-lg text-[9px] font-mono font-extrabold uppercase tracking-wider text-natural-clay transition cursor-pointer flex items-center gap-1"
-                      title="Open the full reading-grouped word family panel"
-                    >
-                      <Sparkles className="w-3 h-3" />
-                      Word Family
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => speakJapanese(currentKanji.kanji)}
-                    className="p-1 hover:bg-natural-forest/10 rounded-lg text-natural-forest transition cursor-pointer"
-                    title="Speak character"
-                  >
-                    <Volume2 className="w-3.5 h-3.5" />
-                  </button>
                 </div>
 
-                <div className="bg-natural-bg/50 border border-natural-border/60 rounded-2xl p-2 md:p-3 divide-y divide-natural-border/30 max-h-[220px] overflow-y-auto">
-                  {wordFamily.map((entry, idx) => {
+                <div className="kz-inset px-3 py-1 divide-y divide-natural-border/30">
+                  {previewWords.map((entry, idx) => {
                     const isMasked = isRecallMode && !revealedVocab[idx];
                     return (
-                      <div 
-                        key={idx} 
-                        className="flex items-center justify-between gap-3 py-2 px-1 hover:bg-natural-card/30 rounded-xl transition"
-                      >
+                      <div key={`${entry.word}-${idx}`} className="flex items-center justify-between gap-3 py-2">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          {/* native sound speaker */}
                           <button
                             type="button"
                             onClick={(e) => {
@@ -595,66 +559,95 @@ export default function KanjiScrollScreen({
                               speakJapanese(entry.word);
                             }}
                             className="p-1 bg-natural-bg hover:bg-natural-forest/10 rounded-lg text-natural-forest-light hover:text-natural-forest transition cursor-pointer shrink-0 border border-natural-border/50"
+                            aria-label={`Speak ${entry.word}`}
                           >
                             <Volume2 className="w-3 h-3" />
                           </button>
-                          
+
+                          {/* The sound this kanji makes here. Hidden with the meaning in recall mode. */}
+                          {entry.kanjiReading && (
+                            <span
+                              className={`min-w-[2.75rem] shrink-0 rounded-lg border border-natural-clay/30 bg-natural-clay/10 px-1.5 py-0.5 text-center font-serif text-[13px] font-bold text-natural-clay ${
+                                isMasked ? "invisible" : ""
+                              }`}
+                              title="The sound this kanji makes in this word"
+                              aria-hidden={isMasked || undefined}
+                            >
+                              {entry.kanjiReading}
+                            </span>
+                          )}
+
                           <div className="min-w-0">
                             <span className="font-serif font-extrabold text-[15px] text-natural-charcoal block leading-tight">
                               {entry.word}
                             </span>
-                            <span className="text-[10px] text-natural-forest-light font-mono font-medium block">
-                              ({entry.reading})
-                            </span>
+                            {entry.reading && (
+                              <span className="text-[10px] text-natural-forest-light font-mono font-medium block">
+                                ({entry.reading})
+                              </span>
+                            )}
                           </div>
                         </div>
 
-                        {/* Vocabulary Translation (Maskable in Active Recall Mode) */}
-                        <div className="text-right shrink-0">
-                          {isMasked ? (
-                            <button
-                              type="button"
-                              onClick={() => setRevealedVocab(prev => ({ ...prev, [idx]: true }))}
-                              className="px-2 py-0.5 bg-natural-clay/10 hover:bg-natural-clay/25 text-[10px] text-natural-clay font-mono font-extrabold rounded-lg border border-dashed border-natural-clay/30 transition cursor-pointer"
-                            >
-                              ? RECALL
-                            </button>
-                          ) : (
-                            <span className="text-xs font-serif font-extrabold text-natural-charcoal">
-                              {entry.meaning}
-                            </span>
-                          )}
-                        </div>
+                        <RecallMask
+                          masked={isMasked}
+                          onReveal={() => setRevealedVocab((prev) => ({ ...prev, [idx]: true }))}
+                          label="? RECALL"
+                          tone="accent"
+                          size="sm"
+                          className="flex min-h-[1.75rem] min-w-[5.5rem] max-w-[9rem] shrink-0 items-center justify-end"
+                        >
+                          <span className="block text-right text-xs font-serif font-extrabold text-natural-charcoal">
+                            {entry.meaning}
+                          </span>
+                        </RecallMask>
                       </div>
                     );
                   })}
                 </div>
+
+                {hasCuratedWordFamily && (
+                  <button
+                    type="button"
+                    onClick={() => setIsWordFamilyOpen(true)}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-natural-clay/30 bg-natural-clay/10 px-3 py-2 text-[11px] font-mono font-extrabold uppercase tracking-wider text-natural-clay transition hover:bg-natural-clay/20 cursor-pointer"
+                    title="Open the full reading-grouped word family panel"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    See all {curatedWordFamily.length} words · {curatedReadingCount} reading{curatedReadingCount === 1 ? "" : "s"}
+                  </button>
+                )}
               </div>
             )}
 
-            {/* Card Footer Details */}
-            <div className="flex items-center justify-between border-t border-natural-border/50 pt-3 relative z-10 text-[11px] font-mono font-bold text-natural-forest-light/60">
-              <span>JLPT N5</span>
-              
-              {/* Difficulty Stars */}
-              <div className="flex items-center gap-0.5" title={`Difficulty Level ${difficultyStarsCount} of 5`}>
-                <span className="text-[10px] uppercase font-bold text-natural-forest-light/50 mr-1 font-mono">Diff:</span>
+            {/* Card Footer: level, stroke count, difficulty */}
+            <div className="flex items-center justify-between gap-3 border-t border-natural-border/50 pt-3 relative z-10 text-[11px] font-mono font-bold text-natural-forest-light/75">
+              <span>
+                JLPT N5 · {currentKanji.strokeCount} stroke{currentKanji.strokeCount === 1 ? "" : "s"}
+              </span>
+
+              <span className="hidden sm:inline font-semibold text-natural-clay/75 italic">astra-chan.dojo</span>
+
+              <div
+                className="flex items-center gap-0.5"
+                role="img"
+                aria-label={`Difficulty ${difficultyStarsCount} of 5`}
+                title={`Difficulty Level ${difficultyStarsCount} of 5`}
+              >
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <span 
-                    key={i} 
+                  <span
+                    key={i}
                     className={`text-xs ${i < difficultyStarsCount ? "text-natural-clay" : "text-natural-border"}`}
                   >
                     ★
                   </span>
                 ))}
               </div>
-
-              <span className="font-semibold text-natural-clay/75 italic">astra-chan.dojo</span>
             </div>
           </div>
 
           {/* 🧩 ASTRA'S MEMORY KEY: RADICAL & MNEMONIC BREAKDOWN */}
-          <div className="bg-natural-card border border-natural-border/70 p-5 rounded-3xl shadow-sm flex flex-col gap-4">
+          <div className="kz-panel p-5 shadow-sm flex flex-col gap-4">
             <div className="flex items-center gap-2 border-b border-natural-border pb-2">
               <Compass className="w-4 h-4 text-natural-clay" />
               <h4 className="text-xs font-serif font-extrabold text-natural-forest uppercase tracking-wider">
@@ -663,14 +656,14 @@ export default function KanjiScrollScreen({
             </div>
 
             {/* Radical Equation Blocks */}
-            <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3 py-1 bg-natural-bg/50 border border-natural-border/50 p-3 rounded-2xl">
+            <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3 py-1">
               {deconstruction.radicals.map((rad, rIdx) => (
                 <div key={rIdx} className="flex items-center gap-2">
                   <div className="flex flex-col items-center bg-natural-card-light border border-natural-border px-3 py-1.5 rounded-xl min-w-[55px] text-center shadow-xs">
                     <span className="text-lg font-serif font-bold text-natural-charcoal leading-none">
                       {rad.char}
                     </span>
-                    <span className="text-[9px] text-natural-forest-light font-sans font-bold uppercase mt-1 leading-none">
+                    <span className="text-[10px] text-natural-forest-light font-sans font-bold uppercase mt-1 leading-none">
                       {rad.meaning.split(" / ")[0]}
                     </span>
                   </div>
@@ -686,16 +679,16 @@ export default function KanjiScrollScreen({
                 <span className="text-lg font-serif font-bold text-natural-forest leading-none">
                   {currentKanji.kanji}
                 </span>
-                <span className="text-[9px] text-natural-forest font-sans font-bold uppercase mt-1 leading-none block">
-                  {currentKanji.meaning}
+                <span className="text-[10px] text-natural-forest font-sans font-bold uppercase mt-1 leading-none block">
+                  {primaryMeaning}
                 </span>
               </div>
             </div>
 
             {/* Mnemonic Device speech box */}
             <div className="p-3 bg-natural-bg border-l-4 border-natural-clay rounded-r-2xl">
-              <span className="text-[9px] font-mono text-natural-clay uppercase tracking-widest font-bold block mb-1">
-                Visual Composition Story (Mnemonic Device)
+              <span className="kz-label text-natural-clay block mb-1">
+                Memory Story
               </span>
               <p className="text-xs text-natural-charcoal font-serif font-bold italic leading-relaxed">
                 "{deconstruction.mnemonic}"
@@ -739,7 +732,7 @@ export default function KanjiScrollScreen({
                 <button
                   type="button"
                   onClick={handleContemplateKanji}
-                  className="px-4 py-1.5 bg-natural-clay text-white hover:bg-natural-clay/90 rounded-xl text-xs font-serif font-extrabold tracking-wide transition shadow-sm cursor-pointer"
+                  className="px-4 py-1.5 bg-natural-clay kz-on-accent hover:bg-natural-clay/90 rounded-xl text-xs font-serif font-extrabold tracking-wide transition shadow-sm cursor-pointer"
                 >
                   Study (+40 XP)
                 </button>
@@ -827,7 +820,7 @@ export default function KanjiScrollScreen({
                     {Number(analysisResult.score) || "?"}%
                   </div>
                   <div>
-                    <span className="text-[9px] font-mono text-[#D26E40] uppercase tracking-wider font-extrabold">VERDICT ACCURACY</span>
+                    <span className="text-[9px] font-mono text-natural-clay uppercase tracking-wider font-extrabold">VERDICT ACCURACY</span>
                     <h5 className="font-serif font-extrabold text-xs text-natural-forest leading-tight mt-0.5">
                       {analysisResult.feedbackTitle}
                     </h5>
