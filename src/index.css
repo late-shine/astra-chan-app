@@ -365,3 +365,52 @@ input, select, textarea, button {
   .kz-on-accent { color: var(--kz-on-accent); }
   .kz-scrim { background-color: var(--kz-scrim); }
 }
+
+
+/* ── Kanji specimen forms (Phase A3) ───────────────────────────────────────
+   The specimen's Digital / Written faces are LOCAL to the specimen and do not
+   follow the app-wide font toggle. Fallback stacks are ordered so a missing web
+   font degrades to a Japanese system face rather than a Latin/emoji font.
+   The stage has a fixed height in every mode so switching form never resizes the card.
+───────────────────────────────────────────────────────────────────────────── */
+.kz-form-digital {
+  font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+  font-weight: 700;
+}
+.kz-form-written {
+  font-family: "Klee One", "YuKyokasho", "Yu Kyokasho", "UD Digi Kyokasho NP-R", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  font-weight: 600;
+}
+
+.kz-specimen-stage {
+  --kz-stage-size: 10.5rem;
+  --kz-stage-gap: 0.75rem;
+  --kz-caption-h: 1.25rem;
+  height: calc(var(--kz-stage-size) + var(--kz-caption-h));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--kz-stage-gap);
+}
+@media (min-width: 768px) {
+  .kz-specimen-stage { --kz-stage-size: 12rem; }
+}
+.kz-specimen-item {
+  flex: none;
+  width: min(var(--kz-stage-size), 100%);
+}
+.kz-specimen-stage[data-compare="true"] .kz-specimen-item {
+  width: min(var(--kz-stage-size), calc((100% - var(--kz-stage-gap)) / 2));
+}
+.kz-specimen-frame {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+}
+.kz-specimen-caption {
+  height: var(--kz-caption-h);
+  line-height: var(--kz-caption-h);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
