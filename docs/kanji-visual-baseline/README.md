@@ -118,6 +118,9 @@ File naming: `<viewport>/<NN>-<state>.png`
 | 09 | ai-error | Console mock, `MODE = "error"` |
 | 10 | family-short | `水` → Word Family (2 groups, 4 words) |
 | 11 | family-long | `生` → Word Family (6 groups, 6 words) |
+| 12 | form-digital | Form control → Digital (A3) |
+| 13 | form-written | Form control → Written (A3) |
+| 14 | form-compare | Form control → Compare (A3). Also capture at 360px to check both frames stay equal-sized |
 
 Theme + font sweep (desktop only) in `theme-sweep/`: states **02**, **07**, **11** across
 `light`, `dark-cosmic`, `dark-emerald`, `dark-maple`, `dark-cyber`, plus the default theme;
