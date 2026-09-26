@@ -2061,6 +2061,12 @@ export default function App() {
     setCurrentKanjiIndex(target);
     setMascotMood("kanji");
     speakJapanese(KANJI_DATA[target].kanji);
+    // Phase A5 verifier fix: DrawingCanvas now clears its ink whenever the kanji changes;
+    // clear the matching AI-feedback state here too, or Review mode would show a blank
+    // canvas next to the *previous* kanji's score and advice. Doesn't touch isAnalyzing —
+    // an in-flight request settling after navigation is a separate, pre-existing edge case.
+    setAnalysisResult(null);
+    setAnalysisError(null);
   };
 
   const handleContemplateKanji = () => {

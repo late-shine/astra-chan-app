@@ -6,7 +6,6 @@ import {
   ChevronLeft, 
   ChevronRight, 
   Plus, 
-  RefreshCw, 
   Sparkles, 
   Volume2, 
   Eye, 
@@ -24,7 +23,6 @@ import ReadingSummary from "./ReadingSummary";
 import RecallMask from "./RecallMask";
 import { KANJI_WORD_FAMILIES } from "../kanjiWordFamilies";
 import type { KanjiItem, KanjiWordEntry, SRSCard } from "../types";
-import companionImg from "../assets/images/synthid-removed-Gemini_Generated_Image_csh1tcsh1tcsh1tc.png";
 
 type CurrentScreen = "menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo";
 type AnalysisResult = { score: number; feedbackTitle: string; advice: string; validDrawing?: boolean } | null;
@@ -750,115 +748,16 @@ export default function KanjiScrollScreen({
           </div>
         </div>
 
-        {/* Right Column: Calligraphy Workspace */}
+        {/* Right Column: Calligraphy Workspace — Phase A5: one practice station with
+            explicit Watch/Trace/Write/Review modes instead of two stacked cards. */}
         <div className="md:col-span-2 flex flex-col justify-start gap-4 animate-fade-in">
-          <DrawingCanvas referenceChar={currentKanji.kanji} />
-
-          {/* Astra-Chan Calligraphy Analysis Station */}
-          <div className="bg-natural-card border border-natural-border/70 p-4 rounded-3xl shadow-sm flex flex-col gap-3">
-            <div className="flex items-center justify-between border-b border-natural-border/40 pb-2">
-              <span className="text-[10px] font-mono text-natural-clay uppercase tracking-widest font-extrabold flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-natural-clay" />
-                ASTRA-CHAN'S INK STATION
-              </span>
-              <span className="text-[9px] font-mono text-natural-forest bg-natural-forest/10 px-2 py-0.5 rounded font-extrabold uppercase">
-                AI Accuracy Engine
-              </span>
-            </div>
-
-            {/* Submit Button or Loading State */}
-            {isAnalyzing ? (
-              <div className="flex flex-col items-center justify-center p-6 bg-natural-bg/50 border border-dashed border-natural-border/80 rounded-2xl text-center gap-3">
-                <RefreshCw className="w-8 h-8 text-natural-clay animate-spin" />
-                <div>
-                  <p className="text-xs font-serif font-bold text-natural-charcoal">Astra-chan is scanning your strokes...</p>
-                  <p className="text-[10.5px] text-natural-forest-light mt-1 font-medium italic">"Checking brush weights, alignment, and spiritual canvas balance!"</p>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={handleEvaluateKanjiDrawing}
-                className="w-full py-3 bg-natural-forest text-natural-bg hover:bg-natural-forest/90 border border-transparent rounded-2xl text-xs font-serif font-extrabold tracking-wider transition hover:shadow-md cursor-pointer flex items-center justify-center gap-2 uppercase animate-pulse"
-              >
-                ✨ Check Stroke Accuracy with Astra-chan
-              </button>
-            )}
-
-            {/* Rendering Assessment Errors — prominent fallback with offline hint */}
-            {analysisError && (
-              <div className="p-4 bg-natural-terracotta/10 border border-natural-terracotta/30 rounded-2xl text-left flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">⚠️</span>
-                  <span className="text-xs font-serif font-extrabold text-natural-terracotta">AI Checker Unavailable</span>
-                </div>
-                <p className="text-xs text-natural-charcoal leading-relaxed font-sans">{analysisError}</p>
-                <div className="mt-1 p-2.5 bg-natural-bg/70 rounded-xl border border-natural-border/50">
-                  <p className="text-[10px] font-mono text-natural-forest-light font-semibold uppercase tracking-wider mb-1">✏️ Offline Self-Check Tips</p>
-                  <ul className="text-[11px] text-natural-charcoal/80 leading-relaxed space-y-0.5 font-sans">
-                    <li>• Does your stroke count match the reference ghost character?</li>
-                    <li>• Are strokes flowing top-to-bottom and left-to-right?</li>
-                    <li>• Does it fit neatly inside the grid square?</li>
-                  </ul>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleEvaluateKanjiDrawing}
-                  className="mt-1 py-2 bg-natural-forest/10 hover:bg-natural-forest/20 text-natural-forest border border-natural-forest/20 rounded-xl text-xs font-serif font-bold tracking-wider transition cursor-pointer"
-                >
-                  ↻ Retry with AI
-                </button>
-              </div>
-            )}
-
-            {/* Rendering Astra-chan's Success / Critique Report Card */}
-            {analysisResult && (
-              <div className="flex flex-col gap-3">
-                {/* Score Badge Header */}
-                <div className="flex items-center gap-3 p-3 bg-natural-bg rounded-2xl border border-natural-border/50">
-                  <div className="w-12 h-12 rounded-full border-2 border-natural-clay flex items-center justify-center bg-natural-card font-mono text-base font-extrabold text-natural-charcoal shadow-inner shrink-0 relative">
-                    {Number(analysisResult.score) || "?"}%
-                  </div>
-                  <div>
-                    <span className="text-[9px] font-mono text-natural-clay uppercase tracking-wider font-extrabold">VERDICT ACCURACY</span>
-                    <h5 className="font-serif font-extrabold text-xs text-natural-forest leading-tight mt-0.5">
-                      {analysisResult.feedbackTitle}
-                    </h5>
-                    {!analysisResult.validDrawing && (
-                      <span className="block text-[9px] text-natural-forest-light mt-1 font-medium">
-                        0% means Astra did not detect a gradeable ink attempt — try again inside the grid.
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Mascot Speech Bubble containing actual tips */}
-                <div className="relative bg-natural-bg/60 border border-natural-border p-3.5 rounded-2xl text-left shadow-sm">
-                  {/* Little triangle for bubble pointing upwards */}
-                  <div className="absolute top-[-6px] left-8 w-3 h-3 bg-natural-card border-t border-l border-natural-border rotate-45"></div>
-
-                  <div className="flex gap-2.5 items-start relative z-10">
-                    <div className="w-8 h-8 rounded-full border border-natural-forest/20 bg-natural-bg overflow-hidden shrink-0 shadow-sm relative">
-                      <img
-                        src={companionImg}
-                        alt="Astra-chan"
-                        referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover scale-105"
-                      />
-                    </div>
-                    <div className="text-xs text-natural-charcoal/90 leading-relaxed font-sans font-medium whitespace-pre-wrap flex-grow">
-                      <span className="font-serif font-extrabold text-natural-forest block mb-1">Astra-chan says:</span>
-                      {analysisResult.advice}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <p className="text-[10px] text-natural-forest-light text-center leading-normal italic px-2 font-medium">
-              Tip: Be sure to draw inside the grid guidelines frame, trace accurately, and clear previous brushmarks before evaluating new ones!
-            </p>
-          </div>
+          <DrawingCanvas
+            referenceChar={currentKanji.kanji}
+            isAnalyzing={isAnalyzing}
+            analysisResult={analysisResult}
+            analysisError={analysisError}
+            onEvaluate={handleEvaluateKanjiDrawing}
+          />
         </div>
       </motion.div>
 
