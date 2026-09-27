@@ -409,7 +409,7 @@ export default function KanjiWordFamilyPanel({
 
           {visibleLanes.length === 0 ? (
             <p className="kz-inset p-4 text-sm font-medium text-natural-forest-light">
-              No word family is available for {kanji.kanji} yet.
+              No curated word family yet for {kanji.kanji} — recognition only for now, never a guessed reading.
             </p>
           ) : (
             <ol className="relative flex flex-col gap-6 pl-8 before:absolute before:bottom-3 before:left-3 before:top-3 before:w-px before:bg-natural-border before:content-[''] md:pl-[3.25rem] md:before:left-[1.875rem]">

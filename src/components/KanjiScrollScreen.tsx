@@ -20,9 +20,12 @@ import DrawingCanvas from "./DrawingCanvas";
 import KanjiWordFamilyPanel from "./KanjiWordFamilyPanel";
 import KanjiSpecimen from "./KanjiSpecimen";
 import ReadingSummary from "./ReadingSummary";
+import type { KanjiReadingSet, KanjiReadingToken } from "./ReadingSummary";
 import RecallMask from "./RecallMask";
 import { KANJI_WORD_FAMILIES } from "../kanjiWordFamilies";
-import type { KanjiItem, KanjiWordEntry, SRSCard } from "../types";
+import { KANJI_READING_RECORDS_V2, KANJI_WORD_FAMILIES_V2 } from "../kanjiWordFamiliesV2";
+import { deriveWordEntryFromV2 } from "../kanjiReadingAdapter";
+import type { KanjiItem, KanjiReadingRecord, KanjiWordEntry, SRSCard } from "../types";
 
 type CurrentScreen = "menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo";
 type AnalysisResult = { score: number; feedbackTitle: string; advice: string; validDrawing?: boolean } | null;
@@ -378,6 +381,45 @@ function previewFromExamples(kanji: KanjiItem): PreviewWord[] {
   });
 }
 
+// ─── B1c: the 13 migrated families, read through the adapter ────────────────
+// kanjiWordFamiliesV2.ts is the source of truth for these 13 kanji from here on;
+// the legacy KANJI_WORD_FAMILIES import above is kept only as the fallback for
+// any kanji that isn't (or isn't yet) in the V2 store — currently none, since
+// both stores cover exactly the same 13 keys, but this keeps a partial-migration
+// state safe if that ever changes.
+//
+// Only KanjiReadingRecords tagged source "legacy-declared" are shown in the
+// On/Kun rows. kanjiWordFamiliesV2.ts also carries a handful of real secondary
+// onyomi tagged "word-family-derived" (e.g. 生's ショウ) that exist solely to
+// give a word-family entry an honest `baseReading` — they are deliberately
+// filtered out here so a learner never sees a reading the rest of the app
+// doesn't otherwise teach yet. See that file's header before changing either
+// side of this contract.
+function toDisplayTokens(records: KanjiReadingRecord[]): KanjiReadingToken[] {
+  return records
+    .filter((record) => record.source === "legacy-declared")
+    .sort((a, b) => a.priority - b.priority)
+    .map((record) => ({ kana: record.kana, romaji: record.romaji }));
+}
+
+// Undefined for any kanji not in the V2 store, so ReadingSummary's own
+// resolveReadings() falls through to its legacy onyomi/kunyomi-string parsing
+// exactly as before — zero change for the other 133 kanji.
+function migratedReadings(kanji: string): Partial<KanjiReadingSet> | undefined {
+  const records = KANJI_READING_RECORDS_V2[kanji];
+  if (!records) return undefined;
+  return { on: toDisplayTokens(records.onyomi), kun: toDisplayTokens(records.kunyomi) };
+}
+
+// Undefined for any kanji not in the V2 store, so the caller falls back to the
+// legacy KANJI_WORD_FAMILIES lookup (which is empty for the same 133 kanji anyway).
+function migratedWordFamily(kanji: string): KanjiWordEntry[] | undefined {
+  const family = KANJI_WORD_FAMILIES_V2[kanji];
+  if (!family) return undefined;
+  const records = KANJI_READING_RECORDS_V2[kanji];
+  return family.map((entry) => deriveWordEntryFromV2(entry, records));
+}
+
 // "High / Tall / Expensive" → primary "High", also ["Tall", "Expensive"].
 function splitMeaning(meaning: string): { primary: string; also: string[] } {
   const parts = meaning.split(/\s+\/\s+/).map((part) => part.trim()).filter(Boolean);
@@ -417,8 +459,11 @@ export default function KanjiScrollScreen({
     setIsWordFamilyOpen(false);
   }, [currentKanjiIndex]);
 
-  // Curated word-family data (grouped-by-reading source, powers the deep-dive panel)
-  const curatedWordFamily: KanjiWordEntry[] = KANJI_WORD_FAMILIES[currentKanji.kanji] || [];
+  // Curated word-family data (grouped-by-reading source, powers the deep-dive panel).
+  // B1c: prefer the migrated V2 family (13 kanji) read through the adapter; the legacy
+  // KANJI_WORD_FAMILIES lookup remains as the fallback for any kanji not yet migrated.
+  const curatedWordFamily: KanjiWordEntry[] =
+    migratedWordFamily(currentKanji.kanji) ?? KANJI_WORD_FAMILIES[currentKanji.kanji] ?? [];
   const hasCuratedWordFamily = curatedWordFamily.length > 0;
   const curatedReadingCount = new Set(curatedWordFamily.map((entry) => entry.kanjiReading)).size;
 
@@ -529,7 +574,7 @@ export default function KanjiScrollScreen({
 
               <div className="pt-4 md:pt-0 md:pl-5">
                 <ReadingSummary
-                  kanji={currentKanji}
+                  kanji={{ ...currentKanji, readings: migratedReadings(currentKanji.kanji) }}
                   masked={isRecallMode && !revealReadings}
                   onReveal={() => setRevealReadings(true)}
                 />
@@ -541,6 +586,17 @@ export default function KanjiScrollScreen({
               <div className="flex flex-col gap-2 relative z-10">
                 <div className="flex items-center gap-2">
                   <span className="kz-label">Key Words</span>
+                  {/* B1c: explicit honesty label for the 133 kanji with no curated word
+                      family yet — replaces silently omitting the reading chip with a
+                      stated "recognition only" state. Never guessed, never mislabeled. */}
+                  {!hasCuratedWordFamily && (
+                    <span
+                      className="rounded-md border border-dashed border-natural-border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-natural-forest-light/75"
+                      title="No curated word family yet for this kanji — these examples don't break down which sound it contributes. Recognition only for now, never a guessed reading."
+                    >
+                      Recognition only
+                    </span>
+                  )}
                   <span className="h-px flex-1 bg-natural-border/50"></span>
                 </div>
 
