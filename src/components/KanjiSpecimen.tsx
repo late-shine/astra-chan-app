@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { Volume2 } from "lucide-react";
 import { KANJI_FORM_NOTICES } from "../kanjiFormNotices";
@@ -8,18 +8,14 @@ import { KANJI_FORM_NOTICES } from "../kanjiFormNotices";
  *
  *  Digital : Noto Sans JP (printed / screen form)
  *  Written : Klee One     (textbook handwriting style)
- *  Compare : both, side by side, identical frame + grid + size
+ *  Compare : both, side by side, identical frame + size
  *
  * The form is LOCAL to this component (remembered in localStorage) and independent of
  * the app-wide Digital/Written font preference, which keeps styling all other Japanese
  * text. The stage has a fixed height, so switching form never resizes the card.
  *
- * API FOR B2 (stroke data)
- * ------------------------
- * Every frame is an SVG with viewBox "0 0 109 109" — the same coordinate space as
- * KanjiVG. Pass SVG children (e.g. <path d="…" />) as `strokeLayer` and they are drawn
- * over the glyph in every visible frame, so the authoritative stroke reference sits on
- * top of both fonts. The font glyph is only a visual comparison, never the stroke order.
+ * Stroke order is taught in the separate Watch workspace. This specimen stays focused on
+ * comparing font forms; it does not overlay stroke paths on top of the glyph.
  */
 export type KanjiForm = "digital" | "written" | "compare";
 type SingleForm = Exclude<KanjiForm, "compare">;
@@ -28,8 +24,8 @@ export interface KanjiSpecimenProps {
   kanji: string;
   /** Speaks the character; the speaker button only renders when provided. */
   onSpeak?: () => void;
-  /** SVG children in a 109×109 viewBox (B2). Rendered above the glyph in each frame. */
-  strokeLayer?: ReactNode;
+  /** Shared B2 practice-guide visibility preference. */
+  showGrid: boolean;
   /** One-line "notice this" note. Defaults to KANJI_FORM_NOTICES[kanji]. */
   notice?: string;
 }
@@ -61,11 +57,11 @@ function readInitialForm(): KanjiForm {
 interface FrameProps {
   form: SingleForm;
   kanji: string;
-  strokeLayer?: ReactNode;
   fallback: boolean;
+  showGrid: boolean;
 }
 
-function SpecimenFrame({ form, kanji, strokeLayer, fallback }: FrameProps) {
+function SpecimenFrame({ form, kanji, fallback, showGrid }: FrameProps) {
   const meta = FRAME_META[form];
   return (
     <div className="kz-specimen-item">
@@ -76,13 +72,19 @@ function SpecimenFrame({ form, kanji, strokeLayer, fallback }: FrameProps) {
           role="img"
           aria-label={`${kanji} in ${meta.name}`}
         >
-          {/* Identical practice grid in every frame: centre cross + diagonals */}
-          <g className="text-natural-border" stroke="currentColor" strokeWidth="0.75" strokeDasharray="3 3" fill="none" opacity="0.7">
-            <line x1="54.5" y1="2" x2="54.5" y2="107" />
-            <line x1="2" y1="54.5" x2="107" y2="54.5" />
-            <line x1="2" y1="2" x2="107" y2="107" />
-            <line x1="107" y1="2" x2="2" y2="107" />
-          </g>
+          {showGrid && (
+            <>
+              {/* Identical practice grid in every frame: centre cross + very light diagonals */}
+              <g className="text-natural-border" stroke="currentColor" strokeWidth="0.6" strokeDasharray="3 3" fill="none" opacity="0.38">
+                <line x1="54.5" y1="2" x2="54.5" y2="107" />
+                <line x1="2" y1="54.5" x2="107" y2="54.5" />
+              </g>
+              <g className="text-natural-border" stroke="currentColor" strokeWidth="0.5" strokeDasharray="3 3" fill="none" opacity="0.16">
+                <line x1="2" y1="2" x2="107" y2="107" />
+                <line x1="107" y1="2" x2="2" y2="107" />
+              </g>
+            </>
+          )}
           <motion.g
             key={kanji}
             initial={{ opacity: 0, scale: 0.92 }}
@@ -101,7 +103,6 @@ function SpecimenFrame({ form, kanji, strokeLayer, fallback }: FrameProps) {
               {kanji}
             </text>
           </motion.g>
-          {strokeLayer}
         </svg>
       </div>
       {/* Short label always; the font name joins it where there is room (md and up) */}
@@ -117,7 +118,7 @@ function SpecimenFrame({ form, kanji, strokeLayer, fallback }: FrameProps) {
   );
 }
 
-export default function KanjiSpecimen({ kanji, onSpeak, strokeLayer, notice }: KanjiSpecimenProps) {
+export default function KanjiSpecimen({ kanji, onSpeak, showGrid, notice }: KanjiSpecimenProps) {
   const [form, setForm] = useState<KanjiForm>(readInitialForm);
   const [fontOk, setFontOk] = useState<Record<SingleForm, boolean>>({ digital: true, written: true });
 
@@ -162,8 +163,8 @@ export default function KanjiSpecimen({ kanji, onSpeak, strokeLayer, notice }: K
               <SpecimenFrame
                 form={single}
                 kanji={kanji}
-                strokeLayer={strokeLayer}
                 fallback={!fontOk[single]}
+                showGrid={showGrid}
               />
             </span>
           ))}
@@ -183,6 +184,7 @@ export default function KanjiSpecimen({ kanji, onSpeak, strokeLayer, notice }: K
       </div>
 
       {/* Form control: local to the specimen, three explicit states */}
+      <div className="flex flex-wrap items-center justify-center gap-2">
       <div
         role="radiogroup"
         aria-label="Kanji form"
@@ -208,6 +210,7 @@ export default function KanjiSpecimen({ kanji, onSpeak, strokeLayer, notice }: K
             </button>
           );
         })}
+      </div>
       </div>
 
       {note && (

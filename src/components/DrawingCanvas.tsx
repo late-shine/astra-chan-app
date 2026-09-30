@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useRef, useState, useEffect } from "react";
-import { Trash2, RotateCcw, Square, Eye, PenTool, Pencil, ClipboardCheck, Sparkles, RefreshCw } from "lucide-react";
+import React, { useRef, useState, useEffect, type ReactNode } from "react";
+import { Trash2, RotateCcw, Square, Eye, EyeOff, PenTool, Pencil, ClipboardCheck, Sparkles, RefreshCw } from "lucide-react";
 import companionImg from "../assets/images/synthid-removed-Gemini_Generated_Image_csh1tcsh1tcsh1tc.png";
 
 /**
@@ -54,6 +54,15 @@ interface DrawingCanvasProps {
   analysisResult: AnalysisResult;
   analysisError: string | null;
   onEvaluate: () => void;
+  /**
+   * Phase B2: real stroke demonstration for Watch mode. `watchStage` fills the canvas stage
+   * (square); `watchControls` goes in the footer. Both are optional: without them Watch shows
+   * the old "coming soon" placeholder. The canvas itself is untouched.
+   */
+  watchStage?: ReactNode;
+  watchControls?: ReactNode;
+  showGrid: boolean;
+  onToggleGrid: () => void;
 }
 
 // Ink palette. These are *pixel* colors written into the canvas and exported to the
@@ -79,7 +88,7 @@ const MODES: Array<{ id: PracticeMode; label: string; icon: typeof Eye; hint: st
     label: "Watch",
     icon: Eye,
     hint: "Preview the stroke demonstration",
-    caption: "Stroke demonstration — coming with real reference data.",
+    caption: "Watch the strokes drawn in the correct order.",
   },
   {
     id: "trace",
@@ -104,7 +113,7 @@ const MODES: Array<{ id: PracticeMode; label: string; icon: typeof Eye; hint: st
   },
 ];
 
-export default function DrawingCanvas({ referenceChar, isAnalyzing, analysisResult, analysisError, onEvaluate }: DrawingCanvasProps) {
+export default function DrawingCanvas({ referenceChar, isAnalyzing, analysisResult, analysisError, onEvaluate, watchStage, watchControls, showGrid, onToggleGrid }: DrawingCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [mode, setMode] = useState<PracticeMode>("trace");
   const [isDrawing, setIsDrawing] = useState(false);
@@ -281,10 +290,12 @@ export default function DrawingCanvas({ referenceChar, isAnalyzing, analysisResu
       {/* Grid Backplane & fixed-size Canvas — stays the same size in every mode */}
       <div className="relative w-[280px] h-[280px] bg-natural-bg border-2 border-natural-border rounded-2xl overflow-hidden shadow-inner">
         {/* Calligraphy Guideline Cross */}
-        <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-0">
-          <div className="absolute top-1/2 left-0 right-0 h-[1px] border-t border-dashed border-natural-border/40"></div>
-          <div className="absolute left-1/2 top-0 bottom-0 w-[1px] border-l border-dashed border-natural-border/40"></div>
-        </div>
+        {showGrid && (
+          <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-0">
+            <div className="absolute top-1/2 left-0 right-0 h-[1px] border-t border-dashed border-natural-border/30"></div>
+            <div className="absolute left-1/2 top-0 bottom-0 w-[1px] border-l border-dashed border-natural-border/30"></div>
+          </div>
+        )}
 
         {/* Floating backdrop ghost helper character — Trace mode only */}
         {mode === "trace" && referenceChar && (
@@ -310,19 +321,35 @@ export default function DrawingCanvas({ referenceChar, isAnalyzing, analysisResu
         />
 
         {/* Watch mode: honest placeholder, not a fake animation standing in for real stroke order */}
-        {mode === "watch" && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-natural-card/95 px-6 text-center">
-            <Eye className="h-6 w-6 text-natural-clay" />
-            <p className="kz-label text-natural-clay">Coming soon</p>
-            <p className="font-serif text-xs italic leading-snug text-natural-forest-light">
-              Astra-chan will draw each stroke here once reference stroke data is added.
-            </p>
-          </div>
-        )}
+        {mode === "watch" &&
+          (watchStage ? (
+            <div className="absolute inset-0 z-20 bg-natural-card">{watchStage}</div>
+          ) : (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-natural-card/95 px-6 text-center">
+              <Eye className="h-6 w-6 text-natural-clay" />
+              <p className="kz-label text-natural-clay">Coming soon</p>
+              <p className="font-serif text-xs italic leading-snug text-natural-forest-light">
+                Astra-chan will draw each stroke here once reference stroke data is added.
+              </p>
+            </div>
+          ))}
       </div>
+
+      <button
+        type="button"
+        onClick={onToggleGrid}
+        aria-pressed={showGrid}
+        title={showGrid ? "Hide practice guides" : "Show practice guides"}
+        className="mx-auto inline-flex min-h-8 items-center justify-center gap-1.5 rounded-xl border border-natural-border bg-natural-bg/60 px-3 py-1.5 font-mono text-[10px] font-extrabold uppercase tracking-wider text-natural-forest-light transition hover:border-natural-forest hover:text-natural-forest"
+      >
+        {showGrid ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+        {showGrid ? "Hide grid" : "Show grid"}
+      </button>
 
       {/* Mode-dependent footer, id'd as the tabs' shared panel */}
       <div role="tabpanel" id="kz-mode-panel" aria-labelledby={`kz-mode-tab-${mode}`} className="flex w-full flex-col gap-3">
+        {mode === "watch" && watchControls}
+
         {(mode === "trace" || mode === "write") && (
           <>
             {/* Row 1: Brush Color Picks & Thickness selectors */}

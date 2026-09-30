@@ -19,6 +19,12 @@ import {
 import DrawingCanvas from "./DrawingCanvas";
 import KanjiWordFamilyPanel from "./KanjiWordFamilyPanel";
 import KanjiSpecimen from "./KanjiSpecimen";
+import {
+  KanjiStrokePlayerProvider,
+  KanjiStrokeStage,
+  KanjiStrokeControls,
+} from "./KanjiStrokePlayer";
+import { prefetchKanjiStrokes } from "../kanjiStrokes/strokeStore";
 import ReadingSummary from "./ReadingSummary";
 import type { KanjiReadingSet, KanjiReadingToken } from "./ReadingSummary";
 import RecallMask from "./RecallMask";
@@ -443,6 +449,13 @@ export default function KanjiScrollScreen({
 }: KanjiScrollScreenProps) {
   const [isWordFamilyOpen, setIsWordFamilyOpen] = useState(false);
   const [isRecallMode, setIsRecallMode] = useState(false);
+  const [showGrid, setShowGrid] = useState(() => {
+    try {
+      return localStorage.getItem("astra_kanji_practice_grid") === "on";
+    } catch {
+      return false;
+    }
+  });
   
   // Recall individual state controls
   const [revealMeaning, setRevealMeaning] = useState(false);
@@ -451,6 +464,18 @@ export default function KanjiScrollScreen({
 
   const currentKanji = kanjiData[currentKanjiIndex];
 
+  const toggleGrid = () => {
+    setShowGrid((visible) => {
+      const next = !visible;
+      try {
+        localStorage.setItem("astra_kanji_practice_grid", next ? "on" : "off");
+      } catch {
+        /* not fatal: the preference just will not persist */
+      }
+      return next;
+    });
+  };
+
   // Auto-reset reveal state when moving between characters
   useEffect(() => {
     setRevealMeaning(false);
@@ -458,6 +483,14 @@ export default function KanjiScrollScreen({
     setRevealedVocab({});
     setIsWordFamilyOpen(false);
   }, [currentKanjiIndex]);
+
+  // Phase B2: stroke data for the specimen overlay (the Watch player loads the same cached data),
+  // and a quiet warm-up of only the two neighbouring cards so Prev/Next stay instant.
+  useEffect(() => {
+    const n = kanjiData.length;
+    if (n === 0) return;
+    prefetchKanjiStrokes([kanjiData[(currentKanjiIndex + 1) % n]?.kanji, kanjiData[(currentKanjiIndex - 1 + n) % n]?.kanji]);
+  }, [currentKanjiIndex, kanjiData]);
 
   // Curated word-family data (grouped-by-reading source, powers the deep-dive panel).
   // B1c: prefer the migrated V2 family (13 kanji) read through the adapter; the legacy
@@ -544,7 +577,11 @@ export default function KanjiScrollScreen({
             </div>
 
             {/* 1 · Kanji specimen: fixed-size stage with a local Digital / Written / Compare control */}
-            <KanjiSpecimen kanji={currentKanji.kanji} onSpeak={() => speakJapanese(currentKanji.kanji)} />
+            <KanjiSpecimen
+              kanji={currentKanji.kanji}
+              onSpeak={() => speakJapanese(currentKanji.kanji)}
+              showGrid={showGrid}
+            />
 
             {/* Middle Divider: the card's one ornamental rule */}
             <div className="w-full border-t-2 border-double border-natural-border relative z-10"></div>
@@ -807,13 +844,19 @@ export default function KanjiScrollScreen({
         {/* Right Column: Calligraphy Workspace — Phase A5: one practice station with
             explicit Watch/Trace/Write/Review modes instead of two stacked cards. */}
         <div className="md:col-span-2 flex flex-col justify-start gap-4 animate-fade-in">
-          <DrawingCanvas
-            referenceChar={currentKanji.kanji}
-            isAnalyzing={isAnalyzing}
-            analysisResult={analysisResult}
-            analysisError={analysisError}
-            onEvaluate={handleEvaluateKanjiDrawing}
-          />
+          <KanjiStrokePlayerProvider kanji={currentKanji.kanji}>
+            <DrawingCanvas
+              referenceChar={currentKanji.kanji}
+              isAnalyzing={isAnalyzing}
+              analysisResult={analysisResult}
+              analysisError={analysisError}
+              onEvaluate={handleEvaluateKanjiDrawing}
+              watchStage={<KanjiStrokeStage showGrid={showGrid} />}
+              watchControls={<KanjiStrokeControls />}
+              showGrid={showGrid}
+              onToggleGrid={toggleGrid}
+            />
+          </KanjiStrokePlayerProvider>
         </div>
       </motion.div>
 
