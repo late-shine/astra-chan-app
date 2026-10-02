@@ -123,8 +123,7 @@ The home screen is Astra-chan's room — each object is a destination:
 - **Daily Spell** — a suggested next action shown on the home screen each session
 
 <p align="center">
-  <img src="docs/vocab-garden.png" alt="N5 Vocabulary — searchable word list with categories and SRS add buttons" width="49%" />
-  <img src="docs/kanji-specimen.png" alt="Kanji study card — Digital / Written / Compare specimen with meaning and On/Kun readings" width="49%" />
+  <img src="docs/vocab-garden.png" alt="N5 Vocabulary — searchable word list with categories and SRS add buttons" width="100%" />
 </p>
 
 ### 🎯 Practice & Quiz
@@ -243,15 +242,14 @@ The home screen is Astra-chan's room — each object is a destination:
 - **Theme & Fonts** — 6 full visual themes (Light, Dark, 🔮 Cosmic Witch, 🎋 Emerald Jade, 🍁 Autumn Maple, 🌌 Cyber Tokyo), each with its own color palette and matching shift in Astra-chan's personality and dialogue, plus a premium typography selector (Noto Sans JP / Klee One)
 
 <p align="center">
-  <img src="docs/theme-cosmic-witch.png" alt="Study Room in the Cosmic Witch theme" width="49%" />
-  <img src="docs/theme-cyber-tokyo.png" alt="The same Study Room in the Cyber Tokyo theme" width="49%" />
+  <img src="docs/theme-cosmic-witch.png" alt="Study Room in the Cosmic Witch theme" width="100%" />
 </p>
 
 - **Astra-chan** — animated mascot with mood system, speech bubbles, and AFK reactions:
   - Goes wondering after 15 seconds of no interaction
   - Goes into deep AFK mode after 3 minutes
   - Lights up with excitement when you return
-  - Five artwork states with smooth crossfade transitions, including dedicated reading and reading-reaction artwork
+  - Five artwork states with smooth crossfade transitions: default, wondering while you are away, excited when you return, reading, and reading-clicked
 
 ---
 
@@ -398,7 +396,7 @@ V1 protects authentication, room membership IDs, invite ownership, profiles, and
 - [x] Vocab and Kanji quiz modes with custom picker
 - [x] Streak calendar and achievement badges
 - [x] Progress backup and restore
-- [x] Astra-chan AFK reactions (wondering, deep AFK, welcome back) as part of the five-state mascot artwork
+- [x] Astra-chan mascot states: default, wondering/AFK waiting, excited return, reading, and reading-clicked artwork
 - [x] Kanji drawing feedback — originally Cloudflare Workers AI (LLaVA 1.5 7B), upgraded to **Gemini 3.1 Flash Lite** after accuracy issues with the original model
 - [x] Romaji toggle for beginners across Grammar Dojo and Reference Charts
 - [x] App component splitting across 9 phases (described above; later features continued to evolve `App.tsx`)
