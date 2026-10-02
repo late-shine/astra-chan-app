@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Play, Pause, SkipBack, SkipForward, RotateCcw, Hash, Repeat, Crosshair } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, RotateCcw, Hash, Repeat, Crosshair, ChevronDown } from "lucide-react";
 import { useKanjiStrokes, type StrokeGuideHandle } from "../kanjiStrokes/strokeStore";
 import { KANJIVG_RELEASE } from "../kanjiStrokes/manifest";
 import type { KanjiStroke, KanjiStrokeData } from "../kanjiStrokes/types";
@@ -401,9 +401,13 @@ const CHIP =
 export function KanjiStrokeControls() {
   const p = useKanjiStrokePlayer();
   const a = p.actions;
+  // UI-1: Focus / Loop / Speed are advanced, so they sit behind one "More" control. The local state
+  // resets each time Watch is entered (this component unmounts when the mode changes).
+  const [moreOpen, setMoreOpen] = useState(false);
   const ready = p.guide.status === "ready" && p.total > 0;
   const atStart = p.current === 0 && p.t === 0;
   const atEnd = p.current >= p.total - 1 && p.t >= 1;
+  const advancedOn = p.focus || p.loop || p.speed !== 1;
 
   return (
     <div className="flex w-full flex-col gap-3">
@@ -436,66 +440,93 @@ export function KanjiStrokeControls() {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Display options">
+      {/* Numbers stays in view (it is what a beginner reaches for first); the rest is one tap away. */}
+      <div className="flex items-center justify-between gap-2">
         <button type="button" className={`${CHIP} ${p.showNumbers ? BTN_ON : ""}`} onClick={a.toggleNumbers} aria-pressed={p.showNumbers} disabled={!ready}>
           <Hash className="h-3.5 w-3.5" /> Numbers
         </button>
         <button
           type="button"
-          className={`${CHIP} ${p.focus ? BTN_ON : ""}`}
-          onClick={a.toggleFocus}
-          aria-pressed={p.focus}
-          disabled={!ready}
-          title="Dim finished strokes so the current one stands out"
+          className={CHIP}
+          onClick={() => setMoreOpen((open) => !open)}
+          aria-expanded={moreOpen}
+          aria-controls="kz-stroke-more"
         >
-          <Crosshair className="h-3.5 w-3.5" /> Focus
+          More
+          {advancedOn && !moreOpen && (
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--kz-accent)]" role="img" aria-label="some options are on" />
+          )}
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform motion-reduce:transition-none ${moreOpen ? "rotate-180" : ""}`} aria-hidden="true" />
         </button>
-        {!p.reducedMotion && (
-          <button
-            type="button"
-            className={`${CHIP} ${p.loop ? BTN_ON : ""}`}
-            onClick={a.toggleLoop}
-            aria-pressed={p.loop}
-            disabled={!ready}
-            title="Keep replaying the stroke in focus"
-          >
-            <Repeat className="h-3.5 w-3.5" /> Loop stroke
-          </button>
-        )}
       </div>
 
-      {!p.reducedMotion ? (
-        <div className="flex items-center gap-2">
-          <span className="kz-label text-[var(--kz-ink-muted)]" id="kz-stroke-speed-label">
-            Speed
-          </span>
-          <div role="radiogroup" aria-labelledby="kz-stroke-speed-label" className="inline-flex rounded-xl border border-[var(--kz-border-strong)] p-0.5">
-            {SPEEDS.map((s) => (
+      {moreOpen && (
+        <div id="kz-stroke-more" className="flex flex-col gap-3 border-t border-[var(--kz-border-hairline)] pt-3">
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Display options">
+            <button
+              type="button"
+              className={`${CHIP} ${p.focus ? BTN_ON : ""}`}
+              onClick={a.toggleFocus}
+              aria-pressed={p.focus}
+              disabled={!ready}
+              title="Dim finished strokes so the current one stands out"
+            >
+              <Crosshair className="h-3.5 w-3.5" /> Focus
+            </button>
+            {!p.reducedMotion && (
               <button
-                key={s}
                 type="button"
-                role="radio"
-                aria-checked={p.speed === s}
+                className={`${CHIP} ${p.loop ? BTN_ON : ""}`}
+                onClick={a.toggleLoop}
+                aria-pressed={p.loop}
                 disabled={!ready}
-                onClick={() => a.setSpeed(s)}
-                className={`h-8 min-w-11 cursor-pointer rounded-[0.6rem] px-2 font-mono text-[11px] font-extrabold tracking-wider transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--kz-accent)] disabled:cursor-not-allowed disabled:opacity-40 ${
-                  p.speed === s ? "bg-natural-forest text-natural-bg shadow-sm" : "text-natural-forest-light hover:text-natural-forest"
-                }`}
+                title="Keep replaying the stroke in focus"
               >
-                {s}×
+                <Repeat className="h-3.5 w-3.5" /> Loop stroke
               </button>
-            ))}
+            )}
           </div>
+
+          {!p.reducedMotion ? (
+            <div className="flex items-center gap-2">
+              <span className="kz-label text-[var(--kz-ink-muted)]" id="kz-stroke-speed-label">
+                Speed
+              </span>
+              <div role="radiogroup" aria-labelledby="kz-stroke-speed-label" className="inline-flex rounded-xl border border-[var(--kz-border-strong)] p-0.5">
+                {SPEEDS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    role="radio"
+                    aria-checked={p.speed === s}
+                    disabled={!ready}
+                    onClick={() => a.setSpeed(s)}
+                    className={`h-8 min-w-11 cursor-pointer rounded-[0.6rem] px-2 font-mono text-[11px] font-extrabold tracking-wider transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--kz-accent)] disabled:cursor-not-allowed disabled:opacity-40 ${
+                      p.speed === s ? "bg-natural-forest text-natural-bg shadow-sm" : "text-natural-forest-light hover:text-natural-forest"
+                    }`}
+                  >
+                    {s}×
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="font-serif text-xs italic leading-snug text-natural-forest-light">
+              Reduced motion is on, so nothing animates. Step through the strokes with Previous and Next.
+            </p>
+          )}
         </div>
-      ) : (
+      )}
+
+      {/* Reduced motion is stated here when the options are closed too, so the missing Play button is never a mystery. */}
+      {p.reducedMotion && !moreOpen && (
         <p className="font-serif text-xs italic leading-snug text-natural-forest-light">
           Reduced motion is on, so nothing animates. Step through the strokes with Previous and Next.
         </p>
       )}
 
-      <p className="font-serif text-[11px] italic leading-snug text-natural-forest-light">
-        Dot = where the pen lands, arrow = where it lifts. This is the standard stroke path; the fonts in the specimen can
-        look a little different.
+      <p className="font-serif text-xs italic leading-snug text-natural-forest-light">
+        Dot = where the pen lands, arrow = where it lifts. Fonts may look a little different from this standard path.
       </p>
       <p className="text-[10px] leading-snug text-[var(--kz-ink-quiet)]">
         Stroke data:{" "}

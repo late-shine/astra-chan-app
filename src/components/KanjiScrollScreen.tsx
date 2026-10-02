@@ -6,7 +6,6 @@ import {
   ChevronLeft, 
   ChevronRight, 
   Plus, 
-  Sparkles, 
   Volume2, 
   Eye, 
   EyeOff, 
@@ -529,52 +528,44 @@ export default function KanjiScrollScreen({
         {/* Left Column: Traditional Premium Kanji Card & Radicals */}
         <div className="md:col-span-3 flex flex-col gap-5">
           
-          {/* Header Action Control Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-natural-card border border-natural-border/70 px-4 py-3 rounded-2xl shadow-sm">
+          {/* Top bar: text-only, no boxes. Exit on the left, where you are in the deck in the middle,
+              the recall toggle on the right (its pressed state and label show the mode). */}
+          <div className="flex items-center justify-between gap-2">
             <button
               type="button"
               onClick={() => setCurrentScreen("menu")}
-              className="px-3.5 py-1.5 bg-natural-bg/60 border border-natural-border text-natural-forest-light text-xs rounded-xl hover:border-natural-forest hover:text-natural-forest font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+              aria-label="Exit to Dojo"
+              className="-ml-2 flex min-h-10 cursor-pointer items-center gap-1 rounded-xl px-2 text-sm font-bold text-natural-forest-light transition hover:bg-natural-forest/10 hover:text-natural-forest"
             >
-              <ChevronLeft className="w-4 h-4" /> Exit to Dojo
+              <ChevronLeft className="w-4 h-4" /> Dojo
             </button>
 
+            <p className="kz-label tabular-nums">
+              Kanji {currentKanjiIndex + 1} / {kanjiData.length}
+            </p>
+
             {/* Quick-Flip Memorization Recall Mode Trigger */}
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-natural-forest-light font-bold">
-                {isRecallMode ? "🧠 Recall mode active" : "👁️ Study Mode"}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsRecallMode(!isRecallMode);
-                  showToast(isRecallMode ? "Switched to Learn Mode! 👁️" : "Recall Practice Mode Activated! 🧠 Try testing yourself!");
-                }}
-                className={`p-1.5 px-3 rounded-xl text-xs font-mono font-extrabold tracking-wider transition-all flex items-center gap-1.5 cursor-pointer border ${
-                  isRecallMode 
-                    ? "bg-natural-clay kz-on-accent border-transparent shadow-md" 
-                    : "bg-natural-bg hover:bg-natural-clay/10 border-natural-border text-natural-clay"
-                }`}
-                title="Toggle Active Recall Flashcard Mode"
-              >
-                {isRecallMode ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                {isRecallMode ? "FLIP TO STUDY" : "TEST RECALL"}
-              </button>
-            </div>
+            <button
+              type="button"
+              aria-pressed={isRecallMode}
+              onClick={() => {
+                setIsRecallMode(!isRecallMode);
+                showToast(isRecallMode ? "Switched to Learn Mode! 👁️" : "Recall Practice Mode Activated! 🧠 Try testing yourself!");
+              }}
+              className={`-mr-2 flex min-h-10 cursor-pointer items-center gap-1.5 rounded-xl px-2.5 text-sm font-bold transition-all ${
+                isRecallMode
+                  ? "bg-natural-clay kz-on-accent shadow-sm"
+                  : "text-natural-clay hover:bg-natural-clay/10"
+              }`}
+              title="Toggle Active Recall Flashcard Mode"
+            >
+              {isRecallMode ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+              {isRecallMode ? "Flip to study" : "Test recall"}
+            </button>
           </div>
 
           {/* 🏯 KANJI CARD — hierarchy: specimen → meaning → readings → key words → footer */}
-          <div className="kz-specimen relative overflow-hidden p-6 shadow-md md:p-8 flex flex-col gap-5 select-none">
-
-            {/* Card Header Stamp */}
-            <div className="flex items-center justify-between border-b border-natural-border/50 pb-2 relative z-10">
-              <span className="kz-label text-natural-forest-light/75">
-                Japanese Kanji Card
-              </span>
-              <span className="kz-label text-natural-clay">
-                Card {currentKanjiIndex + 1} of {kanjiData.length}
-              </span>
-            </div>
+          <div className="kz-specimen relative overflow-hidden p-5 shadow-md sm:p-6 md:p-8 flex flex-col gap-5 select-none">
 
             {/* 1 · Kanji specimen: fixed-size stage with a local Digital / Written / Compare control */}
             <KanjiSpecimen
@@ -618,66 +609,66 @@ export default function KanjiScrollScreen({
               </div>
             </div>
 
-            {/* 4 · Key words: a short preview of the strongest pattern */}
+            {/* 4 · Key words: a short preview of the strongest pattern, then one quiet full-width
+                row into the whole family (UI-1b). */}
             {hasPreview && (
-              <div className="flex flex-col gap-2 relative z-10">
-                <div className="flex items-center gap-2">
-                  <span className="kz-label">Key Words</span>
-                  {/* B1c: explicit honesty label for the 133 kanji with no curated word
-                      family yet — replaces silently omitting the reading chip with a
-                      stated "recognition only" state. Never guessed, never mislabeled. */}
-                  {!hasCuratedWordFamily && (
-                    <span
-                      className="rounded-md border border-dashed border-natural-border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-natural-forest-light/75"
-                      title="No curated word family yet for this kanji — these examples don't break down which sound it contributes. Recognition only for now, never a guessed reading."
-                    >
-                      Recognition only
-                    </span>
-                  )}
-                  <span className="h-px flex-1 bg-natural-border/50"></span>
+              <div className="flex flex-col gap-1 relative z-10">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="kz-label">Key words</span>
+                    {/* B1c: explicit honesty label for the 133 kanji with no curated word
+                        family yet — replaces silently omitting the reading chip with a
+                        stated "recognition only" state. Never guessed, never mislabeled. */}
+                    {!hasCuratedWordFamily && (
+                      <span
+                        className="rounded-md border border-dashed border-natural-border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-natural-forest-light/75"
+                        title="No curated word family yet for this kanji — these examples don't break down which sound it contributes. Recognition only for now, never a guessed reading."
+                      >
+                        Recognition only
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                <div className="kz-inset px-3 py-1 divide-y divide-natural-border/30">
+                <div className="divide-y divide-natural-border/40 border-t border-natural-border/40">
                   {previewWords.map((entry, idx) => {
                     const isMasked = isRecallMode && !revealedVocab[idx];
                     return (
-                      <div key={`${entry.word}-${idx}`} className="flex items-center justify-between gap-3 py-2">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              speakJapanese(entry.word);
-                            }}
-                            className="p-1 bg-natural-bg hover:bg-natural-forest/10 rounded-lg text-natural-forest-light hover:text-natural-forest transition cursor-pointer shrink-0 border border-natural-border/50"
-                            aria-label={`Speak ${entry.word}`}
-                          >
-                            <Volume2 className="w-3 h-3" />
-                          </button>
+                      <div key={`${entry.word}-${idx}`} className="flex items-center gap-2 py-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            speakJapanese(entry.word);
+                          }}
+                          className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-natural-forest-light transition hover:bg-natural-forest/10 hover:text-natural-forest"
+                          aria-label={`Speak ${entry.word}`}
+                        >
+                          <Volume2 className="w-4 h-4" />
+                        </button>
 
-                          {/* The sound this kanji makes here. Hidden with the meaning in recall mode. */}
-                          {entry.kanjiReading && (
-                            <span
-                              className={`min-w-[2.75rem] shrink-0 rounded-lg border border-natural-clay/30 bg-natural-clay/10 px-1.5 py-0.5 text-center font-serif text-[13px] font-bold text-natural-clay ${
-                                isMasked ? "invisible" : ""
-                              }`}
-                              title="The sound this kanji makes in this word"
-                              aria-hidden={isMasked || undefined}
-                            >
-                              {entry.kanjiReading}
+                        {/* The sound this kanji makes here. Hidden with the meaning in recall mode. */}
+                        {entry.kanjiReading && (
+                          <span
+                            className={`min-w-[2.75rem] shrink-0 rounded-lg border border-natural-clay/30 bg-natural-clay/10 px-1.5 py-0.5 text-center font-serif text-[13px] font-bold text-natural-clay ${
+                              isMasked ? "invisible" : ""
+                            }`}
+                            title="The sound this kanji makes in this word"
+                            aria-hidden={isMasked || undefined}
+                          >
+                            {entry.kanjiReading}
+                          </span>
+                        )}
+
+                        <div className="min-w-0 flex-1">
+                          <span className="font-serif font-extrabold text-[15px] text-natural-charcoal block leading-tight">
+                            {entry.word}
+                          </span>
+                          {entry.reading && (
+                            <span className="text-[11px] text-natural-forest-light font-medium block leading-snug">
+                              {entry.reading}
                             </span>
                           )}
-
-                          <div className="min-w-0">
-                            <span className="font-serif font-extrabold text-[15px] text-natural-charcoal block leading-tight">
-                              {entry.word}
-                            </span>
-                            {entry.reading && (
-                              <span className="text-[10px] text-natural-forest-light font-mono font-medium block">
-                                ({entry.reading})
-                              </span>
-                            )}
-                          </div>
                         </div>
 
                         <RecallMask
@@ -686,7 +677,7 @@ export default function KanjiScrollScreen({
                           label="? RECALL"
                           tone="accent"
                           size="sm"
-                          className="flex min-h-[1.75rem] min-w-[5.5rem] max-w-[9rem] shrink-0 items-center justify-end"
+                          className="flex min-h-[1.75rem] min-w-[5rem] max-w-[7.5rem] shrink-0 items-center justify-end sm:max-w-[10rem]"
                         >
                           <span className="block text-right text-xs font-serif font-extrabold text-natural-charcoal">
                             {entry.meaning}
@@ -697,15 +688,23 @@ export default function KanjiScrollScreen({
                   })}
                 </div>
 
+                {/* UI-1b: the way into the full family. A calm row, not a filled block: the count is the
+                    only emphasis. Only for kanji that have a curated family. */}
                 {hasCuratedWordFamily && (
                   <button
                     type="button"
                     onClick={() => setIsWordFamilyOpen(true)}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-natural-clay/30 bg-natural-clay/10 px-3 py-2 text-[11px] font-mono font-extrabold uppercase tracking-wider text-natural-clay transition hover:bg-natural-clay/20 cursor-pointer"
-                    title="Open the full reading-grouped word family panel"
+                    aria-haspopup="dialog"
+                    className="group -mx-2 mt-1 flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-xl border-t border-natural-border/40 px-2 text-left transition hover:bg-natural-clay/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-natural-forest/40"
                   >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    See all {curatedWordFamily.length} words · {curatedReadingCount} reading{curatedReadingCount === 1 ? "" : "s"}
+                    <span className="whitespace-nowrap text-sm font-bold text-natural-charcoal">Explore word family</span>
+                    <span className="flex items-center gap-1 whitespace-nowrap text-xs font-bold text-natural-clay">
+                      {curatedWordFamily.length} words
+                      <span className="hidden sm:inline">
+                        · {curatedReadingCount} reading{curatedReadingCount === 1 ? "" : "s"}
+                      </span>
+                      <ChevronRight className="h-4 w-4 transition-transform motion-reduce:transition-none group-hover:translate-x-0.5" />
+                    </span>
                   </button>
                 )}
               </div>
@@ -737,20 +736,18 @@ export default function KanjiScrollScreen({
             </div>
           </div>
 
-          {/* 🧩 ASTRA'S MEMORY KEY: RADICAL & MNEMONIC BREAKDOWN */}
+          {/* 🧩 ASTRA'S MEMORY KEY: radicals + one mnemonic. Quiet support for the card, not a second card. */}
           <div className="kz-panel p-5 shadow-sm flex flex-col gap-4">
-            <div className="flex items-center gap-2 border-b border-natural-border pb-2">
+            <div className="flex items-center gap-2">
               <Compass className="w-4 h-4 text-natural-clay" />
-              <h4 className="text-xs font-serif font-extrabold text-natural-forest uppercase tracking-wider">
-                Astra's Memory Keys & Radicals
-              </h4>
+              <h4 className="kz-label text-natural-forest">Memory keys &amp; radicals</h4>
             </div>
 
-            {/* Radical Equation Blocks */}
-            <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3 py-1">
+            {/* Radical equation: small tiles, no shadows */}
+            <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3">
               {deconstruction.radicals.map((rad, rIdx) => (
                 <div key={rIdx} className="flex items-center gap-2">
-                  <div className="flex flex-col items-center bg-natural-card-light border border-natural-border px-3 py-1.5 rounded-xl min-w-[55px] text-center shadow-xs">
+                  <div className="flex flex-col items-center bg-natural-card-light border border-natural-border/70 px-3 py-1.5 rounded-xl min-w-[55px] text-center">
                     <span className="text-lg font-serif font-bold text-natural-charcoal leading-none">
                       {rad.char}
                     </span>
@@ -763,10 +760,10 @@ export default function KanjiScrollScreen({
                   )}
                 </div>
               ))}
-              
+
               <span className="text-xs font-bold text-natural-sage font-sans">=</span>
-              
-              <div className="bg-natural-forest/10 border border-natural-forest/20 px-3.5 py-1.5 rounded-xl text-center shadow-xs">
+
+              <div className="bg-natural-forest/10 border border-natural-forest/20 px-3.5 py-1.5 rounded-xl text-center">
                 <span className="text-lg font-serif font-bold text-natural-forest leading-none">
                   {currentKanji.kanji}
                 </span>
@@ -776,68 +773,66 @@ export default function KanjiScrollScreen({
               </div>
             </div>
 
-            {/* Mnemonic Device speech box */}
-            <div className="p-3 bg-natural-bg border-l-4 border-natural-clay rounded-r-2xl">
+            {/* Mnemonic: a rule and text, not another filled box */}
+            <div className="border-l-4 border-natural-clay pl-3.5">
               <span className="kz-label text-natural-clay block mb-1">
                 Memory Story
               </span>
-              <p className="text-xs text-natural-charcoal font-serif font-bold italic leading-relaxed">
+              <p className="text-sm text-natural-charcoal font-serif font-bold italic leading-relaxed">
                 "{deconstruction.mnemonic}"
               </p>
             </div>
+          </div>
 
-            {/* Action buttons list */}
-            <div className="flex flex-wrap gap-2.5 items-center justify-between pt-2 border-t border-natural-border/40 text-xs">
-              
-              {/* SRS Bookmark Add Deck button */}
+          {/* Study actions: one obvious primary (Study), navigation beside it, one quiet secondary
+              (Review Deck) below. They used to sit inside the Memory card, which is unrelated. */}
+          <div className="flex flex-col gap-2.5">
+            <div className="flex items-stretch gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  if (hasCard(currentKanji.kanji)) {
-                    showToast("Already in your review schedule!");
-                  } else {
-                    addCard(currentKanji.kanji, "kanji");
-                    showToast("Added Kanji card to Review Deck! ✨");
-                  }
-                }}
-                className={`p-2 px-3 border rounded-xl font-mono text-xs font-extrabold tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-xs ${
-                  hasCard(currentKanji.kanji)
-                    ? "bg-natural-sage/10 border-natural-sage/30 text-natural-sage/70"
-                    : "bg-natural-bg hover:bg-natural-clay/10 border-natural-border hover:border-natural-clay text-natural-forest-light hover:text-natural-clay"
-                }`}
+                onClick={() => handleKanjiNav("prev")}
+                className="flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-0.5 rounded-xl border border-natural-border bg-natural-bg/60 px-2.5 text-xs font-bold text-natural-forest-light transition hover:border-natural-forest hover:text-natural-forest sm:px-3.5"
               >
-                {hasCard(currentKanji.kanji) ? <BookmarkCheck className="w-3.5 h-3.5 text-natural-sage" /> : <ListPlus className="w-3.5 h-3.5" />}
-                {hasCard(currentKanji.kanji) ? "SRS SCHEDULED" : "ADD TO REVIEW DECK"}
+                <ChevronLeft className="w-4 h-4" /> Prev
               </button>
 
-              {/* Navigation Prior/Next */}
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleKanjiNav("prev")}
-                  className="px-3 py-1.5 border border-natural-border rounded-xl text-xs hover:border-natural-forest hover:text-natural-forest transition flex items-center gap-1 font-bold text-natural-forest-light bg-natural-bg/50 cursor-pointer shadow-xs"
-                >
-                  <ChevronLeft className="w-4 h-4" /> Prev
-                </button>
+              <button
+                type="button"
+                onClick={handleContemplateKanji}
+                className="min-h-11 min-w-0 flex-1 cursor-pointer whitespace-nowrap rounded-xl bg-natural-clay px-2 font-serif text-sm font-extrabold kz-on-accent shadow-sm transition hover:bg-natural-clay/90 sm:px-4 sm:tracking-wide"
+              >
+                Study (+40 XP)
+              </button>
 
-                <button
-                  type="button"
-                  onClick={handleContemplateKanji}
-                  className="px-4 py-1.5 bg-natural-clay kz-on-accent hover:bg-natural-clay/90 rounded-xl text-xs font-serif font-extrabold tracking-wide transition shadow-sm cursor-pointer"
-                >
-                  Study (+40 XP)
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleKanjiNav("next")}
-                  className="px-3 py-1.5 border border-natural-border rounded-xl text-xs hover:border-natural-forest hover:text-natural-forest transition flex items-center gap-1 font-bold text-natural-forest-light bg-natural-bg/50 cursor-pointer shadow-xs"
-                >
-                  Next <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-
+              <button
+                type="button"
+                onClick={() => handleKanjiNav("next")}
+                className="flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-0.5 rounded-xl border border-natural-border bg-natural-bg/60 px-2.5 text-xs font-bold text-natural-forest-light transition hover:border-natural-forest hover:text-natural-forest sm:px-3.5"
+              >
+                Next <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
+
+            {/* SRS Bookmark Add Deck button */}
+            <button
+              type="button"
+              onClick={() => {
+                if (hasCard(currentKanji.kanji)) {
+                  showToast("Already in your review schedule!");
+                } else {
+                  addCard(currentKanji.kanji, "kanji");
+                  showToast("Added Kanji card to Review Deck! ✨");
+                }
+              }}
+              className={`flex min-h-10 cursor-pointer items-center justify-center gap-1.5 self-center rounded-xl border px-4 font-mono text-xs font-extrabold tracking-wider transition-all ${
+                hasCard(currentKanji.kanji)
+                  ? "bg-natural-sage/10 border-natural-sage/30 text-natural-sage/70"
+                  : "border-transparent text-natural-forest-light hover:border-natural-clay hover:bg-natural-clay/10 hover:text-natural-clay"
+              }`}
+            >
+              {hasCard(currentKanji.kanji) ? <BookmarkCheck className="w-3.5 h-3.5 text-natural-sage" /> : <ListPlus className="w-3.5 h-3.5" />}
+              {hasCard(currentKanji.kanji) ? "SRS SCHEDULED" : "ADD TO REVIEW DECK"}
+            </button>
           </div>
         </div>
 

@@ -32,7 +32,11 @@ export interface ReadingLane {
   entries: MapEntry[];
   commonCount: number;
   usefulness: Usefulness;
-  /** One short line, derived from data or from a reviewed `patternNote`. */
+  /**
+   * One short line, only when it teaches something: a reviewed `patternNote`, or the
+   * "learn it as a unit" line for irregular readings. Empty string otherwise (UI-1:
+   * count-based filler such as "One example so far." was removed).
+   */
   pattern: string;
   /** Set only when an entry supplies `variantOf` and that base lane exists. */
   variantOf?: string;
@@ -117,6 +121,18 @@ export function availableFilters(entries: KanjiWordEntry[]): FilterOption[] {
   return [{ id: "all", label: FILTER_LABEL.all, count: total }, ...options];
 }
 
+/**
+ * UI-1b: filters are a way to find words in a long list, so they are only worth their row of chips
+ * when the list is long. At or above this many words the panel offers them; below it the
+ * reading index and the lanes already show everything on one screen. (At the time of writing no
+ * curated family reaches it — they grow with B6 — so the chips are exercised by synthetic data.)
+ */
+export const FILTER_MIN_WORDS = 8;
+
+export function shouldOfferFilters(entries: KanjiWordEntry[]): boolean {
+  return entries.length >= FILTER_MIN_WORDS;
+}
+
 export function wordsForFilter(lane: ReadingLane, filter: MapFilter): MapEntry[] {
   if (filter === "all") return lane.entries;
   return lane.entries.filter((entry) => entryFilters(entry).includes(filter));
@@ -139,7 +155,7 @@ function dominantKind(items: { entry: MapEntry }[]): LaneKind {
   return best;
 }
 
-function patternFor(kind: LaneKind, entries: MapEntry[], commonCount: number): string {
+function patternFor(kind: LaneKind, entries: MapEntry[]): string {
   const reviewed = entries.find((entry) => entry.patternNote)?.patternNote;
   if (reviewed) return reviewed;
   if (kind === "irregular") {
@@ -147,10 +163,9 @@ function patternFor(kind: LaneKind, entries: MapEntry[], commonCount: number): s
       ? "Special whole-word readings. Learn each word as a unit."
       : "Special whole-word reading. Learn the word as a unit.";
   }
-  if (kind === "variant") return "A variant on reading of this kanji.";
-  if (commonCount >= 2) return `Shows up in ${commonCount} common words.`;
-  if (entries.length === 1) return "One example so far.";
-  return `${entries.length} examples, ${commonCount} common.`;
+  // Everything else would only restate what the lane already shows (its type label and its
+  // example rows), so it stays empty rather than adding another line of filler text.
+  return "";
 }
 
 /**
@@ -211,7 +226,7 @@ export function buildLanes(entries: MapEntry[]): ReadingLane[] {
         : draft.commonCount >= 2 || position === 0
           ? "core"
           : "next",
-    pattern: patternFor(draft.kind, draft.entries, draft.commonCount),
+    pattern: patternFor(draft.kind, draft.entries),
     variantOf: draft.variantOf,
   }));
 

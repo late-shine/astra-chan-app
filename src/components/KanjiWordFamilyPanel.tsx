@@ -1,23 +1,37 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import { Check, Plus, Volume2, X } from "lucide-react";
+import { BookmarkCheck, ChevronDown, ListPlus, Volume2, X } from "lucide-react";
 import { VOCABULARY_DATA } from "../data";
 import type { KanjiItem, SRSCard } from "../types";
 import {
   LANE_KIND_LABEL,
-  USEFULNESS_LABEL,
   availableFilters,
   buildLanes,
   kindOfType,
+  shouldOfferFilters,
   splitReading,
   wordsForFilter,
   type LaneKind,
   type MapEntry,
   type MapFilter,
   type ReadingLane,
-  type Usefulness,
 } from "./wordFamilyMap";
 
+/**
+ * Word-family panel — Phase UI-1 / UI-1b layout.
+ *
+ * Hierarchy, in reading order:
+ *   1. hero: the kanji tile, its meaning, "N words · M readings";
+ *   2. reading index: one chip per reading (jumps to its lane) — only when there are 2+;
+ *   3. numbered lanes, one per reading: the sound first, then its type, a label only when the
+ *      reading is special (Core / Recognition only / Irregular), and a word count when 2+;
+ *   4. example words as flat rows under each reading — no box per lane, no box per word.
+ * Filter chips appear only for long families (see FILTER_MIN_WORDS in wordFamilyMap.ts).
+ *
+ * Nothing in here is data-driven beyond the A4 adapter (wordFamilyMap.ts); props, the
+ * dialog behaviour (focus, Escape, Tab trap) and the add-to-deck / speech paths are
+ * unchanged from A4.
+ */
 interface KanjiWordFamilyPanelProps {
   kanji: KanjiItem;
   onClose: () => void;
@@ -31,7 +45,11 @@ const vocabularyWords = new Set(VOCABULARY_DATA.map((item) => item.word));
 
 const FOCUSABLE = 'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
 
-/** Dot before the lane label. The text label always carries the meaning; colour is a hint. */
+/** A lane longer than this folds to LANE_FOLDED_COUNT rows behind one "Show more" control. */
+const LANE_FOLD_AFTER = 5;
+const LANE_FOLDED_COUNT = 4;
+
+/** Dot before the lane type. The text label always carries the meaning; colour is a hint. */
 const KIND_DOT: Record<LaneKind, string> = {
   onyomi: "bg-natural-clay",
   kunyomi: "bg-natural-sage",
@@ -39,21 +57,9 @@ const KIND_DOT: Record<LaneKind, string> = {
   irregular: "bg-natural-forest-light/75",
 };
 
-const USEFULNESS_STYLE: Record<Usefulness, string> = {
-  core: "border-natural-clay bg-natural-clay kz-on-accent",
-  next: "border-natural-clay/30 bg-transparent text-natural-charcoal",
-  recognition: "border-dashed border-natural-border bg-transparent text-natural-forest-light",
-};
-
-/** Shared icon-button shape. Border colour and hover styles are added per use so classes never compete. */
-const ACTION_BASE =
-  "flex h-9 w-9 items-center justify-center rounded-xl border transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-natural-forest/40";
-
-/** Ghost button: no border until hovered or focused. Colour is inherited, so the row can dim/brighten it. */
-const ACTION_GHOST =
-  "cursor-pointer border-transparent hover:border-natural-forest hover:bg-natural-forest/10 focus-visible:border-natural-forest";
-
-const CHIP = "inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-bold leading-none";
+/** Shared icon-button shape (40px: comfortable on touch). Colours are added per use. */
+const ICON_BUTTON =
+  "flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-transparent text-natural-forest-light transition-colors motion-reduce:transition-none hover:border-natural-forest/40 hover:bg-natural-forest/10 hover:text-natural-forest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-natural-forest/40";
 
 interface ActionProps {
   speak: (phrase: string) => void;
@@ -90,37 +96,33 @@ function WordActions({ entry, speak, hasCard, onAdd }: ActionProps & { entry: Ma
   const inDeck = hasCard(entry.word);
 
   return (
-    <div className="flex shrink-0 items-center gap-1 text-natural-forest-light/75 group-hover/row:text-natural-forest-light group-focus-within/row:text-natural-forest-light">
+    <div className="flex shrink-0 items-center">
       <button
         type="button"
         onClick={() => speak(entry.word)}
-        className={`${ACTION_BASE} ${ACTION_GHOST} hover:text-natural-forest`}
+        className={ICON_BUTTON}
         aria-label={`Speak ${entry.word}`}
         title="Speak"
       >
-        <Volume2 className="h-4 w-4" />
+        <Volume2 className="h-[1.125rem] w-[1.125rem]" />
       </button>
 
       {inVocabulary ? (
         <button
           type="button"
           onClick={() => onAdd(entry)}
-          className={`${ACTION_BASE} ${ACTION_GHOST} ${inDeck ? "text-natural-clay" : "hover:text-natural-clay"}`}
+          className={`${ICON_BUTTON} ${inDeck ? "text-natural-clay hover:text-natural-clay" : "hover:text-natural-clay"}`}
           aria-label={inDeck ? `${entry.word} is in your Review Deck` : `Add ${entry.word} to Review Deck`}
           title={inDeck ? "Already in Review Deck" : "Add to Review Deck"}
         >
-          {inDeck ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+          {inDeck ? <BookmarkCheck className="h-[1.125rem] w-[1.125rem]" /> : <ListPlus className="h-[1.125rem] w-[1.125rem]" />}
         </button>
       ) : (
-        <button
-          type="button"
-          disabled
-          className={`${ACTION_BASE} cursor-not-allowed border-transparent opacity-40`}
-          aria-label={`${entry.word} is not in the vocab deck yet`}
-          title="Not in vocab deck yet"
-        >
-          <Plus className="h-4 w-4" />
-        </button>
+        // No dead, disabled button: the slot keeps the speak buttons aligned down the list, and
+        // screen readers still hear why there is no add action.
+        <span className="relative block h-10 w-10">
+          <span className="sr-only">{entry.word} is not in the vocab deck yet</span>
+        </span>
       )}
     </div>
   );
@@ -148,77 +150,74 @@ function WordTags({ entry, laneKind }: { entry: MapEntry; laneKind: LaneKind }) 
   );
 }
 
-function NoteLine({ note }: { note: string }) {
-  return (
-    <p className="mt-2 border-l-2 border-natural-clay/30 pl-3 text-xs leading-relaxed text-natural-forest-light">
-      {note}
-    </p>
-  );
-}
-
-function FeaturedWord({
+/** One example word: the word and its marked reading, the meaning, then at most one quiet note. */
+function WordRow({
   entry,
   kanji,
   laneKind,
   ...actions
 }: ActionProps & { entry: MapEntry; kanji: string; laneKind: LaneKind }) {
   return (
-    <div className="group/row flex items-start justify-between gap-3 p-4">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h4 className="font-serif text-3xl font-extrabold leading-tight text-natural-charcoal">{entry.word}</h4>
-          <ReadingText entry={entry} kanji={kanji} className="text-lg font-bold" />
+    <div className="flex items-center justify-between gap-1 py-2.5">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+          <span className="font-serif text-xl font-extrabold leading-tight text-natural-charcoal">{entry.word}</span>
+          <ReadingText entry={entry} kanji={kanji} className="text-base font-bold" />
         </div>
-        <p className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 font-serif text-base font-bold text-natural-charcoal">
+        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-natural-charcoal">
           {entry.meaning}
           <WordTags entry={entry} laneKind={laneKind} />
         </p>
-        {entry.note && <NoteLine note={entry.note} />}
+        {entry.note && <p className="mt-1.5 text-xs leading-relaxed text-natural-forest-light">{entry.note}</p>}
       </div>
       <WordActions entry={entry} {...actions} />
     </div>
   );
 }
 
-function SupportingWord({
-  entry,
-  kanji,
-  laneKind,
-  ...actions
-}: ActionProps & { entry: MapEntry; kanji: string; laneKind: LaneKind }) {
+/**
+ * The reading itself is the headline. A small number gives each reading a place in the list
+ * (shown only when there is more than one). Underneath: its type, a word count when there are
+ * several, and a label only for readings that deserve one. "Useful next" is the unremarkable
+ * default, so it is never printed.
+ */
+function LaneHeader({ lane, number, headingId }: { lane: ReadingLane; number: string | null; headingId: string }) {
+  const wordCount = lane.entries.length;
   return (
-    <div className="group/row flex items-center justify-between gap-2 px-4 py-2.5">
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-          <span className="font-serif text-lg font-extrabold text-natural-charcoal">{entry.word}</span>
-          <ReadingText entry={entry} kanji={kanji} className="text-sm font-bold" />
-          <span className="font-serif text-sm font-bold text-natural-charcoal">{entry.meaning}</span>
-          <WordTags entry={entry} laneKind={laneKind} />
-        </div>
-        {entry.note && <NoteLine note={entry.note} />}
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 md:block">
+      <div className="flex items-baseline gap-2.5">
+        {number && <span className="kz-label tabular-nums" aria-hidden="true">{number}</span>}
+        <h4
+          id={headingId}
+          tabIndex={-1}
+          className="scroll-mt-16 font-serif text-3xl font-extrabold leading-none text-natural-charcoal focus:outline-none focus-visible:underline"
+        >
+          {lane.reading}
+        </h4>
       </div>
-      <WordActions entry={entry} {...actions} />
-    </div>
-  );
-}
-
-function LaneSummary({ lane, visibleCount }: { lane: ReadingLane; visibleCount: number }) {
-  return (
-    <div>
-      <p className="font-serif text-3xl font-extrabold leading-none text-natural-charcoal">{lane.reading}</p>
-      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-        <span className={`${CHIP} border-natural-border/70 text-natural-charcoal`}>
+      <p className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold text-natural-forest-light md:mt-2.5 ${number ? "md:pl-[1.85rem]" : ""}`}>
+        <span className="inline-flex items-center gap-1.5">
           <span className={`h-1.5 w-1.5 rounded-full ${KIND_DOT[lane.kind]}`} aria-hidden="true" />
           {LANE_KIND_LABEL[lane.kind]}
         </span>
-        <span className={`${CHIP} ${USEFULNESS_STYLE[lane.usefulness]}`}>{USEFULNESS_LABEL[lane.usefulness]}</span>
-      </div>
-      <p className="mt-2 text-xs font-bold text-natural-forest-light">
-        {lane.entries.length} example{lane.entries.length === 1 ? "" : "s"}
-        {visibleCount !== lane.entries.length ? ` (${visibleCount} shown)` : ""}
-        {lane.variantOf ? ` · variant of ${lane.variantOf}` : ""}
+        {wordCount > 1 && <span className="font-medium">{wordCount} words</span>}
+        {lane.usefulness === "core" && (
+          <span className="rounded-md border border-natural-clay bg-natural-clay px-1.5 py-0.5 text-[11px] leading-none kz-on-accent">
+            Core
+          </span>
+        )}
+        {lane.usefulness === "recognition" && (
+          <span className="rounded-md border border-dashed border-natural-border px-1.5 py-0.5 text-[11px] leading-none">
+            Recognition only
+          </span>
+        )}
+        {lane.variantOf && <span className="font-medium">variant of {lane.variantOf}</span>}
       </p>
-      <p className="mt-1 text-xs leading-relaxed text-natural-forest-light">{lane.pattern}</p>
+      {lane.pattern && (
+        <p className={`basis-full text-xs font-medium leading-relaxed text-natural-forest-light md:mt-1.5 ${number ? "md:pl-[1.85rem]" : ""}`}>
+          {lane.pattern}
+        </p>
+      )}
     </div>
   );
 }
@@ -227,22 +226,45 @@ function ReadingLaneView({
   lane,
   words,
   kanji,
+  number,
+  headingId,
+  expanded,
+  onToggleExpanded,
   ...actions
-}: ActionProps & { lane: ReadingLane; words: MapEntry[]; kanji: string }) {
-  const [featured, ...supporting] = words;
+}: ActionProps & {
+  lane: ReadingLane;
+  words: MapEntry[];
+  kanji: string;
+  number: string | null;
+  headingId: string;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+}) {
+  const foldable = words.length > LANE_FOLD_AFTER;
+  const shown = foldable && !expanded ? words.slice(0, LANE_FOLDED_COUNT) : words;
+  const hiddenCount = words.length - shown.length;
+
   return (
-    <div className="flex flex-col gap-3 md:grid md:grid-cols-[12rem_minmax(0,1fr)] md:items-start md:gap-5">
-      <LaneSummary lane={lane} visibleCount={words.length} />
-      <div className="kz-inset overflow-hidden">
-        <FeaturedWord entry={featured} kanji={kanji} laneKind={lane.kind} {...actions} />
-        {supporting.length > 0 && (
-          <ul className="divide-y divide-natural-border/50 border-t border-natural-border/50">
-            {supporting.map((entry) => (
-              <li key={`${entry.word}-${entry.reading}`}>
-                <SupportingWord entry={entry} kanji={kanji} laneKind={lane.kind} {...actions} />
-              </li>
-            ))}
-          </ul>
+    <div className="flex flex-col gap-1 md:grid md:grid-cols-[11rem_minmax(0,1fr)] md:items-start md:gap-6">
+      <LaneHeader lane={lane} number={number} headingId={headingId} />
+      <div>
+        <ul className="divide-y divide-natural-border/40">
+          {shown.map((entry) => (
+            <li key={`${entry.word}-${entry.reading}`}>
+              <WordRow entry={entry} kanji={kanji} laneKind={lane.kind} {...actions} />
+            </li>
+          ))}
+        </ul>
+        {foldable && (
+          <button
+            type="button"
+            onClick={onToggleExpanded}
+            aria-expanded={expanded}
+            className="mt-1 inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-xl px-2 text-xs font-bold text-natural-clay transition-colors motion-reduce:transition-none hover:bg-natural-clay/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-natural-forest/40"
+          >
+            <ChevronDown className={`h-4 w-4 ${expanded ? "rotate-180" : ""}`} aria-hidden="true" />
+            {expanded ? "Show fewer" : `Show ${hiddenCount} more`}
+          </button>
         )}
       </div>
     </div>
@@ -262,10 +284,12 @@ export default function KanjiWordFamilyPanel({
   const closeRef = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);
   const [filter, setFilter] = useState<MapFilter>("all");
+  const [expandedLanes, setExpandedLanes] = useState<Record<string, boolean>>({});
 
   const family = kanji.kanjiWords;
   const lanes = useMemo(() => buildLanes(family ?? []), [family]);
-  const filters = useMemo(() => availableFilters(family ?? []), [family]);
+  // UI-1b: chips only for long families; a short family is fully visible without them.
+  const filters = useMemo(() => (shouldOfferFilters(family ?? []) ? availableFilters(family ?? []) : []), [family]);
   const activeFilter: MapFilter = filters.some((option) => option.id === filter) ? filter : "all";
   const visibleLanes = lanes
     .map((lane) => ({ lane, words: wordsForFilter(lane, activeFilter) }))
@@ -321,12 +345,22 @@ export default function KanjiWordFamilyPanel({
   };
   const actions: ActionProps = { speak: speakJapanese, hasCard, onAdd: handleAdd };
 
+  const laneId = (index: number) => `wf-lane-${index}`;
+  // Reading index → lane. Focus moves to the lane's heading so keyboard and screen-reader users land there too.
+  const jumpToLane = (index: number) => {
+    const heading = document.getElementById(laneId(index));
+    if (!heading) return;
+    heading.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
+    heading.focus({ preventScroll: true });
+  };
+  const numbered = visibleLanes.length > 1;
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center kz-scrim backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center kz-scrim backdrop-blur-sm p-2 sm:p-4"
       onClick={onClose}
     >
       <motion.div
@@ -338,26 +372,26 @@ export default function KanjiWordFamilyPanel({
         animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
         exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 12, scale: 0.98 }}
         transition={{ duration: reduceMotion ? 0 : 0.18 }}
-        className="kz-panel flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden shadow-xl"
+        className="kz-panel flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden shadow-xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-natural-border/70 bg-natural-bg/60 p-4 md:p-5">
-          <div className="flex items-center gap-3 md:gap-4">
+        {/* Hero: tile + meaning + counts in one compact row (about 88px tall at 360px). */}
+        <div className="flex items-start justify-between gap-3 border-b border-natural-border/70 px-4 py-3 md:px-5 md:py-4">
+          <div className="flex min-w-0 items-center gap-3.5 md:gap-4">
             <span
-              className="w-12 shrink-0 text-center font-serif text-5xl font-extrabold leading-none text-natural-forest md:w-[3.75rem] md:text-6xl"
+              className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl border border-[var(--kz-border-soft)] bg-[var(--kz-surface-specimen)] font-serif text-4xl font-extrabold leading-none text-natural-charcoal md:h-[4.5rem] md:w-[4.5rem] md:text-5xl"
               aria-hidden="true"
             >
               {kanji.kanji}
             </span>
             <div className="min-w-0">
               <p className="kz-label">Word family</p>
-              <h3 id="word-family-title" className="font-serif text-2xl font-extrabold text-natural-charcoal">
+              <h3 id="word-family-title" className="font-serif text-xl font-extrabold leading-snug text-natural-charcoal md:text-3xl">
                 <span className="sr-only">{kanji.kanji}, </span>
                 {kanji.meaning}
               </h3>
-              <p className="mt-1 text-xs font-medium text-natural-forest-light">
-                {wordCount} word{wordCount === 1 ? "" : "s"} · {lanes.length} reading{lanes.length === 1 ? "" : "s"}.
-                Highlighted kana are the part {kanji.kanji} plays.
+              <p className="mt-0.5 text-xs font-medium text-natural-forest-light">
+                {wordCount} word{wordCount === 1 ? "" : "s"} · {lanes.length} reading{lanes.length === 1 ? "" : "s"}
               </p>
             </div>
           </div>
@@ -366,7 +400,7 @@ export default function KanjiWordFamilyPanel({
             ref={closeRef}
             type="button"
             onClick={onClose}
-            className={`${ACTION_BASE} shrink-0 cursor-pointer border-natural-border bg-natural-card text-natural-forest-light hover:border-natural-forest hover:text-natural-forest`}
+            className={`${ICON_BUTTON} shrink-0`}
             aria-label="Close word family panel"
             title="Close"
           >
@@ -374,12 +408,12 @@ export default function KanjiWordFamilyPanel({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-5">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {filters.length > 0 && (
             <div
               role="group"
               aria-label="Filter readings"
-              className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 flex gap-2 overflow-x-auto border-b border-natural-border/50 bg-natural-card px-4 py-3 md:-mx-5 md:-mt-5 md:px-5"
+              className="sticky top-0 z-10 flex gap-2 overflow-x-auto border-b border-natural-border/50 bg-natural-card px-4 py-2.5 md:px-5"
             >
               {filters.map((option) => {
                 const active = option.id === activeFilter;
@@ -389,7 +423,7 @@ export default function KanjiWordFamilyPanel({
                     type="button"
                     aria-pressed={active}
                     onClick={() => setFilter(option.id)}
-                    className={`shrink-0 cursor-pointer rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-natural-forest/40 ${
+                    className={`min-h-9 shrink-0 cursor-pointer rounded-xl border px-3 text-xs font-bold transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-natural-forest/40 ${
                       active
                         ? "border-natural-clay bg-natural-clay kz-on-accent"
                         : "border-natural-border bg-transparent text-natural-forest-light hover:border-natural-clay hover:text-natural-charcoal"
@@ -402,30 +436,67 @@ export default function KanjiWordFamilyPanel({
             </div>
           )}
 
-          <p className="sr-only" aria-live="polite">
-            Showing {visibleWordCount} word{visibleWordCount === 1 ? "" : "s"} in {visibleLanes.length} reading
-            {visibleLanes.length === 1 ? "" : "s"}.
-          </p>
-
-          {visibleLanes.length === 0 ? (
-            <p className="kz-inset p-4 text-sm font-medium text-natural-forest-light">
-              No curated word family yet for {kanji.kanji} — recognition only for now, never a guessed reading.
+          <div className="px-4 pb-2 pt-3 md:px-5">
+            <p className="sr-only" aria-live="polite">
+              Showing {visibleWordCount} word{visibleWordCount === 1 ? "" : "s"} in {visibleLanes.length} reading
+              {visibleLanes.length === 1 ? "" : "s"}.
             </p>
-          ) : (
-            <ol className="relative flex flex-col gap-6 pl-8 before:absolute before:bottom-3 before:left-3 before:top-3 before:w-px before:bg-natural-border before:content-[''] md:pl-[3.25rem] md:before:left-[1.875rem]">
-              {visibleLanes.map(({ lane, words }) => (
-                <li key={lane.reading} className="relative">
-                  <span
-                    className={`absolute -left-[1.5625rem] top-3 h-2.5 w-2.5 rounded-full border-2 bg-natural-card md:-left-[1.6875rem] ${
-                      lane.usefulness === "core" ? "border-natural-clay" : "border-natural-border"
-                    }`}
-                    aria-hidden="true"
-                  />
-                  <ReadingLaneView lane={lane} words={words} kanji={kanji.kanji} {...actions} />
-                </li>
-              ))}
-            </ol>
-          )}
+
+            {visibleLanes.length === 0 ? (
+              <p className="kz-inset p-4 text-sm font-medium text-natural-forest-light">
+                No curated word family yet for {kanji.kanji} — recognition only for now, never a guessed reading.
+              </p>
+            ) : (
+              <>
+                {/* Reading summary: every sound this kanji makes, at a glance. Each chip jumps to its lane. */}
+                {visibleLanes.length > 1 && (
+                  <nav aria-label="Jump to a reading" className="flex flex-wrap items-center gap-2 pb-3">
+                    {visibleLanes.map(({ lane }, index) => (
+                      <button
+                        key={lane.reading}
+                        type="button"
+                        onClick={() => jumpToLane(index)}
+                        aria-label={`Jump to ${lane.reading}, reading ${index + 1} of ${visibleLanes.length}`}
+                        className={`inline-flex min-h-10 cursor-pointer items-center rounded-xl border px-3.5 font-serif text-lg font-bold leading-none transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-natural-forest/40 ${
+                          lane.usefulness === "core"
+                            ? "border-natural-clay/60 bg-natural-clay/10 text-natural-charcoal hover:bg-natural-clay/20"
+                            : "border-natural-border text-natural-charcoal hover:border-natural-clay"
+                        }`}
+                      >
+                        {lane.reading}
+                      </button>
+                    ))}
+                  </nav>
+                )}
+
+                {/* The two things every row relies on, said once. */}
+                <p className="pb-1 text-xs leading-relaxed text-natural-forest-light">
+                  Underlined kana show how <span className="font-serif font-bold text-natural-charcoal">{kanji.kanji}</span>{" "}
+                  sounds in each word. Use{" "}
+                  <ListPlus className="inline h-3.5 w-3.5 align-[-0.2em] text-natural-clay" aria-hidden="true" /> to add a
+                  word to your Review Deck.
+                </p>
+                <ol className="divide-y divide-natural-border/60">
+                  {visibleLanes.map(({ lane, words }, index) => (
+                    <li key={lane.reading} className="py-4 md:py-5">
+                      <ReadingLaneView
+                        lane={lane}
+                        words={words}
+                        kanji={kanji.kanji}
+                        number={numbered ? String(index + 1).padStart(2, "0") : null}
+                        headingId={laneId(index)}
+                        expanded={Boolean(expandedLanes[lane.reading])}
+                        onToggleExpanded={() =>
+                          setExpandedLanes((current) => ({ ...current, [lane.reading]: !current[lane.reading] }))
+                        }
+                        {...actions}
+                      />
+                    </li>
+                  ))}
+                </ol>
+              </>
+            )}
+          </div>
         </div>
       </motion.div>
     </motion.div>

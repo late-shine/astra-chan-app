@@ -4,7 +4,7 @@
  */
 
 import React, { useRef, useState, useEffect, type ReactNode } from "react";
-import { Trash2, RotateCcw, Square, Eye, EyeOff, PenTool, Pencil, ClipboardCheck, Sparkles, RefreshCw } from "lucide-react";
+import { Trash2, RotateCcw, Eye, PenTool, Pencil, ClipboardCheck, RefreshCw, ChevronDown } from "lucide-react";
 import companionImg from "../assets/images/synthid-removed-Gemini_Generated_Image_csh1tcsh1tcsh1tc.png";
 
 /**
@@ -43,6 +43,13 @@ import companionImg from "../assets/images/synthid-removed-Gemini_Generated_Imag
  *   with real stroke-path capture, but can keep the four-mode shell, the
  *   pointer-gating pattern (`drawingEnabled`), and the "review" mode's
  *   feedback contract untouched.
+ *
+ * UI-1 (control simplification): the grid toggle now lives in the caption row above the canvas
+ * (Watch / Trace / Write only), Trace/Write tools share one row, every control is at least 32px,
+ * and captions are one short line so the canvas never moves between modes. UI-1b: the mode tabs are a
+ * non-linear rail with arrow-key navigation, the default ink is Earthy Clay, and ink/thickness live behind
+ * a "More" control that always shows the current brush. Element ids
+ * (practice-drawing-canvas, color-*, brush-*, action-*) and all props are unchanged.
  */
 
 type PracticeMode = "watch" | "trace" | "write" | "review";
@@ -76,11 +83,22 @@ interface DrawingCanvasProps {
 // personalization, not a learning aid — "Green Grass" (bright, low contrast on light
 // themes) and "Sienna Clay" (a near-duplicate of "Earthy Clay") are dropped, keeping
 // one high-contrast default and one warm alternative.
+//
+// UI-1b: the default is now Earthy Clay (orange). It reads on every theme's canvas (3.1:1 on the
+// light natural theme, 5.2–5.8:1 on the five dark ones — Forest Moss was 1.5:1 on the dark ones),
+// and it also survives being flattened onto black, which matters because the export below is a
+// transparent PNG. Forest Moss stays available as the second ink.
 const INK_PALETTE = [
-  { id: "color-forest", value: "#2E3A2F", title: "Forest Moss Ink" },
   { id: "color-clay", value: "#C27D56", title: "Earthy Clay brush" },
+  { id: "color-forest", value: "#2E3A2F", title: "Forest Moss Ink" },
 ] as const;
-const DEFAULT_INK = "#2E3A2F"; // Emerald Forest Ink
+const DEFAULT_INK = INK_PALETTE[0].value;
+
+const BRUSHES = [
+  { id: "brush-thin", width: 3, title: "Thin tip brush", short: "thin", dot: "h-1.5 w-1.5" },
+  { id: "brush-medium", width: 6, title: "Medium tip brush", short: "medium", dot: "h-2.5 w-2.5" },
+  { id: "brush-thick", width: 10, title: "Thick tip brush", short: "thick", dot: "h-3.5 w-3.5" },
+] as const;
 
 const MODES: Array<{ id: PracticeMode; label: string; icon: typeof Eye; hint: string; caption: string }> = [
   {
@@ -88,30 +106,40 @@ const MODES: Array<{ id: PracticeMode; label: string; icon: typeof Eye; hint: st
     label: "Watch",
     icon: Eye,
     hint: "Preview the stroke demonstration",
-    caption: "Watch the strokes drawn in the correct order.",
+    caption: "Watch the strokes in order.",
   },
   {
     id: "trace",
     label: "Trace",
     icon: PenTool,
     hint: "Trace over the guide",
-    caption: "Trace the faint guide inside the grid.",
+    caption: "Trace the faint guide.",
   },
   {
     id: "write",
     label: "Write",
     icon: Pencil,
     hint: "Write from memory",
-    caption: "Write it from memory — no guide shown.",
+    caption: "Write it from memory.",
   },
   {
     id: "review",
     label: "Review",
     icon: ClipboardCheck,
     hint: "Check your attempt",
-    caption: "Check your attempt and see Astra-chan's feedback.",
+    caption: "Check your attempt.",
   },
 ];
+
+/** Tiny inline grid glyph (no icon-library dependency for one shape). */
+function GridIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+      <rect x="2" y="2" width="12" height="12" rx="2" />
+      <path d="M6 2v12M10 2v12M2 6h12M2 10h12" />
+    </svg>
+  );
+}
 
 export default function DrawingCanvas({ referenceChar, isAnalyzing, analysisResult, analysisError, onEvaluate, watchStage, watchControls, showGrid, onToggleGrid }: DrawingCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -119,6 +147,7 @@ export default function DrawingCanvas({ referenceChar, isAnalyzing, analysisResu
   const [isDrawing, setIsDrawing] = useState(false);
   const [brushColor, setBrushColor] = useState<string>(DEFAULT_INK);
   const [brushWidth, setBrushWidth] = useState(6);
+  const [brushOpen, setBrushOpen] = useState(false);
   const [strokes, setStrokes] = useState<ImageData[]>([]);
 
   const drawingEnabled = mode === "trace" || mode === "write";
@@ -248,14 +277,30 @@ export default function DrawingCanvas({ referenceChar, isAnalyzing, analysisResu
     }
   };
 
+  // Modes are not steps: any tab is available at any time. Arrow keys / Home / End move between them.
+  const onTabKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const keys = ["ArrowRight", "ArrowLeft", "Home", "End"];
+    if (!keys.includes(event.key)) return;
+    event.preventDefault();
+    const index = MODES.findIndex((m) => m.id === mode);
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? MODES.length - 1
+          : (index + (event.key === "ArrowRight" ? 1 : -1) + MODES.length) % MODES.length;
+    setMode(MODES[next].id);
+    document.getElementById(`kz-mode-tab-${MODES[next].id}`)?.focus();
+  };
+
+  const activeInk = INK_PALETTE.find((ink) => ink.value === brushColor) ?? INK_PALETTE[0];
+  const activeBrush = BRUSHES.find((brush) => brush.width === brushWidth) ?? BRUSHES[1];
+
   return (
     <div className="flex flex-col items-center gap-3 bg-natural-card border border-natural-border/70 rounded-3xl p-4 w-full max-w-sm mx-auto shadow-sm">
-      {/* Mode tabs */}
-      <div
-        role="tablist"
-        aria-label="Practice mode"
-        className="flex w-full items-center gap-1 overflow-x-auto rounded-xl border border-natural-border/60 bg-natural-bg p-1"
-      >
+      {/* Mode rail: four equal segments, the current one lit. A track rather than numbered steps, so it
+          reads as "where you are", never as "what comes next". Any tab can be chosen at any time. */}
+      <div role="tablist" aria-label="Practice mode" onKeyDown={onTabKeyDown} className="flex w-full items-stretch gap-1">
         {MODES.map((m) => {
           const active = mode === m.id;
           const Icon = m.icon;
@@ -267,25 +312,44 @@ export default function DrawingCanvas({ referenceChar, isAnalyzing, analysisResu
               id={`kz-mode-tab-${m.id}`}
               aria-selected={active}
               aria-controls="kz-mode-panel"
+              tabIndex={active ? 0 : -1}
               title={m.hint}
               onClick={() => setMode(m.id)}
-              className={`flex flex-1 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-[10.5px] font-mono font-extrabold uppercase tracking-wide transition motion-reduce:transition-none ${
+              className={`flex min-h-10 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap border-b-[3px] px-1 text-[11px] font-mono font-extrabold uppercase transition motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-natural-forest/40 sm:tracking-wide ${
                 active
-                  ? "bg-natural-forest text-natural-bg shadow-sm"
-                  : "text-natural-forest-light hover:text-natural-forest"
+                  ? "border-natural-clay text-natural-charcoal"
+                  : "border-natural-border/60 text-natural-forest-light hover:border-natural-forest-light hover:text-natural-forest"
               }`}
             >
-              <Icon className="h-3.5 w-3.5 shrink-0" />
+              <Icon className={`h-3.5 w-3.5 shrink-0 ${active ? "text-natural-clay" : ""}`} />
               {m.label}
             </button>
           );
         })}
       </div>
 
-      {/* Instruction for the active mode, right where it's needed */}
-      <p className="min-h-[1.1rem] px-1 text-center font-serif text-[11px] italic leading-snug text-natural-forest-light">
-        {activeMeta.caption}
-      </p>
+      {/* One short instruction for the active mode, with the grid toggle beside it. Fixed row
+          height: the canvas below never moves when the mode changes. */}
+      <div className="flex min-h-9 w-full items-center justify-between gap-2 px-1">
+        <p className="min-w-0 flex-1 font-serif text-xs italic leading-snug text-natural-forest-light">{activeMeta.caption}</p>
+        {mode !== "review" && (
+          <button
+            type="button"
+            onClick={onToggleGrid}
+            aria-pressed={showGrid}
+            aria-label="Practice grid"
+            title={showGrid ? "Hide practice grid" : "Show practice grid"}
+            className={`inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border px-2.5 font-mono text-[11px] font-extrabold uppercase tracking-wider transition motion-reduce:transition-none ${
+              showGrid
+                ? "border-natural-clay/40 bg-natural-clay/10 text-natural-clay"
+                : "border-natural-border bg-natural-bg/60 text-natural-forest-light hover:border-natural-forest hover:text-natural-forest"
+            }`}
+          >
+            <GridIcon className="h-3.5 w-3.5" />
+            Grid
+          </button>
+        )}
+      </div>
 
       {/* Grid Backplane & fixed-size Canvas — stays the same size in every mode */}
       <div className="relative w-[280px] h-[280px] bg-natural-bg border-2 border-natural-border rounded-2xl overflow-hidden shadow-inner">
@@ -335,118 +399,106 @@ export default function DrawingCanvas({ referenceChar, isAnalyzing, analysisResu
           ))}
       </div>
 
-      <button
-        type="button"
-        onClick={onToggleGrid}
-        aria-pressed={showGrid}
-        title={showGrid ? "Hide practice guides" : "Show practice guides"}
-        className="mx-auto inline-flex min-h-8 items-center justify-center gap-1.5 rounded-xl border border-natural-border bg-natural-bg/60 px-3 py-1.5 font-mono text-[10px] font-extrabold uppercase tracking-wider text-natural-forest-light transition hover:border-natural-forest hover:text-natural-forest"
-      >
-        {showGrid ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-        {showGrid ? "Hide grid" : "Show grid"}
-      </button>
-
       {/* Mode-dependent footer, id'd as the tabs' shared panel */}
       <div role="tabpanel" id="kz-mode-panel" aria-labelledby={`kz-mode-tab-${mode}`} className="flex w-full flex-col gap-3">
         {mode === "watch" && watchControls}
 
         {(mode === "trace" || mode === "write") && (
-          <>
-            {/* Row 1: Brush Color Picks & Thickness selectors */}
-            <div className="flex items-center justify-between w-full gap-2">
+          <div className="flex w-full flex-col gap-2">
+            {/* One row: the current brush (ink + thickness, always visible) with a More control, and the
+                two actions you reach for constantly. Everything else is one tap away. */}
+            <div className="flex w-full items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setBrushOpen((open) => !open)}
+                aria-expanded={brushOpen}
+                aria-controls="kz-brush-options"
+                aria-label={`More brush options. Current: ${activeInk.title}, ${activeBrush.short}.`}
+                className="flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-natural-border/70 bg-natural-bg/60 px-3 text-xs font-bold text-natural-forest-light transition motion-reduce:transition-none hover:border-natural-forest hover:text-natural-forest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-natural-forest/40"
+              >
+                <span className="flex items-center gap-1.5" aria-hidden="true">
+                  <span className="block h-4 w-4 rounded-full border border-natural-border" style={{ backgroundColor: brushColor }} />
+                  <span className="flex h-4 w-4 items-center justify-center">
+                    <span className={`block rounded-full bg-natural-charcoal ${activeBrush.dot}`} />
+                  </span>
+                </span>
+                More
+                <ChevronDown className={`h-4 w-4 transition-transform motion-reduce:transition-none ${brushOpen ? "rotate-180" : ""}`} aria-hidden="true" />
+              </button>
+
+              {/* Undo & Clear — icon controls with tooltips, per A5 */}
               <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  id="action-undo"
+                  onClick={undoLast}
+                  title="Undo last stroke"
+                  aria-label="Undo last stroke"
+                  className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-natural-border bg-natural-bg text-natural-forest-light transition motion-reduce:transition-none hover:border-natural-forest hover:text-natural-forest"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  id="action-clear"
+                  onClick={clearCanvas}
+                  title="Clear canvas"
+                  aria-label="Clear canvas"
+                  className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-natural-terracotta/20 bg-natural-terracotta/10 text-natural-terracotta transition motion-reduce:transition-none hover:bg-natural-terracotta/20"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Brush options. Kept in the DOM (display:none when closed) so the control ids stay stable. */}
+            <div id="kz-brush-options" className={`${brushOpen ? "flex" : "hidden"} w-full flex-wrap items-center justify-between gap-2 border-t border-natural-border/50 pt-2`}>
+              <div className="flex items-center" role="group" aria-label="Ink colour">
                 {INK_PALETTE.map((ink) => (
                   <button
                     key={ink.id}
                     type="button"
                     id={ink.id}
                     onClick={() => setBrushColor(ink.value)}
-                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition motion-reduce:transition-none ${
-                      brushColor === ink.value
-                        ? "border-natural-forest scale-115 shadow-sm"
-                        : "border-transparent opacity-70 hover:opacity-100"
-                    }`}
-                    style={{ backgroundColor: ink.value }}
+                    className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl"
                     title={ink.title}
                     aria-label={ink.title}
-                  />
+                    aria-pressed={brushColor === ink.value}
+                  >
+                    <span
+                      className={`block h-5 w-5 rounded-full border-2 transition motion-reduce:transition-none ${
+                        brushColor === ink.value ? "border-natural-forest shadow-sm" : "border-natural-border/60"
+                      }`}
+                      style={{ backgroundColor: ink.value }}
+                    />
+                  </button>
                 ))}
               </div>
 
-              {/* Thickness selectors */}
-              <div className="flex items-center gap-1.5 bg-natural-bg px-2 py-1 rounded-xl border border-natural-border/60">
-                <button
-                  type="button"
-                  id="brush-thin"
-                  onClick={() => setBrushWidth(3)}
-                  className={`p-1 rounded transition motion-reduce:transition-none ${
-                    brushWidth === 3 ? "text-natural-forest bg-natural-card/50 font-bold" : "text-natural-forest-light/50 hover:text-natural-forest"
-                  }`}
-                  title="Thin tip brush"
-                  aria-label="Thin tip brush"
-                >
-                  <Square className="w-2.5 h-2.5 fill-current" />
-                </button>
-                <button
-                  type="button"
-                  id="brush-medium"
-                  onClick={() => setBrushWidth(6)}
-                  className={`p-1 rounded transition motion-reduce:transition-none ${
-                    brushWidth === 6 ? "text-natural-forest bg-natural-card/50 font-bold" : "text-natural-forest-light/50 hover:text-natural-forest"
-                  }`}
-                  title="Medium tip brush"
-                  aria-label="Medium tip brush"
-                >
-                  <Square className="w-3.5 h-3.5 fill-current" />
-                </button>
-                <button
-                  type="button"
-                  id="brush-thick"
-                  onClick={() => setBrushWidth(10)}
-                  className={`p-1 rounded transition motion-reduce:transition-none ${
-                    brushWidth === 10 ? "text-natural-forest bg-natural-card/50 font-bold" : "text-natural-forest-light/50 hover:text-natural-forest"
-                  }`}
-                  title="Thick tip brush"
-                  aria-label="Thick tip brush"
-                >
-                  <Square className="w-4.5 h-4.5 fill-current" />
-                </button>
+              <div className="flex items-center rounded-xl border border-natural-border/60 bg-natural-bg p-0.5" role="group" aria-label="Brush thickness">
+                {BRUSHES.map((brush) => (
+                  <button
+                    key={brush.id}
+                    type="button"
+                    id={brush.id}
+                    onClick={() => setBrushWidth(brush.width)}
+                    className={`flex h-9 w-10 cursor-pointer items-center justify-center rounded-lg transition motion-reduce:transition-none ${
+                      brushWidth === brush.width ? "bg-natural-card text-natural-forest" : "text-natural-forest-light/60 hover:text-natural-forest"
+                    }`}
+                    title={brush.title}
+                    aria-label={brush.title}
+                    aria-pressed={brushWidth === brush.width}
+                  >
+                    <span className={`block rounded-full bg-current ${brush.dot}`} />
+                  </button>
+                ))}
               </div>
             </div>
-
-            {/* Row 2: Action Tools (Undo & Clear) — icon controls with tooltips, per A5 */}
-            <div className="flex items-center justify-end gap-2 w-full">
-              <button
-                type="button"
-                id="action-undo"
-                onClick={undoLast}
-                title="Undo last stroke"
-                aria-label="Undo last stroke"
-                className="flex h-8 w-8 items-center justify-center rounded-xl border border-natural-border bg-natural-bg text-natural-forest-light transition motion-reduce:transition-none hover:border-natural-forest hover:text-natural-forest cursor-pointer shadow-xs"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                id="action-clear"
-                onClick={clearCanvas}
-                title="Clear canvas"
-                aria-label="Clear canvas"
-                className="flex h-8 w-8 items-center justify-center rounded-xl border border-natural-terracotta/20 bg-natural-terracotta/10 text-natural-terracotta transition motion-reduce:transition-none hover:bg-natural-terracotta/20 cursor-pointer shadow-xs"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </>
+          </div>
         )}
 
         {mode === "review" && (
           <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-center gap-1.5 text-[9px] font-mono font-extrabold uppercase tracking-widest text-natural-clay">
-              <Sparkles className="h-3 w-3" />
-              AI Accuracy Engine
-            </div>
-
             {/* Submit Button or Loading State */}
             {isAnalyzing ? (
               <div className="flex flex-col items-center justify-center p-6 bg-natural-bg/50 border border-dashed border-natural-border/80 rounded-2xl text-center gap-3">
@@ -460,9 +512,9 @@ export default function DrawingCanvas({ referenceChar, isAnalyzing, analysisResu
               <button
                 type="button"
                 onClick={onEvaluate}
-                className="w-full py-3 bg-natural-forest text-natural-bg hover:bg-natural-forest/90 border border-transparent rounded-2xl text-xs font-serif font-extrabold tracking-wider transition motion-reduce:transition-none hover:shadow-md cursor-pointer flex items-center justify-center gap-2 uppercase motion-safe:animate-pulse"
+                className="flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border border-transparent bg-natural-forest px-3 py-3 font-serif text-sm font-extrabold text-natural-bg transition motion-reduce:transition-none hover:bg-natural-forest/90 hover:shadow-md"
               >
-                ✨ Check Stroke Accuracy with Astra-chan
+                ✨ Check my drawing
               </button>
             )}
 
@@ -474,9 +526,9 @@ export default function DrawingCanvas({ referenceChar, isAnalyzing, analysisResu
                   <span className="text-xs font-serif font-extrabold text-natural-terracotta">AI Checker Unavailable</span>
                 </div>
                 <p className="text-xs text-natural-charcoal leading-relaxed font-sans">{analysisError}</p>
-                <div className="mt-1 p-2.5 bg-natural-bg/70 rounded-xl border border-natural-border/50">
-                  <p className="text-[10px] font-mono text-natural-forest-light font-semibold uppercase tracking-wider mb-1">✏️ Offline Self-Check Tips</p>
-                  <ul className="text-[11px] text-natural-charcoal/80 leading-relaxed space-y-0.5 font-sans">
+                <div className="mt-1 border-t border-natural-terracotta/20 pt-2.5">
+                  <p className="kz-label mb-1">✏️ Offline self-check tips</p>
+                  <ul className="text-xs text-natural-charcoal/80 leading-relaxed space-y-0.5 font-sans">
                     <li>• Does your stroke count match the reference ghost character?</li>
                     <li>• Are strokes flowing top-to-bottom and left-to-right?</li>
                     <li>• Does it fit neatly inside the grid square?</li>
@@ -501,7 +553,7 @@ export default function DrawingCanvas({ referenceChar, isAnalyzing, analysisResu
                     {Number(analysisResult.score) || "?"}%
                   </div>
                   <div>
-                    <span className="text-[9px] font-mono text-natural-clay uppercase tracking-wider font-extrabold">VERDICT ACCURACY</span>
+                    <span className="kz-label text-natural-clay">Drawing check</span>
                     <h5 className="font-serif font-extrabold text-xs text-natural-forest leading-tight mt-0.5">
                       {analysisResult.feedbackTitle}
                     </h5>
