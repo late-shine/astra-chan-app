@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { Volume2 } from "lucide-react";
 import { KANJI_FORM_NOTICES } from "../kanjiFormNotices";
+import { notifyPreferenceChanged } from "../preferences";
 
 /**
  * KanjiSpecimen — the big kanji on the study card, with a local Form control.
@@ -129,6 +130,7 @@ export default function KanjiSpecimen({ kanji, onSpeak, showGrid, notice }: Kanj
     } catch {
       /* not fatal: the choice just won't be remembered */
     }
+    notifyPreferenceChanged(); // ACC-1: lets the account-synced preferences notice this change
   };
 
   // Ask the browser for exactly these glyphs in each face; if a face can't supply them

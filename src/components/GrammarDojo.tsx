@@ -11,6 +11,7 @@ import {
   BookOpen
 } from "lucide-react";
 import companionImg from "../assets/images/synthid-removed-Gemini_Generated_Image_csh1tcsh1tcsh1tc.png";
+import { notifyPreferenceChanged } from "../preferences";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -391,6 +392,7 @@ export default function GrammarDojo({ onBack, onAwardXP, speakJapanese }: Gramma
     try {
       localStorage.setItem("astra_show_romaji", String(showRomaji));
     } catch (e) { }
+    notifyPreferenceChanged(); // ACC-1: lets the account-synced preferences notice this change
   }, [showRomaji]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────

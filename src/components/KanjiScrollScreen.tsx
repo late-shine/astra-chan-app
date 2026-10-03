@@ -31,6 +31,7 @@ import { KANJI_WORD_FAMILIES } from "../kanjiWordFamilies";
 import { KANJI_READING_RECORDS_V2, KANJI_WORD_FAMILIES_V2 } from "../kanjiWordFamiliesV2";
 import { deriveWordEntryFromV2 } from "../kanjiReadingAdapter";
 import type { KanjiItem, KanjiReadingRecord, KanjiWordEntry, SRSCard } from "../types";
+import { notifyPreferenceChanged } from "../preferences";
 
 type CurrentScreen = "menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo";
 type AnalysisResult = { score: number; feedbackTitle: string; advice: string; validDrawing?: boolean } | null;
@@ -471,6 +472,7 @@ export default function KanjiScrollScreen({
       } catch {
         /* not fatal: the preference just will not persist */
       }
+      notifyPreferenceChanged(); // ACC-1: deferred one tick, so safe inside this updater
       return next;
     });
   };

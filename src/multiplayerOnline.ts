@@ -87,6 +87,12 @@ export interface UserProfile {
   searchName?: string;
   updatedAt: number;
   createdAt?: number;
+  /**
+   * ACC-1: set only when the user explicitly saved their name/avatar. A profile
+   * with this field is authoritative when restoring on another device; one
+   * without it may have been overwritten by the old start-up behaviour.
+   */
+  profileSetAt?: number;
 }
 
 /** Room invite sent to a friend */
@@ -841,7 +847,11 @@ export function listenToMatchHistory(callback: (history: MatchHistoryRecord[]) =
 }
 
 /** Create or update the current user's public friend profile */
-export async function saveUserProfile(name: string, avatar = ""): Promise<UserProfile> {
+export async function saveUserProfile(
+  name: string,
+  avatar = "",
+  options: { stamp?: boolean } = {}
+): Promise<UserProfile> {
   const uid = currentUid();
   if (!uid) throw new Error("You must be signed in to save your profile.");
 
@@ -857,12 +867,32 @@ export async function saveUserProfile(name: string, avatar = ""): Promise<UserPr
     lastSeen: now,
     createdAt: snapshot.val()?.createdAt || now,
     updatedAt: now,
+    // ACC-1b: callers publishing placeholder values pass { stamp: false } so the profile
+    // does not become authoritative. The field is omitted (never undefined) in that case,
+    // and update() leaves any existing value untouched.
+    ...(options?.stamp === false ? {} : { profileSetAt: now }),
     searchName: normalizeSearchName(cleanName),
   };
 
   await update(profileRef, profile);
   onDisconnect(profileRef).update({ online: false, lastSeen: Date.now() });
   return profile;
+}
+
+/**
+ * ACC-1: mark the current user online WITHOUT touching name or avatar.
+ * App start-up used to call saveUserProfile() with whatever this device had
+ * stored, which overwrote the account's real profile on a fresh device. Start-up
+ * now reads the cloud profile first and only calls saveUserProfile() when the
+ * reconcile rule says to publish; otherwise it calls this.
+ */
+export async function markProfileOnline(): Promise<void> {
+  const uid = currentUid();
+  if (!uid) return;
+  const profileRef = ref(db, `userProfiles/${uid}`);
+  const now = Date.now();
+  await update(profileRef, { online: true, lastSeen: now, updatedAt: now });
+  onDisconnect(profileRef).update({ online: false, lastSeen: Date.now() });
 }
 
 /** Read another user's public profile by UID */

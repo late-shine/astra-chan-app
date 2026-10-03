@@ -160,8 +160,13 @@ export async function loadCloudStats(uid = currentUid()): Promise<StudentStats |
 
 export async function saveCloudStats(stats: StudentStats, uid = currentUid()): Promise<void> {
     if (!uid || isAnonymousUser()) return;
+    // Realtime Database set() throws if any value is `undefined`. An optional
+    // field left as undefined on the stats object (preferences, SRS card
+    // fields...) would fail the whole sync, so strip them with a JSON round
+    // trip: undefined members are dropped, everything else is unchanged.
+    const cleanStats = JSON.parse(JSON.stringify(stats)) as StudentStats;
     await set(ref(db, `userProgress/${uid}`), {
-        stats,
+        stats: cleanStats,
         updatedAt: Date.now(),
     });
 }

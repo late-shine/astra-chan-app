@@ -76,6 +76,8 @@ import {
   recordMatchHistory,
   listenToMatchHistory,
   saveUserProfile,
+  getUserProfile,
+  markProfileOnline,
   searchUserProfiles,
   type RoomState,
   type RoomSettings,
@@ -108,6 +110,33 @@ import ReferenceCharts from "./components/ReferenceCharts";
 import GrammarDojo from "./components/GrammarDojo";
 import ReadingRoomScreen from "./components/ReadingRoomScreen";
 import { DEFAULT_CLOUD_JAPANESE_VOICE, getCloudJapaneseVoice } from "./voiceCatalog";
+import {
+  THEME_IDS,
+  PREFERENCE_CHANGED_EVENT,
+  completePreferences,
+  readComponentPreferences,
+  readPreferencesEnvelope,
+  resolvePreferences,
+  sanitizeEnvelope,
+  serializePreferences,
+  writeLocalPreferences,
+  writePreferencesEnvelope,
+  type ComponentPreferences,
+  type SyncedPreferences,
+  type UserPreferences,
+} from "./preferences";
+import {
+  AVATAR_RECOMPRESS_ABOVE_CHARS,
+  DEFAULT_PROFILE_NAME,
+  clearProfilePending,
+  compressAvatarDataUrl,
+  compressAvatarFile,
+  markProfilePending,
+  readLocalProfile,
+  reconcileProfile,
+  shouldStampProfile,
+  writeLocalProfile,
+} from "./profileSync";
 import MenuScreen from "./components/MenuScreen";
 import ResultsScreen from "./components/ResultsScreen";
 import VocabQuizScreen from "./components/VocabQuizScreen";
@@ -468,7 +497,7 @@ export default function App() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   // Customizable background elements and dark/light settings
-  const VALID_THEMES = ["light", "dark", "dark-cosmic", "dark-emerald", "dark-maple", "dark-cyber"] as const;
+  const VALID_THEMES = THEME_IDS; // single shared list: src/preferences.ts
   type ThemeId = typeof VALID_THEMES[number];
   const [theme, setTheme] = useState<ThemeId>(() => {
     try {
@@ -606,6 +635,118 @@ export default function App() {
       localStorage.setItem("astra_auto_pronounce", String(autoPronounce));
     } catch (e) { }
   }, [autoPronounce]);
+
+  // ── ACC-1: ACCOUNT-SYNCED PREFERENCES ──────────────────────────────────────
+  // Model and rules live in src/preferences.ts. In short: stats.preferences
+  // carries a validated copy of the settings plus an `updatedAt` that is stamped
+  // ONLY when the user changes a setting (never on start-up, never when a synced
+  // value is applied). App-owned settings are read from the state above; the
+  // three owned by child components (romaji, kanji form, practice grid) are
+  // re-read from localStorage whenever a component announces a change.
+  const refreshComponentPrefs = () => {
+    setComponentPrefs((previous) => {
+      const next = readComponentPreferences();
+      return next.showRomaji === previous.showRomaji
+        && next.kanjiForm === previous.kanjiForm
+        && next.kanjiPracticeGrid === previous.kanjiPracticeGrid
+        ? previous
+        : next;
+    });
+  };
+  const [componentPrefs, setComponentPrefs] = useState<ComponentPreferences>(readComponentPreferences);
+  useEffect(() => {
+    window.addEventListener(PREFERENCE_CHANGED_EVENT, refreshComponentPrefs);
+    return () => window.removeEventListener(PREFERENCE_CHANGED_EVENT, refreshComponentPrefs);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const preferenceSnapshot: UserPreferences = completePreferences({
+    theme,
+    fontStyle,
+    language,
+    autoPronounce,
+    speechVoiceMode,
+    cloudVoiceId: selectedCloudVoiceId,
+    bgAnimationType,
+    bgIntensity,
+    bgBlur,
+    bgOpacity,
+    autoCycleBg,
+    ...componentPrefs,
+  });
+  const preferenceKey = serializePreferences(preferenceSnapshot);
+  const preferenceSnapshotRef = useRef<UserPreferences>(preferenceSnapshot);
+  preferenceSnapshotRef.current = preferenceSnapshot;
+  // Baseline = whatever is on screen at first render, so start-up never counts as a change.
+  const lastSyncedPreferenceKeyRef = useRef<string | null>(null);
+  if (lastSyncedPreferenceKeyRef.current === null) lastSyncedPreferenceKeyRef.current = preferenceKey;
+
+  // A genuine user change: stamp it, keep a durable local copy, and mirror it into
+  // stats so the existing debounced cloud sync carries it.
+  useEffect(() => {
+    if (preferenceKey === lastSyncedPreferenceKeyRef.current) return;
+    lastSyncedPreferenceKeyRef.current = preferenceKey;
+    const envelope: SyncedPreferences = { values: { ...preferenceSnapshotRef.current }, updatedAt: Date.now() };
+    writePreferencesEnvelope(envelope);
+    setStats((previous) => ({ ...previous, preferences: envelope }));
+  }, [preferenceKey]);
+
+  /** Adopt synced values on this device (state + the existing localStorage keys). */
+  const applyPreferenceValues = (values: Partial<UserPreferences>) => {
+    writeLocalPreferences(values);
+    if (values.theme !== undefined) setTheme(values.theme);
+    if (values.fontStyle !== undefined) setFontStyle(values.fontStyle);
+    if (values.language !== undefined) setLanguage(values.language);
+    if (values.autoPronounce !== undefined) setAutoPronounce(values.autoPronounce);
+    if (values.speechVoiceMode !== undefined) setSpeechVoiceMode(values.speechVoiceMode);
+    if (values.cloudVoiceId !== undefined) setSelectedCloudVoiceId(values.cloudVoiceId);
+    if (values.bgAnimationType !== undefined) setBgAnimationType(values.bgAnimationType);
+    if (values.bgIntensity !== undefined) setBgIntensity(values.bgIntensity);
+    if (values.bgBlur !== undefined) setBgBlur(values.bgBlur);
+    if (values.bgOpacity !== undefined) setBgOpacity(values.bgOpacity);
+    if (values.autoCycleBg !== undefined) setAutoCycleBg(values.autoCycleBg);
+    refreshComponentPrefs();
+  };
+
+  /**
+   * The ONE place cloud stats meet local stats (sign-in and page-load hydrate).
+   * SRS cards are merged by mergeSrsCards; preferences by resolvePreferences;
+   * everything else is cloud-wins, exactly as before. Pass null when the account
+   * has no cloud stats yet: the result is the local stats, with this device's
+   * customised preferences stamped so they reach the new cloud copy.
+   */
+  const hydrateStatsFromCloud = (localStats: StudentStats, cloudStats: StudentStats | null): StudentStats => {
+    const resolution = resolvePreferences({
+      local: readPreferencesEnvelope() ?? sanitizeEnvelope(localStats.preferences),
+      cloud: cloudStats ? sanitizeEnvelope(cloudStats.preferences) : null,
+      snapshot: preferenceSnapshotRef.current,
+      now: Date.now(),
+    });
+
+    let hydrated: StudentStats;
+    if (cloudStats) {
+      const { preferences: _cloudPreferences, ...cloudRest } = cloudStats;
+      hydrated = {
+        ...cloudRest,
+        srsCards: mergeSrsCards(localStats.srsCards || {}, cloudStats.srsCards || {}),
+      };
+    } else {
+      const { preferences: _localPreferences, ...localRest } = localStats;
+      hydrated = localRest;
+    }
+
+    if (resolution.envelope) {
+      hydrated.preferences = resolution.envelope;
+      writePreferencesEnvelope(resolution.envelope);
+    }
+    if (resolution.apply && resolution.envelope) {
+      // Mark the incoming values as already-synced BEFORE the setters fire, so
+      // applying them is not mistaken for a user change and re-stamped.
+      lastSyncedPreferenceKeyRef.current = serializePreferences(completePreferences(resolution.envelope.values));
+      applyPreferenceValues(resolution.apply);
+    }
+    return hydrated;
+  };
 
   // Zen Soundscape synthesizer start/stop and volume logic
   const startAmbientMusic = () => {
@@ -1022,6 +1163,9 @@ export default function App() {
       try {
         const parsed = JSON.parse(saved) as StudentStats;
         parsed.srsCards = parsed.srsCards ?? {};
+        // ACC-1: the preferences' durable local copy is its own key; the blob copy is only a mirror.
+        const loadedPreferences = readPreferencesEnvelope() ?? sanitizeEnvelope(parsed.preferences);
+        delete parsed.preferences;
 
         // Dynamic streak verification — recompute from studyDates in local time
         let currentStreak = 0;
@@ -1048,6 +1192,7 @@ export default function App() {
 
         setStats({
           ...parsed,
+          ...(loadedPreferences ? { preferences: loadedPreferences } : {}),
           streakCount: currentStreak,
           vocabularyProgress: parsed.vocabularyProgress || {},
           studyDates: parsed.studyDates || [],
@@ -1064,7 +1209,11 @@ export default function App() {
       }
       setStatsHydrated(true);
     }
-    if (!saved) setStatsHydrated(true);
+    if (!saved) {
+      const loadedPreferences = readPreferencesEnvelope();
+      if (loadedPreferences) setStats((previous) => ({ ...previous, preferences: loadedPreferences }));
+      setStatsHydrated(true);
+    }
   }, []);
 
   // Sign in anonymously first so existing multiplayer features keep working.
@@ -1084,15 +1233,14 @@ export default function App() {
           const cloudStats = await loadCloudStats(user.uid);
           if (cancelled) return;
           if (cloudStats) {
-            const hydratedStats = {
-              ...cloudStats,
-              srsCards: mergeSrsCards(stats.srsCards || {}, cloudStats.srsCards || {}),
-            };
+            const hydratedStats = hydrateStatsFromCloud(stats, cloudStats);
             setStats(hydratedStats);
             replaceCards(hydratedStats.srsCards);
             localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(hydratedStats));
           } else {
-            await saveCloudStats(stats, user.uid);
+            const seededStats = hydrateStatsFromCloud(stats, null);
+            setStats(seededStats);
+            await saveCloudStats(seededStats, user.uid);
           }
         }
         if (!cancelled) setCloudStatsHydrated(true);
@@ -1198,9 +1346,25 @@ export default function App() {
         showToast("That progress file could not be read.");
         return;
       }
+      // ACC-1: a backup's settings are restored with its progress, stamped now so they
+      // win over the cloud copy. A backup without settings keeps this device's current ones.
+      const backupPreferences = sanitizeEnvelope((parsed?.stats ?? parsed)?.preferences);
+      if (backupPreferences) {
+        const restoredPreferences: SyncedPreferences = {
+          values: completePreferences(backupPreferences.values, preferenceSnapshotRef.current),
+          updatedAt: Date.now(),
+        };
+        writeLocalPreferences(restoredPreferences.values);
+        writePreferencesEnvelope(restoredPreferences);
+        importedStats.preferences = restoredPreferences;
+      } else if (stats.preferences) {
+        importedStats.preferences = stats.preferences;
+      }
       saveStats(importedStats);
       if (typeof parsed?.profileName === "string" && parsed.profileName.trim()) {
         localStorage.setItem("astra_profile_name", parsed.profileName.trim().slice(0, 24));
+        // ACC-1: without this, the saved cloud profile would win after the reload and the restored name would be lost.
+        markProfilePending({ name: true });
       }
       showToast("Progress restored. Reloading...");
       setTimeout(() => window.location.reload(), 700);
@@ -1283,33 +1447,32 @@ export default function App() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      showToast("Please choose an image file.");
+    // ACC-1: the image is cropped to a small square and re-encoded, so any normal
+    // photo works and what reaches the cloud is a few KB instead of up to ~1 MB.
+    let value = "";
+    try {
+      value = await compressAvatarFile(file);
+    } catch (err: any) {
+      showToast(err?.message || "Avatar upload failed.");
       return;
     }
-    if (file.size > 700 * 1024) {
-      showToast("Avatar image is too large. Try one under 700 KB.");
+    if (!value) {
+      showToast("Avatar upload failed.");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const value = typeof reader.result === "string" ? reader.result : "";
-      if (!value) {
-        showToast("Avatar upload failed.");
-        return;
-      }
+    try {
       localStorage.setItem("astra_profile_avatar", value);
-      setProfileAvatar(value);
-      showToast("Avatar updated.");
-    };
-    reader.onerror = () => showToast("Avatar upload failed.");
-    reader.readAsDataURL(file);
+    } catch { /* storage full: the avatar still shows this session */ }
+    setProfileAvatar(value);
+    const synced = await publishAvatarChange(value);
+    showToast(synced ? "Avatar updated." : "Avatar saved on this device. It will sync when you are back online.");
   };
 
-  const handleRemoveAvatar = () => {
+  const handleRemoveAvatar = async () => {
     localStorage.removeItem("astra_profile_avatar");
     setProfileAvatar("");
-    showToast("Avatar removed.");
+    const synced = await publishAvatarChange("");
+    showToast(synced ? "Avatar removed." : "Avatar removed on this device. It will sync when you are back online.");
   };
 
   const getFriendCode = () => {
@@ -2959,7 +3122,78 @@ export default function App() {
 
   // ── FRIEND SYSTEM FUNCTIONS ────────────────────────────────────────────────
 
-  /** Ensure Firebase identity exists and publish this player's profile */
+  /**
+   * ACC-1: bring this device's name/avatar in line with the account's cloud profile.
+   *
+   * This used to be the opposite: every start-up published whatever this device had
+   * stored (default name, empty avatar on a fresh browser), overwriting the real
+   * profile. Now the cloud profile is read FIRST and reconcileProfile() decides
+   * (src/profileSync.ts); presence is updated separately and never touches
+   * name or avatar.
+   */
+  const syncOwnProfile = async (uid: string, isCancelled: () => boolean = () => false) => {
+    const local = readLocalProfile();
+    const cloud = await getUserProfile(uid);
+    if (isCancelled()) return;
+
+    const decision = reconcileProfile(local, cloud);
+    let avatar = decision.avatar;
+    let publish = decision.publish;
+    // Avatars uploaded before ACC-1 can be ~1 MB. Shrink them once and re-publish.
+    if (avatar.length > AVATAR_RECOMPRESS_ABOVE_CHARS) {
+      const smaller = await compressAvatarDataUrl(avatar);
+      if (isCancelled()) return;
+      if (smaller !== avatar) {
+        avatar = smaller;
+        publish = true;
+      }
+    }
+
+    writeLocalProfile(decision.name, avatar);
+    setProfileName(decision.name);
+    setProfileNameInput(decision.name);
+    setOnlineHostNameInput(decision.name);
+    setOnlineJoinName(decision.name);
+    setProfileAvatar(avatar);
+
+    if (publish) {
+      // ACC-1b: a placeholder-only profile is published unstamped (see reconcileProfile).
+      await saveUserProfile(decision.name, avatar, { stamp: decision.stamp });
+    } else {
+      await markProfileOnline();
+    }
+    clearProfilePending();
+  };
+
+  /** syncOwnProfile that reports a failure instead of throwing, so a profile hiccup never breaks sign-in. */
+  const syncOwnProfileSafe = async (uid: string, isCancelled?: () => boolean) => {
+    try {
+      await syncOwnProfile(uid, isCancelled);
+    } catch (err: any) {
+      if (!isCancelled?.()) setProfileError(err?.message || "Profile sync failed");
+    }
+  };
+
+  /**
+   * Publish an avatar change right away (it used to wait for the Save button, which
+   * also carried the name). If it cannot reach the cloud, the change stays marked
+   * pending and wins over the cloud copy on the next start. Returns true when synced.
+   */
+  const publishAvatarChange = async (nextAvatar: string): Promise<boolean> => {
+    markProfilePending({ avatar: true });
+    try {
+      await ensureSignedIn();
+      const savedName = readLocalProfile().name || profileName || DEFAULT_PROFILE_NAME;
+      // ACC-1b: do not stamp the default name as authoritative just because the avatar changed.
+      await saveUserProfile(savedName, nextAvatar, { stamp: shouldStampProfile(savedName) });
+      clearProfilePending();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  /** Ensure Firebase identity exists and reconcile this player's profile with the cloud */
   useEffect(() => {
     let cancelled = false;
     ensureSignedIn()
@@ -2971,11 +3205,8 @@ export default function App() {
         setProfileNameInput(savedName);
         setOnlineHostNameInput((current) => current || savedName);
         setOnlineJoinName((current) => current || savedName);
-        try {
-          await saveUserProfile(savedName, profileAvatar);
-        } catch (err: any) {
-          if (!cancelled) setProfileError(err.message || "Profile sync failed");
-        }
+        // ACC-1: read the account's cloud profile first; do not blindly publish local defaults.
+        await syncOwnProfileSafe(user.uid, () => cancelled);
       })
       .catch((err: any) => {
         if (!cancelled) setProfileError(err.message || "Firebase sign-in failed");
@@ -3055,6 +3286,7 @@ export default function App() {
       await ensureSignedIn();
       const profile = await saveUserProfile(profileNameInput, profileAvatar);
       localStorage.setItem("astra_profile_name", profile.name);
+      clearProfilePending();
       setProfileName(profile.name);
       setProfileNameInput(profile.name);
       setOnlineHostNameInput(profile.name);
@@ -3076,8 +3308,10 @@ export default function App() {
       setMyUid(user.uid);
       setAccountEmail(user.email);
       setIsAccountUser(true);
-      await saveUserProfile(profileName || profileNameInput || "Astra Scholar", profileAvatar);
-      await saveCloudStats(stats, user.uid);
+      await syncOwnProfileSafe(user.uid);
+      const seededStats = hydrateStatsFromCloud(stats, null);
+      setStats(seededStats);
+      await saveCloudStats(seededStats, user.uid);
       setCloudStatsHydrated(true);
       showToast("Astra account created. Progress sync is now active.");
     } catch (err: any) {
@@ -3097,16 +3331,17 @@ export default function App() {
       setAccountEmail(user.email);
       setIsAccountUser(true);
       if (cloudStats) {
-        const hydratedStats = {
-          ...cloudStats,
-          srsCards: mergeSrsCards(stats.srsCards || {}, cloudStats.srsCards || {}),
-        };
+        const hydratedStats = hydrateStatsFromCloud(stats, cloudStats);
         setStats(hydratedStats);
         replaceCards(hydratedStats.srsCards);
         localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(hydratedStats));
       } else {
-        await saveCloudStats(stats, user.uid);
+        const seededStats = hydrateStatsFromCloud(stats, null);
+        setStats(seededStats);
+        await saveCloudStats(seededStats, user.uid);
       }
+      // ACC-1: restore this account's name and avatar (previously only stats were restored).
+      await syncOwnProfileSafe(user.uid);
       setCloudStatsHydrated(true);
       showToast("Signed in. Cloud progress loaded.");
     } catch (err: any) {
@@ -3126,17 +3361,17 @@ export default function App() {
       setAccountEmail(user.email);
       setIsAccountUser(true);
       if (cloudStats) {
-        const hydratedStats = {
-          ...cloudStats,
-          srsCards: mergeSrsCards(stats.srsCards || {}, cloudStats.srsCards || {}),
-        };
+        const hydratedStats = hydrateStatsFromCloud(stats, cloudStats);
         setStats(hydratedStats);
         replaceCards(hydratedStats.srsCards);
         localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(hydratedStats));
       } else {
-        await saveCloudStats(stats, user.uid);
+        const seededStats = hydrateStatsFromCloud(stats, null);
+        setStats(seededStats);
+        await saveCloudStats(seededStats, user.uid);
       }
-      await saveUserProfile(profileName || profileNameInput || "Astra Scholar", profileAvatar);
+      // ACC-1: this used to publish this device's name/avatar over the account's. Reconcile instead.
+      await syncOwnProfileSafe(user.uid);
       setCloudStatsHydrated(true);
       showToast("Google account connected. Cloud progress sync is active.");
     } catch (err: any) {

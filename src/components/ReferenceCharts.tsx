@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import InteractiveWorkbench from "./InteractiveWorkbench";
 import NaturalPhrasesTab from "./NaturalPhrasesTab";
+import { notifyPreferenceChanged } from "../preferences";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -992,6 +993,7 @@ export default function ReferenceCharts({ onBack, speakJapanese }: ReferenceChar
     try {
       localStorage.setItem("astra_show_romaji", String(showRomaji));
     } catch (e) { }
+    notifyPreferenceChanged(); // ACC-1: lets the account-synced preferences notice this change
   }, [showRomaji]);
 
   const renderTab = () => {

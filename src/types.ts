@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { SyncedPreferences } from "./preferences";
+
 export interface UsageExample {
   japanese: string;
   romaji: string;
@@ -93,6 +95,11 @@ export interface StudentStats {
   survivalBestScore: number;    // Highest survival mode score ever achieved
   srsReviewedTotal: number;     // Cumulative SRS cards reviewed across all sessions
   readingMisses?: ReadingMissRecord[]; // Vocabulary noticed during Reading Room sessions
+  /**
+   * ACC-1: synced theme/font/language/voice/atmosphere settings. Optional and
+   * additive; omitted (never `undefined`) when the user has none. See src/preferences.ts.
+   */
+  preferences?: SyncedPreferences;
 }
 
 // ============================================================================
