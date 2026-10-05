@@ -1,35 +1,27 @@
 import { useState, useCallback } from "react";
 import { SRSCard, StudentStats } from "../types";
+import { createNewCard, normalizeSrsCards, scheduleAnswer } from "../srsScheduler";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = "hirachan_master_stats_v1";
 
-/** Review intervals in milliseconds, indexed by the card's NEW level after a correct answer. */
-const INTERVALS_MS: Record<number, number> = {
-  0: 8  * 60 * 60 * 1000,   // level 0 → 8 hours
-  1: 1  * 24 * 60 * 60 * 1000,  // level 1 → 1 day
-  2: 3  * 24 * 60 * 60 * 1000,  // level 2 → 3 days
-  3: 7  * 24 * 60 * 60 * 1000,  // level 3 → 7 days
-  4: 14 * 24 * 60 * 60 * 1000,  // level 4 → 14 days
-  5: 30 * 24 * 60 * 60 * 1000,  // level 5 → 30 days
-};
-
-/** Penalty interval for a wrong answer regardless of level. */
-const WRONG_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
+// The ladder, fuzz, and answer rules live in src/srsScheduler.ts (phase S1).
 
 // ── localStorage helpers ─────────────────────────────────────────────────────
 
 /**
  * Read srsCards out of the shared stats blob.
  * Returns an empty object if nothing is saved yet or parsing fails.
+ * Cards are normalized (S1): invalid fields are repaired and unusable entries dropped,
+ * while a valid legacy card keeps its level and nextReview exactly.
  */
 function loadCards(): Record<string, SRSCard> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw) as StudentStats;
-    return parsed.srsCards ?? {};
+    return normalizeSrsCards(parsed.srsCards, Date.now());
   } catch {
     return {};
   }
@@ -82,20 +74,16 @@ export function useSRS(onCardsChanged?: (cards: Record<string, SRSCard>) => void
 
   // ── addCard ────────────────────────────────────────────────────────────────
   /**
-   * Adds a new card at level 0, due in 8 hours.
+   * Adds a new card at level 0, due in 8 hours, with reps 0 / lapses 0 / addedAt set.
    * If a card for itemKey already exists, this is a no-op (no duplicates).
    */
   const addCard = useCallback(
     (itemKey: string, type: SRSCard["type"]) => {
+      const now = Date.now(); // read once, so a repeated updater call yields the same card
       setSrsCards((prev) => {
         if (prev[itemKey]) return prev; // already exists — bail out
 
-        const card: SRSCard = {
-          level: 0,
-          nextReview: Date.now() + INTERVALS_MS[0],
-          type,
-          itemKey,
-        };
+        const card = createNewCard(itemKey, type, now);
         const next = { ...prev, [itemKey]: card };
         publishCards(next);
         return next;
@@ -125,30 +113,22 @@ export function useSRS(onCardsChanged?: (cards: Record<string, SRSCard>) => void
 
   // ── answerCard ─────────────────────────────────────────────────────────────
   /**
-   * Records the user's answer for a card and schedules the next review.
-   *   correct → level + 1 (capped at 5), next review = interval for new level
-   *   wrong   → level - 1 (floored at 0), next review = 4 hours
+   * Records the user's answer for a card and schedules the next review
+   * (rules in scheduleAnswer, src/srsScheduler.ts):
+   *   correct → level + 1 (capped at 8), next review = that level's interval, fuzzed ±12% from 3 days up
+   *   wrong   → level = floor(level / 2), next review = 4 hours, lapses + 1
+   * Both stamp lastReviewed.
    */
   const answerCard = useCallback(
     (itemKey: string, wasCorrect: boolean) => {
+      const now = Date.now(); // read once, so a repeated updater call yields the same schedule
       setSrsCards((prev) => {
         const card = prev[itemKey];
         if (!card) return prev; // unknown card — bail out
 
-        let newLevel: number;
-        let newNextReview: number;
-
-        if (wasCorrect) {
-          newLevel = Math.min(5, card.level + 1);
-          newNextReview = Date.now() + INTERVALS_MS[newLevel];
-        } else {
-          newLevel = Math.max(0, card.level - 1);
-          newNextReview = Date.now() + WRONG_INTERVAL_MS;
-        }
-
         const next = {
           ...prev,
-          [itemKey]: { ...card, level: newLevel, nextReview: newNextReview },
+          [itemKey]: scheduleAnswer(card, wasCorrect, now),
         };
         publishCards(next);
         return next;
@@ -176,7 +156,7 @@ export function useSRS(onCardsChanged?: (cards: Record<string, SRSCard>) => void
    */
   const replaceCards = useCallback(
     (cards: Record<string, SRSCard>) => {
-      const next = { ...cards };
+      const next = normalizeSrsCards(cards, Date.now());
       setSrsCards(next);
       publishCards(next);
     },

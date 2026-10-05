@@ -147,6 +147,7 @@ import ProfileScreen from "./components/ProfileScreen";
 import ReviewDeckScreen from "./components/ReviewDeckScreen";
 import OnlineMultiplayerScreen from "./components/OnlineMultiplayerScreen";
 import { useSRS } from "./hooks/useSRS";
+import { mergeSrsCards, normalizeSrsCards } from "./srsScheduler";
 import wonderingImg from "./assets/images/astra-wondering.jpeg";
 import excitedImg from "./assets/images/astra-excited.png.jpeg";
 import bgMistySakura from "./assets/images/bg_misty_sakura.jpg";
@@ -258,38 +259,7 @@ function accountErrorMessage(error: any, fallback: string): string {
   }
 }
 
-/**
- * Preserve the newest known schedule when local and cloud progress differ.
- * This is especially important for older app versions that updated the SRS
- * hook/localStorage but could save a stale srsCards map to the cloud.
- */
-function mergeSrsCards(
-  localCards: Record<string, SRSCard>,
-  cloudCards: Record<string, SRSCard>
-): Record<string, SRSCard> {
-  const merged: Record<string, SRSCard> = { ...cloudCards };
-  const now = Date.now();
-
-  Object.entries(localCards).forEach(([itemKey, localCard]) => {
-    const cloudCard = merged[itemKey];
-    if (!cloudCard) {
-      merged[itemKey] = localCard;
-      return;
-    }
-
-    // A future local schedule beats a cloud copy that still says the card is
-    // due. Otherwise, use the later schedule as the best available signal of
-    // which copy was reviewed most recently.
-    if (
-      (localCard.nextReview > now && cloudCard.nextReview <= now) ||
-      localCard.nextReview > cloudCard.nextReview
-    ) {
-      merged[itemKey] = localCard;
-    }
-  });
-
-  return merged;
-}
+// Phase S1: mergeSrsCards (lastReviewed-based cloud merge) now lives in src/srsScheduler.ts.
 
 /* ===== PHASE 3A: DIRECTION-AWARE 3D SCREEN TRANSITIONS ===== */
 // `custom` carries the direction sign: +1 going deeper (menu -> room), -1 coming back.
@@ -1289,7 +1259,8 @@ export default function App() {
       characterProgress: imported.characterProgress && typeof imported.characterProgress === "object" ? imported.characterProgress : {},
       vocabularyProgress: imported.vocabularyProgress && typeof imported.vocabularyProgress === "object" ? imported.vocabularyProgress : {},
       favoriteCategory: typeof imported.favoriteCategory === "string" ? imported.favoriteCategory : "basic",
-      srsCards: imported.srsCards && typeof imported.srsCards === "object" ? imported.srsCards : {},
+      // S1: tolerate cards with missing or invalid fields (normalize, never throw); valid cards keep level and nextReview.
+      srsCards: normalizeSrsCards(imported.srsCards, Date.now()),
       studyDates: Array.isArray(imported.studyDates) ? imported.studyDates : [],
       survivalBestScore: Number(imported.survivalBestScore) || 0,
       srsReviewedTotal: Number(imported.srsReviewedTotal) || 0,

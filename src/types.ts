@@ -63,10 +63,16 @@ export interface VocabularyItem {
 }
 
 export interface SRSCard {
-  level: number;        // 0 to 5
+  level: number;        // 0 to 8 (ladder in src/srsScheduler.ts; 0 to 5 before phase S1)
   nextReview: number;   // Unix timestamp ms (Date.now() format)
   type: "vocab" | "kanji" | "hiragana" | "katakana";
   itemKey: string;      // the word/kanji/kana string itself e.g. "食べる"
+  // Phase S1 history fields. All optional and omitted (never `undefined`) when unknown, because
+  // Realtime Database rejects undefined. A legacy card has none of them and is never treated as new.
+  lastReviewed?: number; // ms timestamp of the last answer, right or wrong; drives the cloud merge
+  reps?: number;         // successful reviews. Set to 0 only on cards created by addCard
+  lapses?: number;       // times the card was answered wrong
+  addedAt?: number;      // ms timestamp when the card was added to the deck
 }
 
 export interface ReadingMissRecord {
