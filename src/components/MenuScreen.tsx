@@ -31,6 +31,7 @@ import {
 
 import { HIRAGANA_DATA, KATAKANA_DATA, KANJI_DATA, VOCABULARY_DATA } from "../data";
 import { HiraganaItem, KatakanaItem, StudentStats, SRSCard } from "../types";
+import { formatSessionLine, formatWaitingLine, type SessionSummary } from "../srsScheduler";
 import wonderingImg from "../assets/images/astra-wondering.jpeg";
 import excitedImg from "../assets/images/astra-excited.png.jpeg";
 import companionImg from "../assets/images/synthid-removed-Gemini_Generated_Image_csh1tcsh1tcsh1tc.png";
@@ -169,10 +170,10 @@ interface MenuScreenProps {
   setIsMusicExpanded: React.Dispatch<React.SetStateAction<boolean>>;
   setIsAtmosphereExpanded: React.Dispatch<React.SetStateAction<boolean>>;
 
-  // SRS / Review Deck
-  dueCount: number;
+  // SRS / Review Deck (S2: every entry point starts the budgeted session, never "all due cards")
+  sessionSummary: SessionSummary;
   totalCount: number;
-  getDueCards: () => SRSCard[];
+  getSessionQueue: () => SRSCard[];
   setSrsQueue: React.Dispatch<React.SetStateAction<SRSCard[]>>;
   setSrsQueueIndex: React.Dispatch<React.SetStateAction<number>>;
   setSrsRevealed: React.Dispatch<React.SetStateAction<boolean>>;
@@ -270,9 +271,9 @@ export default function MenuScreen(props: MenuScreenProps) {
     setMascotMood,
     setIsMusicExpanded,
     setIsAtmosphereExpanded,
-    dueCount,
+    sessionSummary,
     totalCount,
-    getDueCards,
+    getSessionQueue,
     setSrsQueue,
     setSrsQueueIndex,
     setSrsRevealed,
@@ -309,6 +310,11 @@ export default function MenuScreen(props: MenuScreenProps) {
 
   const handleToggleVocabularyLearned = useHandleToggleVocabularyLearned(stats, setStats, showToast);
 
+  // Review Deck text: "Today: 25 reviews · 5 new · about 5 min", with a quiet "+120 waiting" line beneath.
+  const sessionLine = formatSessionLine(sessionSummary);
+  const waitingLine = formatWaitingLine(sessionSummary);
+  const sessionToDo = sessionSummary.total;
+
   return (
             <motion.div
               initial={{ opacity: 0, y: 12 }}
@@ -338,16 +344,17 @@ export default function MenuScreen(props: MenuScreenProps) {
                             <div>
                               <p className="text-[10px] font-mono font-bold uppercase tracking-widest text-natural-clay">Today's Spell</p>
                               <p className="mt-1 text-sm font-serif font-bold text-natural-forest">
-                                {dueCount > 0
-                                  ? `Review ${dueCount} due card${dueCount === 1 ? "" : "s"}`
-                                  : "Practice one short round"}
+                                {sessionLine ?? "Practice one short round"}
                               </p>
+                              {waitingLine && (
+                                <p className="mt-0.5 text-[11px] font-mono font-bold text-natural-forest-light/80">{waitingLine}</p>
+                              )}
                             </div>
                             <button
                               type="button"
                               onClick={() => {
-                                if (dueCount > 0) {
-                                  setSrsQueue(getDueCards());
+                                if (sessionToDo > 0) {
+                                  setSrsQueue(getSessionQueue());
                                   setSrsQueueIndex(0);
                                   setSrsRevealed(false);
                                   setCurrentScreen("review-deck");
@@ -424,11 +431,13 @@ export default function MenuScreen(props: MenuScreenProps) {
                         },
                         {
                           title: "Review Box",
-                          desc: totalCount === 0 ? "Add cards from Learn." : `${dueCount} due today.`,
+                          desc: totalCount === 0
+                            ? "Add cards from Learn."
+                            : `${sessionLine ?? "Done for today ✨"}${waitingLine ? ` · ${waitingLine}` : ""}`,
                           icon: BookMarked,
-                          accent: dueCount > 0 ? "forest" : "quiet",
+                          accent: sessionToDo > 0 ? "forest" : "quiet",
                           action: () => {
-                            setSrsQueue(getDueCards());
+                            setSrsQueue(getSessionQueue());
                             setSrsQueueIndex(0);
                             setSrsRevealed(false);
                             setCurrentScreen("review-deck");
@@ -520,13 +529,13 @@ export default function MenuScreen(props: MenuScreenProps) {
               <button
                 type="button"
                 onClick={() => {
-                  setSrsQueue(getDueCards());
+                  setSrsQueue(getSessionQueue());
                   setSrsQueueIndex(0);
                   setSrsRevealed(false);
                   setCurrentScreen("review-deck");
                 }}
                 className={`w-full flex items-center justify-between p-4 rounded-2xl border transition hover:-translate-y-0.5 duration-300 shadow-sm cursor-pointer ${
-                  dueCount > 0
+                  sessionToDo > 0
                     ? "bg-natural-forest text-natural-bg border-natural-forest/80 hover:bg-natural-forest/90"
                     : "bg-natural-card text-natural-charcoal border-natural-border/70 hover:border-natural-forest/50"
                 }`}
@@ -535,19 +544,22 @@ export default function MenuScreen(props: MenuScreenProps) {
                   <span className="text-xl leading-none">📦</span>
                   <div className="text-left">
                     <span className="block font-serif font-bold text-base leading-tight">Review Deck</span>
-                    <span className={`text-xs font-mono font-bold tracking-wide ${dueCount > 0 ? "text-natural-bg/70" : "text-natural-forest-light"}`}>
+                    <span className={`block text-xs font-mono font-bold tracking-wide ${sessionToDo > 0 ? "text-natural-bg/70" : "text-natural-forest-light"}`}>
                       {totalCount === 0
                         ? "No cards yet — add some from Learn!"
-                        : dueCount > 0
-                          ? `${dueCount} card${dueCount === 1 ? "" : "s"} due today`
-                          : "All caught up ✨"}
+                        : sessionLine ?? "Done for today ✨"}
                     </span>
+                    {totalCount > 0 && waitingLine && (
+                      <span className={`block text-[11px] font-mono font-bold tracking-wide ${sessionToDo > 0 ? "text-natural-bg/55" : "text-natural-forest-light/70"}`}>
+                        {waitingLine}
+                      </span>
+                    )}
                   </div>
                 </div>
-                <span className={`px-2.5 py-1 rounded-lg text-xs font-mono font-extrabold tabular-nums ${
-                  dueCount > 0 ? "bg-natural-bg/20 text-natural-bg" : "bg-natural-forest/10 text-natural-forest"
+                <span className={`shrink-0 ml-3 px-2.5 py-1 rounded-lg text-xs font-mono font-extrabold tabular-nums ${
+                  sessionToDo > 0 ? "bg-natural-bg/20 text-natural-bg" : "bg-natural-forest/10 text-natural-forest"
                 }`}>
-                  {dueCount} due
+                  {sessionToDo > 0 ? `${sessionToDo} today` : totalCount === 0 ? "0" : "Done"}
                 </span>
               </button>
 

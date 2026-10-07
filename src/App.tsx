@@ -101,7 +101,7 @@ import {
   signInEmailAccount,
   signOutAccount,
 } from "./firebase";
-import { HiraganaItem, KatakanaItem, KanjiItem, VocabularyItem, StudentStats, SRSCard } from "./types";
+import { HiraganaItem, KatakanaItem, KanjiItem, VocabularyItem, StudentStats, SRSCard, SrsSettings } from "./types";
 import type { ReadingToken } from "./reading/readingData";
 import MascotCompanion from "./components/MascotCompanion";
 import AtmosphereCanvas from "./components/AtmosphereCanvas";
@@ -147,7 +147,7 @@ import ProfileScreen from "./components/ProfileScreen";
 import ReviewDeckScreen from "./components/ReviewDeckScreen";
 import OnlineMultiplayerScreen from "./components/OnlineMultiplayerScreen";
 import { useSRS } from "./hooks/useSRS";
-import { mergeSrsCards, normalizeSrsCards } from "./srsScheduler";
+import { mergeSrsCards, mergeSrsSettings, normalizeSrsCards, normalizeSrsSettings } from "./srsScheduler";
 import wonderingImg from "./assets/images/astra-wondering.jpeg";
 import excitedImg from "./assets/images/astra-excited.png.jpeg";
 import bgMistySakura from "./assets/images/bg_misty_sakura.jpg";
@@ -338,15 +338,33 @@ export default function App() {
   const {
     addCard,
     hasCard,
-    getDueCards,
-    answerCard,
+    getSessionQueue,
+    sessionSummary,
+    forecast,
+    gradeCard,
+    gradeRelearnCard,
+    removeCard,
     replaceCards,
-    dueCount,
     totalCount,
-  } = useSRS(handleSrsCardsChanged);
+  } = useSRS(handleSrsCardsChanged, stats.srsSettings);
   const [srsQueue, setSrsQueue]       = useState<SRSCard[]>([]);
   const [srsQueueIndex, setSrsQueueIndex] = useState(0);
   const [srsRevealed, setSrsRevealed]   = useState(false);
+
+  /**
+   * S2: change the daily Review Deck limits. Stamped now so this device's choice wins the cloud merge.
+   * Persisted by read-modify-write (like awardSRSXP) so it never overwrites newer card data.
+   */
+  const updateSrsSettings = useCallback((next: { dailyReviewCap: number; dailyNewCap: number }) => {
+    const settings: SrsSettings = { ...normalizeSrsSettings(next), updatedAt: Date.now() };
+    setStats((previous) => ({ ...previous, srsSettings: settings }));
+    try {
+      const raw = localStorage.getItem("hirachan_master_stats_v1");
+      const blob = raw ? (JSON.parse(raw) as StudentStats) : ({} as StudentStats);
+      blob.srsSettings = settings;
+      localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(blob));
+    } catch { /* ignore storage errors */ }
+  }, []);
 
   /** Awards XP for an SRS review while preserving the synchronized card map. */
   const awardSRSXP = useCallback((xp: number) => {
@@ -700,6 +718,11 @@ export default function App() {
         ...cloudRest,
         srsCards: mergeSrsCards(localStats.srsCards || {}, cloudStats.srsCards || {}),
       };
+      // S2: daily limits resolve by their own updatedAt (a device's offline change is not lost);
+      // omitted entirely when neither side has any.
+      const mergedSrsSettings = mergeSrsSettings(localStats.srsSettings, cloudStats.srsSettings);
+      if (mergedSrsSettings) hydrated.srsSettings = mergedSrsSettings;
+      else delete hydrated.srsSettings;
     } else {
       const { preferences: _localPreferences, ...localRest } = localStats;
       hydrated = localRest;
@@ -1261,6 +1284,10 @@ export default function App() {
       favoriteCategory: typeof imported.favoriteCategory === "string" ? imported.favoriteCategory : "basic",
       // S1: tolerate cards with missing or invalid fields (normalize, never throw); valid cards keep level and nextReview.
       srsCards: normalizeSrsCards(imported.srsCards, Date.now()),
+      // S2: a backup's daily limits come back with it; a backup without them leaves this device's as they are.
+      ...(imported.srsSettings && typeof imported.srsSettings === "object"
+        ? { srsSettings: { ...normalizeSrsSettings(imported.srsSettings), updatedAt: Date.now() } }
+        : stats.srsSettings ? { srsSettings: stats.srsSettings } : {}),
       studyDates: Array.isArray(imported.studyDates) ? imported.studyDates : [],
       survivalBestScore: Number(imported.survivalBestScore) || 0,
       srsReviewedTotal: Number(imported.srsReviewedTotal) || 0,
@@ -3582,9 +3609,9 @@ export default function App() {
     setMascotMood,
     setIsMusicExpanded,
     setIsAtmosphereExpanded,
-    dueCount,
+    sessionSummary,
     totalCount,
-    getDueCards,
+    getSessionQueue,
     setSrsQueue,
     setSrsQueueIndex,
     setSrsRevealed,
@@ -3835,15 +3862,23 @@ export default function App() {
   // Props for the extracted ReviewDeckScreen component (Phase 8 of the App.tsx split).
   const reviewDeckScreenProps = {
     srsQueue,
+    setSrsQueue,
     srsQueueIndex,
     setSrsQueueIndex,
     srsRevealed,
     setSrsRevealed,
-    answerCard,
+    gradeCard,
+    gradeRelearnCard,
+    removeCard,
     awardSRSXP,
     playChime,
     setCurrentScreen,
     totalCount,
+    getSessionQueue,
+    sessionSummary,
+    srsSettings: normalizeSrsSettings(stats.srsSettings),
+    onChangeSrsSettings: updateSrsSettings,
+    forecast,
   };
 
   // Props for the extracted OnlineMultiplayerScreen component (Phase 9 of the App.tsx split).

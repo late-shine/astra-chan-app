@@ -1,6 +1,19 @@
-import { useState, useCallback } from "react";
-import { SRSCard, StudentStats } from "../types";
-import { createNewCard, normalizeSrsCards, scheduleAnswer } from "../srsScheduler";
+import { useState, useCallback, useMemo } from "react";
+import { SRSCard, SrsSettings, StudentStats } from "../types";
+import {
+  ForecastDay,
+  SessionSummary,
+  SrsGrade,
+  buildForecast,
+  buildSessionPlan,
+  createNewCard,
+  normalizeSrsCards,
+  scheduleAnswer,
+  scheduleGrade,
+  scheduleRelearnAnswer,
+  scheduleRelearnGrade,
+  summarizeSession,
+} from "../srsScheduler";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -61,7 +74,14 @@ function persistCards(cards: Record<string, SRSCard>): void {
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useSRS(onCardsChanged?: (cards: Record<string, SRSCard>) => void) {
+/**
+ * `settings` (phase S2) are the learner's daily limits, owned by App.tsx as `stats.srsSettings`.
+ * Omit them and the defaults (50 reviews, 10 new) apply.
+ */
+export function useSRS(
+  onCardsChanged?: (cards: Record<string, SRSCard>) => void,
+  settings?: SrsSettings
+) {
   const [srsCards, setSrsCards] = useState<Record<string, SRSCard>>(loadCards);
 
   const publishCards = useCallback(
@@ -104,6 +124,17 @@ export function useSRS(onCardsChanged?: (cards: Record<string, SRSCard>) => void
       .sort((a, b) => a.nextReview - b.nextReview);
   }, [srsCards]);
 
+  // ── getSessionQueue (S2) ───────────────────────────────────────────────────
+  /**
+   * Today's session: due reviews (most overdue first, trimmed to the daily budget) followed by
+   * new cards (up to the daily new-card budget). Every Review Deck entry point uses this; none
+   * may bypass the budget. getDueCards() above still returns every due card.
+   */
+  const getSessionQueue = useCallback(
+    (): SRSCard[] => buildSessionPlan(srsCards, settings, Date.now()).queue,
+    [srsCards, settings]
+  );
+
   // ── getTotalCards ──────────────────────────────────────────────────────────
   /** Returns the total number of cards in the deck. */
   const getTotalCards = useCallback(
@@ -114,10 +145,11 @@ export function useSRS(onCardsChanged?: (cards: Record<string, SRSCard>) => void
   // ── answerCard ─────────────────────────────────────────────────────────────
   /**
    * Records the user's answer for a card and schedules the next review
-   * (rules in scheduleAnswer, src/srsScheduler.ts):
-   *   correct → level + 1 (capped at 8), next review = that level's interval, fuzzed ±12% from 3 days up
-   *   wrong   → level = floor(level / 2), next review = 4 hours, lapses + 1
-   * Both stamp lastReviewed.
+   * (rules in scheduleAnswer, src/srsScheduler.ts). The two-button form: true is "Got it", false is "Forgot".
+   *   correct → level + 1 (capped at 8), next review = that level's interval × ease, fuzzed ±12% from 3 days up
+   *   wrong   → level = floor(level / 2), next review = 10 minutes (relearn step), lapses + 1
+   * Both stamp lastReviewed and adjust the card's ease; a brand-new card also gets introducedAt.
+   * gradeCard below is the three-button form (S3).
    */
   const answerCard = useCallback(
     (itemKey: string, wasCorrect: boolean) => {
@@ -129,6 +161,82 @@ export function useSRS(onCardsChanged?: (cards: Record<string, SRSCard>) => void
         const next = {
           ...prev,
           [itemKey]: scheduleAnswer(card, wasCorrect, now),
+        };
+        publishCards(next);
+        return next;
+      });
+    },
+    [publishCards]
+  );
+
+  // ── gradeCard (S3) ─────────────────────────────────────────────────────────
+  /**
+   * The three-button answer for a first showing: "forgot", "hard" or "gotIt" (rules in scheduleGrade).
+   *   gotIt  → level + 1, ease + 0.05          hard   → same level, ease − 0.1, about 0.8 × the interval (min 1 day)
+   *   forgot → level halved, ease − 0.15, due in 10 minutes, lapses + 1
+   * answerCard(key, boolean) above is the same thing for true / false.
+   */
+  const gradeCard = useCallback(
+    (itemKey: string, grade: SrsGrade) => {
+      const now = Date.now(); // read once, so a repeated updater call yields the same schedule
+      setSrsCards((prev) => {
+        const card = prev[itemKey];
+        if (!card) return prev; // unknown card — bail out
+
+        const next = {
+          ...prev,
+          [itemKey]: scheduleGrade(card, grade, now),
+        };
+        publishCards(next);
+        return next;
+      });
+    },
+    [publishCards]
+  );
+
+  // ── answerRelearnCard (S2) ─────────────────────────────────────────────────
+  /**
+   * Records the answer to the in-session re-show of a card that was just forgotten
+   * (rules in scheduleRelearnAnswer). Call answerCard for the first showing, this for the re-show.
+   *   correct → keeps its halved level, due after that level's interval (at least 1 day)
+   *   wrong   → no further penalty, due again in 10 minutes
+   */
+  const answerRelearnCard = useCallback(
+    (itemKey: string, wasCorrect: boolean) => {
+      const now = Date.now(); // read once, so a repeated updater call yields the same schedule
+      setSrsCards((prev) => {
+        const card = prev[itemKey];
+        if (!card) return prev; // unknown card — bail out
+
+        const next = {
+          ...prev,
+          [itemKey]: scheduleRelearnAnswer(card, wasCorrect, now),
+        };
+        publishCards(next);
+        return next;
+      });
+    },
+    [publishCards]
+  );
+
+  // ── gradeRelearnCard (S3) ──────────────────────────────────────────────────
+  /**
+   * The three-button answer for the in-session re-show of a forgotten card (rules in scheduleRelearnGrade).
+   *   gotIt  → due after the halved level's interval, at least 1 day
+   *   hard   → due after 0.8 × that interval, at least 1 day
+   *   forgot → no further penalty, due again in 10 minutes
+   * answerRelearnCard(key, boolean) above is the same thing for true / false.
+   */
+  const gradeRelearnCard = useCallback(
+    (itemKey: string, grade: SrsGrade) => {
+      const now = Date.now(); // read once, so a repeated updater call yields the same schedule
+      setSrsCards((prev) => {
+        const card = prev[itemKey];
+        if (!card) return prev; // unknown card — bail out
+
+        const next = {
+          ...prev,
+          [itemKey]: scheduleRelearnGrade(card, grade, now),
         };
         publishCards(next);
         return next;
@@ -177,14 +285,37 @@ export function useSRS(onCardsChanged?: (cards: Record<string, SRSCard>) => void
   const dueCount   = (Object.values(srsCards) as SRSCard[]).filter((c) => c.nextReview <= now).length;
   const totalCount = Object.keys(srsCards).length;
 
+  // The summary (counts for the menu text) is recomputed when the deck or the limits change,
+  // and once a minute so a card that falls due while the menu is open shows up.
+  const minute = Math.floor(now / 60000);
+  const sessionSummary: SessionSummary = useMemo(
+    () => summarizeSession(buildSessionPlan(srsCards, settings, Date.now())),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [srsCards, settings, minute]
+  );
+
+  // The 7-day forecast (S3): cards scheduled for each of the next 7 local days, starting tomorrow.
+  // Recomputed when the deck changes and once a minute (so it rolls over at midnight).
+  const forecast: ForecastDay[] = useMemo(
+    () => buildForecast(srsCards, Date.now()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [srsCards, minute]
+  );
+
   return {
     addCard,
     hasCard,
     getDueCards,
     getTotalCards,
     answerCard,
+    gradeCard,
+    answerRelearnCard,
+    gradeRelearnCard,
     removeCard,
     replaceCards,
+    getSessionQueue,
+    sessionSummary,
+    forecast,
     dueCount,
     totalCount,
   };

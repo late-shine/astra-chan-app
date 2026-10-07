@@ -1,42 +1,215 @@
+import { useState } from "react";
 import type React from "react";
 import { motion } from "motion/react";
-import { CheckCircle2, ChevronLeft, X } from "lucide-react";
+import { CheckCircle2, ChevronLeft, Minus, Settings2, X } from "lucide-react";
 import { KANJI_DATA, VOCABULARY_DATA } from "../data";
-import type { SRSCard } from "../types";
+import type { SRSCard, SrsSettings } from "../types";
+import {
+  MAX_LEVEL,
+  MAX_RELEARN_REQUEUES,
+  NEW_CAP_OPTIONS,
+  REVIEW_CAP_OPTIONS,
+  UNLIMITED_REVIEWS,
+  formatForecastLine,
+  formatIntervalShort,
+  localDayRange,
+  previewIntervals,
+  scheduleGrade,
+  type ForecastDay,
+  type SessionSummary,
+  type SrsGrade,
+} from "../srsScheduler";
 
 type CurrentScreen = "menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo";
 
 interface ReviewDeckScreenProps {
   srsQueue: SRSCard[];
+  /** S2: lets a forgotten card be re-appended to the session (relearn re-show). */
+  setSrsQueue: React.Dispatch<React.SetStateAction<SRSCard[]>>;
   srsQueueIndex: number;
   setSrsQueueIndex: React.Dispatch<React.SetStateAction<number>>;
   srsRevealed: boolean;
   setSrsRevealed: React.Dispatch<React.SetStateAction<boolean>>;
-  answerCard: (itemKey: string, wasCorrect: boolean) => void;
+  /** S3: three-button grade for a first showing (Forgot / Hard / Got it). Replaces S2's `answerCard` prop. */
+  gradeCard: (itemKey: string, grade: SrsGrade) => void;
+  /** S3: grades the in-session re-show of a forgotten card (no XP, no second penalty). Replaces S2's `answerRelearnCard` prop. */
+  gradeRelearnCard: (itemKey: string, grade: SrsGrade) => void;
+  /** S2: used by the "Remove this card" action on an orphan card. */
+  removeCard: (itemKey: string) => void;
   awardSRSXP: (xp: number) => void;
   playChime: (success: boolean) => void;
   setCurrentScreen: React.Dispatch<React.SetStateAction<CurrentScreen>>;
   totalCount: number;
+  /** S2: builds the next budgeted session ("Study N more" on the end screen). */
+  getSessionQueue: () => SRSCard[];
+  /** S2: live counts for the end screen (next due time, how many are waiting). */
+  sessionSummary: SessionSummary;
+  /** S2: the current daily limits (already normalized) and how to change them. */
+  srsSettings: SrsSettings;
+  onChangeSrsSettings: (next: { dailyReviewCap: number; dailyNewCap: number }) => void;
+  /** S3: cards scheduled for each of the next 7 days (starting tomorrow), for the forecast strip. */
+  forecast: ForecastDay[];
+}
+
+/** "in 25 min", "in 3 h", "tomorrow", "in 4 days" for the next-card-due line. */
+function formatNextDue(at: number, now: number): string {
+  const diff = at - now;
+  if (diff <= 60 * 1000) return "now";
+  const minutes = Math.round(diff / 60000);
+  if (minutes < 60) return `in ${minutes} min`;
+  const [todayStart] = localDayRange(now);
+  const [dueDayStart] = localDayRange(at);
+  const days = Math.round((dueDayStart - todayStart) / (24 * 60 * 60 * 1000));
+  if (days <= 0) return `in ${Math.round(diff / 3600000)} h`;
+  return days === 1 ? "tomorrow" : `in ${days} days`;
+}
+
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+
+/** A quiet progress ring for a card's level (0 to 8). Colours come from the kz-* tokens, so every theme works. */
+function LevelRing({ level }: { level: number }) {
+  const clamped = Math.max(0, Math.min(MAX_LEVEL, Math.floor(level) || 0));
+  const radius = 13;
+  const circumference = 2 * Math.PI * radius;
+  const label = `Level ${clamped} of ${MAX_LEVEL}`;
+  return (
+    <div className="absolute top-3 right-3 w-8 h-8" role="img" aria-label={label} title={label}>
+      <svg viewBox="0 0 32 32" className="w-8 h-8 -rotate-90" aria-hidden="true">
+        <circle cx="16" cy="16" r={radius} fill="none" strokeWidth="2.5" style={{ stroke: "var(--kz-border-soft)" }} />
+        {clamped > 0 && (
+          <circle
+            cx="16"
+            cy="16"
+            r={radius}
+            fill="none"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * (1 - clamped / MAX_LEVEL)}
+            className="motion-safe:transition-[stroke-dashoffset] motion-safe:duration-500"
+            style={{ stroke: "var(--kz-accent)" }}
+          />
+        )}
+      </svg>
+      <span
+        className="absolute inset-0 flex items-center justify-center text-[10px] font-mono font-bold leading-none"
+        style={{ color: "var(--kz-ink-muted)" }}
+      >
+        {clamped}
+      </span>
+    </div>
+  );
+}
+
+/** Cards due on each of the next 7 days. One quiet line on phones, one small column per day from the sm breakpoint up. */
+function ForecastStrip({ forecast }: { forecast: ForecastDay[] }) {
+  const peak = Math.max(1, ...forecast.map((day) => day.count));
+  const line = formatForecastLine(forecast);
+  return (
+    <div className="kz-inset px-3 py-2" role="group" aria-label={`Forecast: ${line}`}>
+      <p className="sm:hidden text-center text-[11px] font-mono font-bold" style={{ color: "var(--kz-ink-muted)" }}>
+        {line}
+      </p>
+      <div className="hidden sm:grid grid-cols-7 gap-1.5" aria-hidden="true">
+        {forecast.map((day) => (
+          <div key={day.dayStart} className="flex flex-col items-center gap-1">
+            <div className="h-8 w-full flex items-end justify-center">
+              <div
+                className="w-3 rounded-sm"
+                style={{
+                  height: `${day.count === 0 ? 8 : Math.max(15, Math.round((day.count / peak) * 100))}%`,
+                  background: day.count === 0 ? "var(--kz-border-soft)" : "var(--kz-accent)",
+                }}
+              />
+            </div>
+            <span className="text-[10px] font-mono font-bold leading-none" style={{ color: "var(--kz-ink)" }}>
+              {day.count}
+            </span>
+            <span className="kz-label leading-none">
+              {new Date(day.dayStart).toLocaleDateString(undefined, { weekday: "short" })}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function ReviewDeckScreen({
   srsQueue,
+  setSrsQueue,
   srsQueueIndex,
   setSrsQueueIndex,
   srsRevealed,
   setSrsRevealed,
-  answerCard,
+  gradeCard,
+  gradeRelearnCard,
+  removeCard,
   awardSRSXP,
   playChime,
   setCurrentScreen,
   totalCount,
+  getSessionQueue,
+  sessionSummary,
+  srsSettings,
+  onChangeSrsSettings,
+  forecast,
 }: ReviewDeckScreenProps) {
+            const [showSettings, setShowSettings] = useState(false);
+            // First-pass answers given in this sitting: what the end screen reports and what XP was awarded for.
+            const [answeredThisSession, setAnsweredThisSession] = useState(0);
             const isDone = srsQueue.length === 0 || srsQueueIndex >= srsQueue.length;
             const currentCard = isDone ? null : srsQueue[srsQueueIndex];
             const vocabData  = currentCard?.type === "vocab"  ? VOCABULARY_DATA.find(v => v.word  === currentCard.itemKey) ?? null : null;
             const kanjiData  = currentCard?.type === "kanji"  ? KANJI_DATA.find(k => k.kanji === currentCard.itemKey) ?? null : null;
             const remaining  = srsQueue.length - srsQueueIndex;
             const pct        = srsQueue.length > 0 ? (srsQueueIndex / srsQueue.length) * 100 : 100;
+
+            // S2: a card forgotten earlier in this session is queued again at the end. An entry is that
+            // re-show (a "relearn pass") when the same card also appears earlier in the queue.
+            const sameCardCount = currentCard ? srsQueue.filter((c) => c.itemKey === currentCard.itemKey).length : 0;
+            const isRelearnPass = currentCard ? srsQueue.findIndex((c) => c.itemKey === currentCard.itemKey) !== srsQueueIndex : false;
+            const canRequeue   = sameCardCount - 1 < MAX_RELEARN_REQUEUES;
+            const hasCardData  = !!(vocabData || kanjiData);
+            const cardsReviewed = answeredThisSession; // first passes only: relearn re-shows earn no XP and are not counted
+
+            // S3: what each button would schedule (un-fuzzed). Same functions as the grading itself, so the labels cannot drift.
+            const preview = currentCard ? previewIntervals(currentCard, Date.now(), { relearn: isRelearnPass }) : null;
+
+            /** Grade the current card. First showings earn XP for any grade (as before); relearn re-shows do not. */
+            const gradeCurrent = (grade: SrsGrade) => {
+              const card = currentCard!;
+              if (isRelearnPass) {
+                gradeRelearnCard(card.itemKey, grade);
+              } else {
+                gradeCard(card.itemKey, grade);
+                awardSRSXP(5);
+                setAnsweredThisSession((count) => count + 1);
+              }
+              // A forgotten card comes back at the end of this session, at most twice. It is queued in its
+              // post-forgot state (halved level), so the re-show's ring and previews match what is stored.
+              if (grade === "forgot" && canRequeue && hasCardData) {
+                const afterForgot = isRelearnPass ? card : scheduleGrade(card, "forgot", Date.now());
+                setSrsQueue((prev) => [...prev, afterForgot]);
+              }
+              setSrsQueueIndex((prev) => prev + 1);
+              setSrsRevealed(false);
+              playChime(grade !== "forgot");
+            };
+
+            /** Orphan card (its word or kanji no longer exists): delete it and move on. */
+            const removeCurrent = () => {
+              removeCard(currentCard!.itemKey);
+              setSrsQueueIndex((prev) => prev + 1);
+              setSrsRevealed(false);
+            };
+
+            const startAnotherSet = () => {
+              setAnsweredThisSession(0);
+              setSrsQueue(getSessionQueue());
+              setSrsQueueIndex(0);
+              setSrsRevealed(false);
+            };
 
 
   return (<motion.div
@@ -64,9 +237,79 @@ export default function ReviewDeckScreen({
                       </span>
                     )}
                   </div>
-                  {/* Spacer to keep header centred */}
-                  <div className="w-16" />
+                  {/* Daily limits (S2); also keeps the header centred */}
+                  <div className="w-16 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowSettings((open) => !open)}
+                      aria-label="Daily limits"
+                      aria-expanded={showSettings}
+                      className={`p-2 border rounded-lg transition cursor-pointer ${
+                        showSettings
+                          ? "bg-natural-forest/10 border-natural-forest text-natural-forest"
+                          : "bg-natural-bg/40 border-natural-border text-natural-forest-light hover:border-natural-forest hover:text-natural-forest"
+                      }`}
+                    >
+                      <Settings2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
+
+                {/* ── 7-day forecast (S3) ───────────────────────────────── */}
+                {totalCount > 0 && <ForecastStrip forecast={forecast} />}
+
+                {/* ── Daily limits panel (S2) ───────────────────────────── */}
+                {showSettings && (
+                  <div className="bg-natural-card border border-natural-border/70 rounded-2xl p-4 flex flex-col gap-4 shadow-sm">
+                    <div>
+                      <p className="text-[10px] font-mono font-extrabold uppercase tracking-widest text-natural-forest-light mb-2">
+                        Reviews per day
+                      </p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {REVIEW_CAP_OPTIONS.map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            aria-pressed={srsSettings.dailyReviewCap === option}
+                            onClick={() => onChangeSrsSettings({ dailyReviewCap: option, dailyNewCap: srsSettings.dailyNewCap })}
+                            className={`py-2 rounded-lg border text-xs font-mono font-bold transition cursor-pointer ${
+                              srsSettings.dailyReviewCap === option
+                                ? "bg-natural-forest text-natural-bg border-natural-forest"
+                                : "bg-natural-bg/40 border-natural-border text-natural-forest-light hover:border-natural-forest hover:text-natural-forest"
+                            }`}
+                          >
+                            {option >= UNLIMITED_REVIEWS ? "No limit" : option}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-mono font-extrabold uppercase tracking-widest text-natural-forest-light mb-2">
+                        New cards per day
+                      </p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {NEW_CAP_OPTIONS.map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            aria-pressed={srsSettings.dailyNewCap === option}
+                            onClick={() => onChangeSrsSettings({ dailyReviewCap: srsSettings.dailyReviewCap, dailyNewCap: option })}
+                            className={`py-2 rounded-lg border text-xs font-mono font-bold transition cursor-pointer ${
+                              srsSettings.dailyNewCap === option
+                                ? "bg-natural-forest text-natural-bg border-natural-forest"
+                                : "bg-natural-bg/40 border-natural-border text-natural-forest-light hover:border-natural-forest hover:text-natural-forest"
+                            }`}
+                          >
+                            {option}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-natural-forest-light/80 font-medium leading-relaxed">
+                      Cards over the limit stay due and wait for your next session. Nothing is lost.
+                    </p>
+                  </div>
+                )}
 
                 {/* ── Progress bar ──────────────────────────────────────── */}
                 <div className="w-full bg-natural-border/30 rounded-full h-1.5">
@@ -77,19 +320,38 @@ export default function ReviewDeckScreen({
                 </div>
 
                 {isDone ? (
-                  /* ── Completion / empty-deck state ──────────────────────── */
+                  /* ── Session end / nothing to do today ──────────────────── */
                   <div className="bg-natural-card border border-natural-border/70 rounded-3xl p-10 flex flex-col items-center gap-5 text-center shadow-sm">
                     <span className="text-6xl">🌸</span>
                     <div>
                       <h4 className="font-serif font-extrabold text-xl text-natural-forest mb-2">
-                        All caught up!
+                        {totalCount === 0 ? "Your deck is empty" : "Done for today!"}
                       </h4>
-                      <p className="text-sm text-natural-forest-light font-medium leading-relaxed">
-                        Check back tomorrow for new reviews.
-                      </p>
-                      {srsQueue.length > 0 && (
+                      {totalCount > 0 && (
+                        <p className="text-sm text-natural-forest-light font-medium leading-relaxed">
+                          {cardsReviewed > 0
+                            ? `You reviewed ${plural(cardsReviewed, "card")} this session.`
+                            : "Nothing is waiting for you right now."}
+                        </p>
+                      )}
+                      {totalCount > 0 && sessionSummary.nextDueAt !== null && (
+                        <p className="mt-2 text-xs font-mono font-bold text-natural-forest-light">
+                          Next card due {formatNextDue(sessionSummary.nextDueAt, Date.now())}
+                        </p>
+                      )}
+                      {sessionSummary.waitingCount > 0 && (
+                        <p className="mt-1 text-xs font-mono font-bold text-natural-forest-light/80">
+                          +{sessionSummary.waitingCount} waiting for a later session
+                        </p>
+                      )}
+                      {sessionSummary.newPaused && (
+                        <p className="mt-2 text-[11px] text-natural-forest-light/80 font-medium">
+                          New cards are paused until your reviews catch up.
+                        </p>
+                      )}
+                      {cardsReviewed > 0 && (
                         <p className="mt-3 text-xs font-mono font-bold text-natural-clay bg-natural-clay/10 px-3 py-1.5 rounded-lg inline-block">
-                          +{srsQueue.length * 5} XP earned this session ✨
+                          +{cardsReviewed * 5} XP earned this session ✨
                         </p>
                       )}
                       {totalCount === 0 && (
@@ -98,10 +360,23 @@ export default function ReviewDeckScreen({
                         </p>
                       )}
                     </div>
+                    {sessionSummary.total > 0 && (
+                      <button
+                        type="button"
+                        onClick={startAnotherSet}
+                        className="px-6 py-2.5 bg-natural-forest text-natural-bg rounded-xl text-sm font-serif font-bold hover:bg-natural-forest/90 transition cursor-pointer shadow-sm"
+                      >
+                        Study {sessionSummary.total} more
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setCurrentScreen("menu")}
-                      className="px-6 py-2.5 bg-natural-forest text-natural-bg rounded-xl text-sm font-serif font-bold hover:bg-natural-forest/90 transition cursor-pointer shadow-sm"
+                      className={
+                        sessionSummary.total > 0
+                          ? "px-6 py-2.5 border border-natural-border text-natural-forest-light rounded-xl text-sm font-serif font-bold hover:border-natural-forest hover:text-natural-forest transition cursor-pointer"
+                          : "px-6 py-2.5 bg-natural-forest text-natural-bg rounded-xl text-sm font-serif font-bold hover:bg-natural-forest/90 transition cursor-pointer shadow-sm"
+                      }
                     >
                       Back to Menu
                     </button>
@@ -112,12 +387,13 @@ export default function ReviewDeckScreen({
                     {/* Card type badge */}
                     <div className="flex justify-center">
                       <span className="text-[10px] font-mono font-extrabold uppercase tracking-widest text-natural-clay bg-natural-clay/10 px-3 py-1 rounded-full">
-                        {currentCard!.type === "vocab" ? "Vocabulary" : "Kanji"} — Recall the meaning
+                        {isRelearnPass ? "Relearning" : currentCard!.type === "vocab" ? "Vocabulary" : "Kanji"} — Recall the meaning
                       </span>
                     </div>
 
                     {/* ── Flash card ──────────────────────────────────── */}
-                    <div className="bg-natural-card border border-natural-border/70 p-8 rounded-3xl shadow-sm flex flex-col items-center gap-3 text-center min-h-[220px] justify-center">
+                    <div className="kz-specimen relative shadow-sm px-6 pt-12 pb-6 sm:px-8 flex flex-col items-center gap-3 text-center min-h-[220px] justify-center break-words">
+                      <LevelRing level={currentCard!.level} />
                       {currentCard!.type === "vocab" && vocabData ? (
                         <>
                           <span className="text-5xl font-serif font-extrabold text-natural-forest leading-tight">
@@ -132,7 +408,7 @@ export default function ReviewDeckScreen({
                             {vocabData.romaji}
                           </span>
                           {srsRevealed && (
-                            <div className="mt-3 pt-4 border-t border-natural-border w-full">
+                            <div className="mt-3 pt-4 border-t border-[color:var(--kz-border-strong)] w-full">
                               <span className="text-base font-serif italic text-natural-charcoal font-medium">
                                 {vocabData.english}
                               </span>
@@ -148,7 +424,7 @@ export default function ReviewDeckScreen({
                             {kanjiData.strokeCount} strokes
                           </span>
                           {srsRevealed && (
-                            <div className="mt-3 pt-4 border-t border-natural-border w-full">
+                            <div className="mt-3 pt-4 border-t border-[color:var(--kz-border-strong)] w-full">
                               <span className="text-base font-serif font-bold text-natural-charcoal block">
                                 {kanjiData.meaning}
                               </span>
@@ -159,9 +435,18 @@ export default function ReviewDeckScreen({
                           )}
                         </>
                       ) : (
-                        <span className="text-sm text-natural-forest-light font-mono italic">
-                          Card not found: {currentCard!.itemKey}
-                        </span>
+                        <>
+                          <span className="text-sm text-natural-forest-light font-mono italic">
+                            Card not found: {currentCard!.itemKey}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={removeCurrent}
+                            className="mt-1 px-3 py-1.5 border border-natural-terracotta/40 text-natural-terracotta rounded-lg text-xs font-bold hover:bg-natural-terracotta/10 transition cursor-pointer"
+                          >
+                            Remove this card
+                          </button>
+                        </>
                       )}
                     </div>
 
@@ -175,39 +460,40 @@ export default function ReviewDeckScreen({
                         👁 Reveal Answer
                       </button>
                     ) : (
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-3 gap-2">
                         <button
                           type="button"
-                          onClick={() => {
-                            answerCard(currentCard!.itemKey, false);
-                            awardSRSXP(5);
-                            setSrsQueueIndex((prev) => prev + 1);
-                            setSrsRevealed(false);
-                            playChime(false);
-                          }}
-                          className="py-3.5 bg-natural-terracotta/10 border border-natural-terracotta/40 text-natural-terracotta rounded-xl text-sm font-bold hover:bg-natural-terracotta/20 transition cursor-pointer flex items-center justify-center gap-2"
+                          onClick={() => gradeCurrent("forgot")}
+                          aria-label={`Forgot. See it again in about ${formatIntervalShort(preview!.forgot)}`}
+                          className="py-3 px-1 bg-natural-terracotta/10 border border-natural-terracotta/40 text-natural-terracotta rounded-xl text-sm font-bold hover:bg-natural-terracotta/20 transition cursor-pointer flex flex-col items-center gap-1"
                         >
-                          <X className="w-4 h-4" /> I forgot
+                          <span className="flex items-center gap-1.5"><X className="w-4 h-4" /> Forgot</span>
+                          <span className="text-[10px] font-mono font-bold">~{formatIntervalShort(preview!.forgot)}</span>
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
-                            answerCard(currentCard!.itemKey, true);
-                            awardSRSXP(5);
-                            setSrsQueueIndex((prev) => prev + 1);
-                            setSrsRevealed(false);
-                            playChime(true);
-                          }}
-                          className="py-3.5 bg-natural-forest/10 border border-natural-forest/40 text-natural-forest rounded-xl text-sm font-bold hover:bg-natural-forest/20 transition cursor-pointer flex items-center justify-center gap-2"
+                          onClick={() => gradeCurrent("hard")}
+                          aria-label={`Hard. See it again in about ${formatIntervalShort(preview!.hard)}`}
+                          className="py-3 px-1 bg-natural-clay/10 border border-natural-clay/40 text-natural-clay rounded-xl text-sm font-bold hover:bg-natural-clay/20 transition cursor-pointer flex flex-col items-center gap-1"
                         >
-                          <CheckCircle2 className="w-4 h-4" /> I knew it
+                          <span className="flex items-center gap-1.5"><Minus className="w-4 h-4" /> Hard</span>
+                          <span className="text-[10px] font-mono font-bold">~{formatIntervalShort(preview!.hard)}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => gradeCurrent("gotIt")}
+                          aria-label={`Got it. See it again in about ${formatIntervalShort(preview!.gotIt)}`}
+                          className="py-3 px-1 bg-natural-forest/10 border border-natural-forest/40 text-natural-forest rounded-xl text-sm font-bold hover:bg-natural-forest/20 transition cursor-pointer flex flex-col items-center gap-1"
+                        >
+                          <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4" /> Got it</span>
+                          <span className="text-[10px] font-mono font-bold">~{formatIntervalShort(preview!.gotIt)}</span>
                         </button>
                       </div>
                     )}
 
-                    {/* Card level indicator */}
+                    {/* Position in the session (the level is shown by the ring on the card) */}
                     <p className="text-center text-[10px] font-mono text-natural-forest-light/60 font-bold uppercase tracking-widest">
-                      SRS Level {currentCard!.level} · {srsQueueIndex + 1} of {srsQueue.length}
+                      {isRelearnPass ? "Relearning · no XP · " : ""}{srsQueueIndex + 1} of {srsQueue.length}
                     </p>
                   </>
                 )}

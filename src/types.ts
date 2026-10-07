@@ -73,6 +73,22 @@ export interface SRSCard {
   reps?: number;         // successful reviews. Set to 0 only on cards created by addCard
   lapses?: number;       // times the card was answered wrong
   addedAt?: number;      // ms timestamp when the card was added to the deck
+  // Phase S2: set once, when a brand-new card is first answered. Drives the "new cards today" counter.
+  introducedAt?: number;
+  // Phase S3: per-card ease multiplier on the ladder interval (default 1.0, kept within 0.8–1.4). Omitted until
+  // the card has been graded once; a card without it behaves as ease 1.0. Never `undefined`.
+  ease?: number;
+}
+
+/**
+ * Phase S2: the learner's daily limits, stored in the stats blob (and so synced).
+ * `dailyReviewCap` >= 9999 means unlimited. `dailyNewCap` 0 means no new cards.
+ * `updatedAt` is stamped only when the learner changes a limit; it decides which copy wins on cloud merge.
+ */
+export interface SrsSettings {
+  dailyReviewCap: number;
+  dailyNewCap: number;
+  updatedAt?: number;
 }
 
 export interface ReadingMissRecord {
@@ -106,6 +122,8 @@ export interface StudentStats {
    * additive; omitted (never `undefined`) when the user has none. See src/preferences.ts.
    */
   preferences?: SyncedPreferences;
+  /** Phase S2: daily Review Deck limits. Optional and additive; omitted until the learner changes them. */
+  srsSettings?: SrsSettings;
 }
 
 // ============================================================================
