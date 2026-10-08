@@ -1051,7 +1051,7 @@ export const KANJI_DATA: KanjiItem[] = [
   { kanji: "近", meaning: "Near", onyomi: "キン", onyomiRomaji: "kin", kunyomi: "ちか-い", kunyomiRomaji: "chika-i", mnemonic: "A short little hop bringing you right up close.", strokeCount: 7, examples: [{ japanese: "近い (ちかい)", romaji: "chikai", english: "Near / close" }, { japanese: "近所 (きんじょ)", romaji: "kinjo", english: "Neighborhood" }] }
 ];
 
-// COMPACT LIST OF 720+ ESSENTIAL N5 DAILY WORDS JUST LIKE KANJI - DECORATED WITH AUDIO SUPPORT
+// Compact list of essential N5 daily words; the UI derives its displayed count from VOCABULARY_DATA.length.
 export const VOCABULARY_DATA: VocabularyItem[] = [
   // Greetings Category
   { word: "こんにちは", hiragana: "こんにちは", romaji: "konnichiwa", english: "Hello / Good afternoon", category: "greetings" },
@@ -1094,7 +1094,7 @@ export const VOCABULARY_DATA: VocabularyItem[] = [
   { word: "去年", hiragana: "きょねん", romaji: "kyonen", english: "Last year", category: "time" },
   { word: "今年", hiragana: "ことし", romaji: "kotoshi", english: "This year", category: "time" },
   { word: "来年", hiragana: "らいねん", romaji: "rainen", english: "Next year", category: "time" },
-  { word: "一昨年", hiragana: "おととし", romaji: "ototoshi", english: "Day before yesterday", category: "time" },
+  { word: "一昨日", hiragana: "おととい", romaji: "ototoi", english: "Day before yesterday", category: "time" },
   { word: "明後日", hiragana: "あさって", romaji: "asatte", english: "Day after tomorrow", category: "time" },
 
   // Places Category

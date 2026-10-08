@@ -941,7 +941,7 @@ export default function MenuScreen(props: MenuScreenProps) {
                           <span className="text-[10px] font-mono text-natural-clay bg-natural-clay/10 px-2.5 py-0.5 rounded font-bold uppercase">Garden library</span>
                         </div>
                         <p className="text-xs text-natural-forest-light/90 font-medium mt-1">
-                          N5 level commands a robust garden of approximately 720 daily vocabulary elements (such as time, weather, food, pronouns, greetings, objects). Search words below, practice vocalization, and unlock XP rewards!
+                          N5 level has {VOCABULARY_DATA.length} daily vocabulary entries (such as time, weather, food, pronouns, greetings, and objects). Search words below, practice vocalization, and unlock XP rewards!
                         </p>
                       </div>
 
@@ -964,7 +964,7 @@ export default function MenuScreen(props: MenuScreenProps) {
                             onChange={(e) => setVocabsCategory(e.target.value)}
                             className="w-full bg-natural-bg font-serif text-xs border border-natural-border focus:border-natural-forest py-2 px-3 rounded-xl outline-none text-natural-charcoal font-bold cursor-pointer"
                           >
-                            <option value="all">🌾 All themes (690+)</option>
+                            <option value="all">🌾 All themes ({VOCABULARY_DATA.length})</option>
                             <option value="greetings">🌸 Greetings & Rituals</option>
                             <option value="time">⏱️ Time, Days & Seasons</option>
                             <option value="places">🏠 Places & Shrines</option>
