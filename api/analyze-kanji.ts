@@ -26,6 +26,22 @@ function shouldTryNextAnalysisModel(status: number): boolean {
     return status === 404 || status === 408 || status === 429 || status >= 500;
 }
 
+const ANALYSIS_RESPONSE_FORMAT = {
+    text: {
+        mimeType: "application/json",
+        schema: {
+            type: "object",
+            properties: {
+                validDrawing: { type: "boolean" },
+                score: { type: "integer" },
+                feedbackTitle: { type: "string" },
+                advice: { type: "string" },
+            },
+            required: ["validDrawing", "score", "feedbackTitle", "advice"],
+        },
+    },
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== "POST") {
         return res.status(405).json({ error: "Method Not Allowed" });
@@ -103,7 +119,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             : "image/png";
 
         // ─── Try the preferred model, then fall back on transient/model errors ─
-        let responseData: any;
+        let resultObj: any;
         let lastError: Error | null = null;
 
         for (const model of ANALYSIS_MODELS) {
@@ -134,6 +150,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                             ],
                             generationConfig: {
                                 maxOutputTokens: 600,
+                                responseFormat: ANALYSIS_RESPONSE_FORMAT,
                             },
                         }),
                     }
@@ -164,33 +181,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
 
             try {
-                responseData = await response.json();
+                const responseData = await response.json();
+                const replyText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!replyText) {
+                    throw new Error("Empty response received from Gemini API.");
+                }
+
+                const cleanText = replyText
+                    .trim()
+                    .replace(/^```(?:json)?\s*/i, "")
+                    .replace(/\s*```$/, "");
+
+                resultObj = JSON.parse(cleanText);
                 break;
             } catch (err: unknown) {
-                lastError = err instanceof Error
+                const parseError = err instanceof Error
                     ? err
-                    : new Error(`Gemini ${model} returned invalid JSON.`);
-                console.warn(`[analyze-kanji] ${model} returned invalid JSON; trying the next model.`);
+                    : new Error("Gemini returned invalid analysis JSON.");
+                lastError = new Error("Gemini " + model + " returned invalid analysis JSON.");
+                console.warn(
+                    "[analyze-kanji] " + model + " returned invalid analysis JSON; trying the next model.",
+                    parseError
+                );
             }
         }
 
-        if (!responseData) {
+        if (!resultObj) {
             throw lastError || new Error("All Gemini analysis models failed.");
         }
-
-        // Gemini returns text inside candidates[0].content.parts[0].text
-        const replyText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!replyText) {
-            throw new Error("Empty response received from Gemini API.");
-        }
-
-        // Strip any accidental markdown fences before parsing
-        const cleanText = replyText
-            .trim()
-            .replace(/^```(?:json)?\s*/i, "")
-            .replace(/\s*```$/, "");
-
-        const resultObj = JSON.parse(cleanText);
         const validDrawing = resultObj.validDrawing === true;
         const rawScore = Number(resultObj.score);
         const score = validDrawing
