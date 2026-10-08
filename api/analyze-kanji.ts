@@ -26,20 +26,15 @@ function shouldTryNextAnalysisModel(status: number): boolean {
     return status === 404 || status === 408 || status === 429 || status >= 500;
 }
 
-const ANALYSIS_RESPONSE_FORMAT = {
-    text: {
-        mimeType: "application/json",
-        schema: {
-            type: "object",
-            properties: {
-                validDrawing: { type: "boolean" },
-                score: { type: "integer" },
-                feedbackTitle: { type: "string" },
-                advice: { type: "string" },
-            },
-            required: ["validDrawing", "score", "feedbackTitle", "advice"],
-        },
-    },
+const ANALYSIS_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    validDrawing: { type: "BOOLEAN" },
+    score: { type: "INTEGER" },
+    feedbackTitle: { type: "STRING" },
+    advice: { type: "STRING" },
+  },
+  required: ["validDrawing", "score", "feedbackTitle", "advice"],
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -150,7 +145,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                             ],
                             generationConfig: {
                                 maxOutputTokens: 600,
-                                responseFormat: ANALYSIS_RESPONSE_FORMAT,
+      responseMimeType: "application/json",
+      responseSchema: ANALYSIS_RESPONSE_SCHEMA,
                             },
                         }),
                     }
