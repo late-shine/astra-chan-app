@@ -13,6 +13,19 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
+const ANALYSIS_MODELS = [
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+] as const;
+
+function shouldTryNextAnalysisModel(status: number): boolean {
+    return status === 404 || status === 408 || status === 429 || status >= 500;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== "POST") {
         return res.status(405).json({ error: "Method Not Allowed" });
@@ -89,47 +102,81 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ? imageData.split(";")[0].split(":")[1]
             : "image/png";
 
-        // ─── Call Gemini 3.1 Flash Lite ───────────────────────────────────────
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`,
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    contents: [
-                        {
-                            parts: [
+        // ─── Try the preferred model, then fall back on transient/model errors ─
+        let responseData: any;
+        let lastError: Error | null = null;
+
+        for (const model of ANALYSIS_MODELS) {
+            let response: Response;
+            try {
+                response = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            contents: [
                                 {
-                                    inline_data: {
-                                        mime_type: mimeType,
-                                        data: base64Data,
-                                    },
-                                },
-                                {
-                                    text: promptText,
+                                    parts: [
+                                        {
+                                            inline_data: {
+                                                mime_type: mimeType,
+                                                data: base64Data,
+                                            },
+                                        },
+                                        {
+                                            text: promptText,
+                                        },
+                                    ],
                                 },
                             ],
-                        },
-                    ],
-                    generationConfig: {
-                        maxOutputTokens: 600,
-                        temperature: 0.7,
-                    },
-                }),
+                            generationConfig: {
+                                maxOutputTokens: 600,
+                            },
+                        }),
+                    }
+                );
+            } catch (err: unknown) {
+                lastError = err instanceof Error
+                    ? err
+                    : new Error(`Gemini ${model} request failed.`);
+                console.warn(`[analyze-kanji] ${model} request failed; trying the next model.`, lastError);
+                continue;
             }
-        );
 
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(
-                errorData.error?.message ||
-                `Gemini API returned status ${response.status}`
-            );
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                lastError = new Error(
+                    errorData.error?.message ||
+                    `Gemini ${model} returned status ${response.status}`
+                );
+
+                if (!shouldTryNextAnalysisModel(response.status)) {
+                    throw lastError;
+                }
+
+                console.warn(
+                    `[analyze-kanji] ${model} returned ${response.status}; trying the next model.`
+                );
+                continue;
+            }
+
+            try {
+                responseData = await response.json();
+                break;
+            } catch (err: unknown) {
+                lastError = err instanceof Error
+                    ? err
+                    : new Error(`Gemini ${model} returned invalid JSON.`);
+                console.warn(`[analyze-kanji] ${model} returned invalid JSON; trying the next model.`);
+            }
         }
 
-        const responseData = await response.json();
+        if (!responseData) {
+            throw lastError || new Error("All Gemini analysis models failed.");
+        }
 
         // Gemini returns text inside candidates[0].content.parts[0].text
         const replyText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;

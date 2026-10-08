@@ -44,7 +44,7 @@ Some moments worth mentioning:
 - The multiplayer system took the longest. I checked Firebase guidance with more than one model and researched API-key security before trusting the deployment. Nothing important was accepted just because one model sounded confident.
 - The Study Room redesign changed everything. Instead of menus and tabs, the home screen became Astra-chan's room — a Bookshelf, a Writing Desk, a Star Window. Navigation as a place to be, not a list to scroll through.
 - Astra-chan now reacts when you go AFK. She wonders about you after 15 seconds of silence, and lights up when you return. Small thing. Feels alive.
-- The kanji drawing feedback went through two models. The original used Cloudflare Workers AI with LLaVA 1.5 7B — a vision model that technically worked, but gave vague or inaccurate structural feedback. I switched it to **Google Gemini 3.1 Flash Lite**, which gave feedback specific enough to explain what looked off. The app now combines that optional AI feedback with a separate KanjiVG-based stroke demonstration.
+- The kanji drawing feedback went through two model generations. The original used Cloudflare Workers AI with LLaVA 1.5 7B — a vision model that technically worked, but gave vague or inaccurate structural feedback. I switched it to **Google Gemini**, now using a fallback chain beginning with Gemini 3.8 Flash and stepping through 3.7, 3.6, 3.5 Flash, 3.5 Flash-Lite, and 3.1 Flash-Lite when a model is unavailable or rate-limited. The feedback stays specific enough to explain what looked off, alongside a separate KanjiVG-based stroke demonstration.
 
 This is still being built. It probably always will be.
 
@@ -221,7 +221,7 @@ The home screen is Astra-chan's room — each object is a destination:
 - **Account Recovery** — email/password users can request a Firebase password-reset link without visiting the Firebase Console
 - **Offline Fallback** — local browser storage remains available when the user is not signed in or temporarily offline; account preferences such as theme, font, and browser-provided voice remain device-specific
 - **Dual-Language Interface** — complete bilingual support! Toggle the entire application interface between English and Japanese with a single click
-- **Hybrid Japanese Voice Engine** — choose fixed Gemini Japanese voices from Astra's catalog, or use browser voices for free/offline playback; Gemini audio falls back to the browser engine when unavailable
+- **Hybrid Japanese Voice Engine** — choose fixed Gemini Japanese voices from Astra's catalog, or use browser voices for free/offline playback; Gemini TTS tries the 3.8 Flash-Lite and Flash models before legacy fallbacks, then the browser engine if every Gemini attempt is unavailable
 - **Monthly Study Calendar** — detailed tracking calendar showing daily active study streaks, streak counts, and XP milestones
 - **Mastery Badges** — earn 10 distinct unlockable achievement badges celebrating your progress (e.g., *First Steps*, *Survivor*, *Week Warrior*, *Deck Master*, *N5 Scholar*)
 - **Durable Backup/Restore** — download all stats, vocabulary decks, and unlocked milestones to a JSON file and restore your state at any time
@@ -263,8 +263,8 @@ The home screen is Astra-chan's room — each object is a destination:
 | Animation | Framer Motion |
 | Database | Firebase Realtime Database |
 | Auth | Firebase Anonymous Auth + optional Email/Password and Google accounts |
-| Voice | Browser Speech Synthesis + optional Gemini TTS |
-| AI Feedback | Google Gemini 3.1 Flash Lite (optional vision feedback) |
+| Voice | Browser Speech Synthesis + Gemini 3.8 Flash-Lite/Flash TTS with legacy fallbacks |
+| AI Feedback | Google Gemini Flash fallback chain (optional vision feedback) |
 | Stroke Data | KanjiVG-derived stroke paths (CC BY-SA 3.0) |
 | Deployment | Vercel (serverless functions for API proxy) |
 | Icons | Lucide React |
@@ -345,7 +345,7 @@ VITE_FIREBASE_STORAGE_BUCKET=
 VITE_FIREBASE_MESSAGING_SENDER_ID=
 VITE_FIREBASE_APP_ID=
 GEMINI_API_KEY=
-GEMINI_TTS_MODEL=gemini-2.5-flash-preview-tts
+GEMINI_TTS_MODEL=gemini-3.8-flash-lite-tts
 ```
 
 Enable **Email/Password** and **Google** under Firebase Console → **Authentication → Sign-in method** if you want account creation and cloud progress sync. Password-reset emails use Firebase Authentication's built-in email action and can be customized under **Authentication → Templates**. Apply the complete rules from `database.rules.json` to Firebase Realtime Database. The `userProgress/$uid` path is private to the authenticated owner.
@@ -356,11 +356,11 @@ When using the Firebase CLI, publish database rules with:
 firebase deploy --only database
 ```
 
-For the fixed Astra Gemini voice catalog, add the same server-side `GEMINI_API_KEY` to the local `.env` file and Vercel Environment Variables. `GEMINI_TTS_MODEL` is optional and defaults to `gemini-2.5-flash-preview-tts`. Never use a `VITE_` prefix for the Gemini key. If Gemini TTS is unavailable or its quota is reached, Astra automatically falls back to the browser voice engine.
+For the fixed Astra Gemini voice catalog, add the same server-side `GEMINI_API_KEY` to the local `.env` file and Vercel Environment Variables. `GEMINI_TTS_MODEL` is optional and defaults to `gemini-3.8-flash-lite-tts`; the server falls back through Gemini 3.8 Flash TTS, Gemini 3.1 Flash TTS, and Gemini 2.5 Flash TTS when the selected model is unavailable or rate-limited. Never use a `VITE_` prefix for the Gemini key. If every Gemini TTS attempt is unavailable, Astra falls back to the browser voice engine.
 
 > Get a free Gemini API key at [aistudio.google.com](https://aistudio.google.com). Gemini limits vary by model, project, and time window; if the voice quota is reached, Astra automatically uses the browser voice instead.
 
-> ⚠️ **AI drawing analysis limit:** The free Gemini tier resets daily. If Astra-chan's drawing checker stops responding, the day's quota has been reached — it'll be back the next day automatically.
+> ⚠️ **AI drawing analysis limit:** The drawing checker tries several Gemini Flash models when one is unavailable or rate-limited. If the available model quotas are exhausted, the checker may stop responding until a model window resets.
 
 ### Firebase Realtime Database Paths
 
@@ -397,7 +397,7 @@ V1 protects authentication, room membership IDs, invite ownership, profiles, and
 - [x] Streak calendar and achievement badges
 - [x] Progress backup and restore
 - [x] Astra-chan mascot states: default, wondering/AFK waiting, excited return, reading, and reading-clicked artwork
-- [x] Kanji drawing feedback — originally Cloudflare Workers AI (LLaVA 1.5 7B), upgraded to **Gemini 3.1 Flash Lite** after accuracy issues with the original model
+- [x] Kanji drawing feedback — originally Cloudflare Workers AI (LLaVA 1.5 7B), upgraded to a **Gemini Flash fallback chain** after accuracy issues with the original model
 - [x] Romaji toggle for beginners across Grammar Dojo and Reference Charts
 - [x] App component splitting across 9 phases (described above; later features continued to evolve `App.tsx`)
 - [x] Interactive Mastery Sandbox (counter builder, verb conjugation worksheet, 31-day calendar ledger — built as interactive tools rather than literal user-created tables)

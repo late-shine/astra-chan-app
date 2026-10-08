@@ -8,7 +8,18 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { Buffer } from "node:buffer";
 
-const DEFAULT_MODEL = "gemini-2.5-flash-preview-tts";
+const DEFAULT_MODEL = "gemini-3.8-flash-lite-tts";
+const TTS_FALLBACK_MODELS = [
+  DEFAULT_MODEL,
+  "gemini-3.8-flash-tts",
+  "gemini-3.1-flash-tts-preview",
+  "gemini-2.5-flash-preview-tts",
+] as const;
+
+function shouldTryNextTtsModel(status: number): boolean {
+  return status === 404 || status === 408 || status === 429 || status >= 500;
+}
+
 const VOICES: Record<string, { id: string; geminiVoice: string }> = {
   "ja-JP-Chirp3-HD-Sulafat": { id: "ja-JP-Chirp3-HD-Sulafat", geminiVoice: "Sulafat" },
   "ja-JP-Chirp3-HD-Achernar": { id: "ja-JP-Chirp3-HD-Achernar", geminiVoice: "Achernar" },
@@ -45,7 +56,10 @@ function toWavBase64(pcmBase64: string, sampleRate = 24_000): string {
 async function synthesize(text: string, voiceId: string, speakingRate: number) {
   const voice = VOICES[voiceId];
   const apiKey = process.env.GEMINI_API_KEY;
-  const model = process.env.GEMINI_TTS_MODEL || DEFAULT_MODEL;
+  const configuredModel = process.env.GEMINI_TTS_MODEL?.trim();
+  const models = configuredModel
+    ? [configuredModel, ...TTS_FALLBACK_MODELS.filter((candidate) => candidate !== configuredModel)]
+    : TTS_FALLBACK_MODELS;
   const pace = speakingRate <= 0.85
     ? "at a slightly deliberate, learner-friendly pace"
     : speakingRate >= 1.15
@@ -63,36 +77,69 @@ async function synthesize(text: string, voiceId: string, speakingRate: number) {
     throw error;
   }
 
-  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-    body: JSON.stringify({
-      model,
-      input: `Say in Japanese ${pace}. Speak exactly this transcript and do not translate or add words:\n${text}`,
-      response_format: { type: "audio" },
-      generation_config: { speech_config: [{ voice: voice.geminiVoice }] },
-    }),
-  });
+  let lastError: Error | null = null;
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const error = new Error(errorData.error?.message || `Gemini TTS returned status ${response.status}`);
-    (error as Error & { statusCode?: number }).statusCode = response.status;
-    throw error;
+  for (const model of models) {
+    const isModernTts = model === "gemini-3.8-flash-tts"
+      || model === "gemini-3.8-flash-lite-tts";
+    let response: Response;
+
+    try {
+      response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          model,
+          input: "Say in Japanese " + pace + ". Speak exactly this transcript and do not translate or add words:\n" + text,
+          response_format: isModernTts
+            ? { type: "audio", mime_type: "audio/l16", sample_rate: 24_000 }
+            : { type: "audio" },
+          generation_config: { speech_config: [{ voice: voice.geminiVoice }] },
+        }),
+      });
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error("Gemini TTS request failed.");
+      console.warn("[synthesize-speech] " + model + " request failed; trying the next model.", lastError);
+      continue;
+    }
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const error = new Error(
+        errorData.error?.message || "Gemini TTS returned status " + response.status
+      );
+      (error as Error & { statusCode?: number }).statusCode = response.status;
+      lastError = error;
+
+      if (!shouldTryNextTtsModel(response.status)) {
+        throw error;
+      }
+
+      console.warn(
+        "[synthesize-speech] " + model + " returned " + response.status + "; trying the next model."
+      );
+      continue;
+    }
+
+    const payload = await response.json();
+    const audioPart = payload.output_audio
+      ?? payload.steps?.flatMap((step: { content?: Array<{ type?: string }> }) => step.content || [])
+        .find((part: { type?: string }) => part.type === "audio");
+    if (!audioPart?.data) {
+      lastError = new Error("Gemini TTS returned no audio data for " + model + ".");
+      console.warn("[synthesize-speech] " + model + " returned no audio; trying the next model.");
+      continue;
+    }
+
+    return {
+      audioContent: toWavBase64(audioPart.data, Number(audioPart.sample_rate) || 24_000),
+      mimeType: "audio/wav",
+      voiceId: voice.id,
+      model,
+    };
   }
 
-  const payload = await response.json();
-  const audioPart = payload.output_audio
-    ?? payload.steps?.flatMap((step: { content?: Array<{ type?: string }> }) => step.content || [])
-      .find((part: { type?: string }) => part.type === "audio");
-  if (!audioPart?.data) throw new Error("Gemini TTS returned no audio data.");
-
-  return {
-    audioContent: toWavBase64(audioPart.data, Number(audioPart.sample_rate) || 24_000),
-    mimeType: "audio/wav",
-    voiceId: voice.id,
-    model,
-  };
+  throw lastError || new Error("All Gemini TTS models failed.");
 }
 
 const speechCache = new Map<string, { audioContent: string; createdAt: number }>();
