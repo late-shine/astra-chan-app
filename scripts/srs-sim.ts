@@ -4,7 +4,7 @@
  */
 
 /**
- * Phase S1 + S2 + S3 check script — a standalone dev tool, NOT a UI feature. It exercises the
+ * Phase S1 + S2 + S3 + S4 check script — a standalone dev tool, NOT a UI feature. It exercises the
  * pure scheduler in src/srsScheduler.ts:
  *
  *   1. a legacy deck loads unchanged (levels, nextReview, due count)
@@ -17,6 +17,8 @@
  *   7. (S3) the three grades, per-card ease, overdue credit, the 365-day ceiling, interval previews
  *      (which must match what the next answer schedules), the 7-day forecast, and a 365-day
  *      simulation that uses all three grades
+ *   8. (S4) tricky cards (leeches): flagged on the 6th Forgot, set aside from queues, counts and the forecast,
+ *      Put back, the merge, and the backlog tool (very overdue cards spread over the next days)
  *
  * It never touches the app, Firebase, localStorage, or any data file. The "old rules"
  * below are a verbatim model of the pre-S1 hook and the pre-S1 mergeSrsCards, kept here
@@ -35,12 +37,14 @@
 import { readFileSync } from "node:fs";
 
 import {
+  BACKLOG_OFFER_FACTOR,
   DEFAULT_EASE,
   EASE_DELTA,
   FUZZ_MIN_INTERVAL_MS,
   FUZZ_RATIO,
   HARD_INTERVAL_FACTOR,
   INTERVALS_MS,
+  LEECH_LAPSE_THRESHOLD,
   MAX_EASE,
   MAX_INTERVAL_MS,
   MAX_LEVEL,
@@ -48,8 +52,14 @@ import {
   MIN_EASE,
   MIN_RECALL_INTERVAL_MS,
   RELEARN_INTERVAL_MS,
+  RESCHEDULE_LEVEL,
+  RESCHEDULE_MAX_DAYS,
+  RESCHEDULE_MIN_DAYS,
+  RESCHEDULE_MIN_PER_DAY,
   SRS_GRADES,
   UNLIMITED_REVIEWS,
+  VERY_OVERDUE_MIN_MS,
+  VERY_OVERDUE_RATIO,
   applyFuzz,
   buildForecast,
   buildSessionPlan,
@@ -61,7 +71,10 @@ import {
   formatSessionLine,
   formatWaitingLine,
   gradeIntervalMs,
+  isLeech,
   isNewCard,
+  isVeryOverdue,
+  listTrickyCards,
   localDayRange,
   mergeSrsCards,
   mergeSrsSettings,
@@ -70,7 +83,10 @@ import {
   normalizeSrsSettings,
   overdueRatio,
   previewIntervals,
+  putBackLeech,
   relearnIntervalMs,
+  rescheduleSpreadDays,
+  rescheduleVeryOverdue,
   scheduleAnswer,
   scheduleGrade,
   scheduleRelearnAnswer,
@@ -1298,6 +1314,305 @@ section("365-day simulation WITH three grades (900 cards, 10/day for 90 days; 72
   check("3-grade sim: all 900 cards were introduced", Object.values(deck).length === 900 && Object.values(deck).every((card) => !isNewCard(card)));
 }
 
+// ─── 6d. S4: tricky cards (leeches) and backlog recovery ────────────────────
+
+/** A tricky card: forgotten 6 times, its last (failed) answer 2 days ago, so it is still waiting on that Forgot's 10-minute step. */
+const s4Leech = (key: string, extra: Partial<SRSCard> = {}): SRSCard =>
+  reviewCard(key, { level: 1, lapses: 6, leech: true, lastReviewed: TODAY_NOON - 2 * DAY, nextReview: TODAY_NOON - 2 * DAY + RELEARN_INTERVAL_MS, ...extra });
+/** A very overdue review card: due `daysLate` days ago after being scheduled for 7 days. */
+const s4Ancient = (key: string, daysLate = 200, extra: Partial<SRSCard> = {}): SRSCard =>
+  reviewCard(key, { level: 3, nextReview: TODAY_NOON - daysLate * DAY, lastReviewed: TODAY_NOON - (daysLate + 7) * DAY, ...extra });
+const s4MergeAt = (local: SRSCard, cloud: SRSCard, at: number): SRSCard => mergeSrsCards({ k: local }, { k: cloud }, at).k;
+const s4Cap20: SrsSettings = { dailyReviewCap: 20, dailyNewCap: 10 };
+
+section("S4: flagging a tricky card");
+
+{
+  check("LEECH_LAPSE_THRESHOLD is 6", LEECH_LAPSE_THRESHOLD === 6);
+  check("backlog constants: offer above 3 x the cap; spread over 3 to 30 days, 5+ a day; back to level 1",
+    BACKLOG_OFFER_FACTOR === 3 && RESCHEDULE_MIN_DAYS === 3 && RESCHEDULE_MAX_DAYS === 30 && RESCHEDULE_MIN_PER_DAY === 5 && RESCHEDULE_LEVEL === 1);
+  const sixth = scheduleGrade(reviewCard("f5", { lapses: 5 }), "forgot", TODAY_NOON);
+  check("flag: the Forgot that brings lapses to 6 sets the card aside", sixth.lapses === 6 && sixth.leech === true, JSON.stringify(sixth));
+  const seventh = scheduleGrade(reviewCard("f6", { lapses: 6 }), "forgot", TODAY_NOON);
+  check("flag: 7 lapses (already over the line) is flagged too", seventh.lapses === 7 && seventh.leech === true);
+  const fifth = scheduleGrade(reviewCard("f4", { lapses: 4 }), "forgot", TODAY_NOON);
+  check("flag: 5 lapses is not enough, and there is no leech field at all", fifth.lapses === 5 && !("leech" in fifth));
+  const legacy = scheduleGrade({ level: 2, nextReview: NOW, type: "vocab", itemKey: "legacy" }, "forgot", TODAY_NOON);
+  check("flag: a legacy card without lapses counts from 0 and is not flagged", legacy.lapses === 1 && !("leech" in legacy));
+  check("flag: Hard and Got it never set a card aside",
+    (["hard", "gotIt"] as const).every((grade) => {
+      const next = scheduleGrade(reviewCard("g", { lapses: 5 }), grade, TODAY_NOON);
+      return next.lapses === 5 && !("leech" in next);
+    }));
+  const relearn = scheduleRelearnGrade(reviewCard("r", { lapses: 5 }), "forgot", TODAY_NOON);
+  check("flag: a relearn Forgot is not a new lapse and never flags", relearn.lapses === 5 && !("leech" in relearn));
+  const stillAside = scheduleGrade(s4Leech("keep"), "gotIt", TODAY_NOON);
+  check("flag: an answer does not clear the flag (only Put back does)", stillAside.leech === true);
+  check("flag: the flagged card is JSON-safe (no undefined anywhere)", !containsUndefined(sixth) && !containsUndefined(fifth) && !containsUndefined(stillAside));
+  check("flag: isLeech reads the flag", isLeech(sixth) && !isLeech(fifth));
+
+  // The whole life of a card that keeps being forgotten: flagged on exactly the sixth Forgot.
+  let card: SRSCard = reviewCard("life", { level: 4, lapses: 0 });
+  let flaggedAt = 0;
+  for (let i = 1; i <= 8; i++) {
+    card = scheduleGrade(card, "forgot", TODAY_NOON + i * HOUR);
+    if (card.leech === true && flaggedAt === 0) flaggedAt = i;
+  }
+  check("flag: a card forgotten over and over is flagged on exactly the 6th Forgot", flaggedAt === 6, String(flaggedAt));
+}
+
+section("S4: normalization of the leech field");
+
+{
+  const base = reviewCard("n");
+  const kept = normalizeCard({ ...base, leech: true }, NOW);
+  check("normalize: leech true is kept", kept !== null && kept.leech === true);
+  const bad: unknown[] = [false, "true", 1, 0, null, undefined, {}, []];
+  check("normalize: leech false, strings, numbers, null and objects are omitted (the field is not even present)",
+    bad.every((value) => {
+      const out = normalizeCard({ ...base, leech: value }, NOW);
+      return out !== null && !("leech" in out);
+    }));
+  const flagged = s4Leech("rt");
+  check("normalize: a tricky card survives a JSON round trip and normalization unchanged",
+    stable(normalizeCard(JSON.parse(JSON.stringify(flagged)), NOW)) === stable(flagged));
+  check("normalize: normalizeSrsCards keeps the flag on a whole deck", normalizeSrsCards(deckOf([flagged, reviewCard("plain")]), NOW).rt?.leech === true);
+}
+
+section("S4: tricky cards are set aside everywhere");
+
+{
+  const plain = [reviewCard("p1"), reviewCard("p2"), reviewCard("p3")];
+  const deck = deckOf([
+    ...plain,
+    s4Leech("t1", { lapses: 7 }),                                   // due, tricky
+    s4Leech("t2", { lastReviewed: TODAY_NOON - HOUR, nextReview: TODAY_NOON + 10 * MIN }), // answered today, would be due in 10 minutes
+    reviewCard("later", { nextReview: TODAY_NOON + 2 * DAY, lastReviewed: TODAY_NOON - DAY }),
+  ]);
+  const plan = buildSessionPlan(deck, defaultSrsSettings(), TODAY_NOON);
+  check("plan: tricky cards are never queued", keys(plan.queue) === "p1,p2,p3" || plan.queue.every((c) => !c.itemKey.startsWith("t")), keys(plan.queue));
+  check("plan: exactly the 3 ordinary due cards are queued", plan.queue.length === 3 && plan.total === 3);
+  check("plan: trickyCount counts the set-aside cards", plan.trickyCount === 2, String(plan.trickyCount));
+  check("plan: the backlog does not include tricky cards", plan.overdueBacklog === 3, String(plan.overdueBacklog));
+  check("plan: nextDueAt ignores a tricky card that would be due in 10 minutes", plan.nextDueAt === TODAY_NOON + 2 * DAY, String(plan.nextDueAt));
+  check("plan: the summary carries the S4 fields and still has no queue",
+    (() => { const sum = summarizeSession(plan); return !("queue" in sum) && sum.trickyCount === 2 && sum.overdueBacklog === 3; })());
+  check("plan: S4 fields are plain data (JSON-safe)", !containsUndefined(summarizeSession(plan)));
+
+  // Waiting count: 25 ordinary due cards + 5 tricky ones, cap 20 → 20 queued, 5 waiting (not 10).
+  const crowded = deckOf([...Array.from({ length: 25 }, (_, i) => reviewCard(`c${i}`)), ...Array.from({ length: 5 }, (_, i) => s4Leech(`x${i}`))]);
+  const crowdedPlan = buildSessionPlan(crowded, s4Cap20, TODAY_NOON);
+  check("plan: tricky cards are not counted as waiting", crowdedPlan.total === 20 && crowdedPlan.waitingCount === 5 && crowdedPlan.trickyCount === 5,
+    `${crowdedPlan.total}/${crowdedPlan.waitingCount}/${crowdedPlan.trickyCount}`);
+
+  // A tricky card that was answered today still used one of today's reviews.
+  const spent = deckOf([...Array.from({ length: 25 }, (_, i) => reviewCard(`c${i}`)), s4Leech("today", { lastReviewed: TODAY_NOON - HOUR, nextReview: TODAY_NOON - HOUR + RELEARN_INTERVAL_MS })]);
+  const spentPlan = buildSessionPlan(spent, s4Cap20, TODAY_NOON);
+  check("plan: the Forgot that set a card aside still counts toward today's review budget", spentPlan.reviewedToday === 1 && spentPlan.reviewCount === 19,
+    `${spentPlan.reviewedToday}/${spentPlan.reviewCount}`);
+
+  // Forecast.
+  const tomorrow = reviewCard("tomorrow", { nextReview: localAt(1, 10), lastReviewed: localAt(0, 9) });
+  const asideTomorrow = s4Leech("aside-tomorrow", { nextReview: localAt(1, 11) });
+  const forecast = buildForecast(deckOf([tomorrow, asideTomorrow]), TODAY_NOON);
+  check("forecast: a tricky card is not counted as coming up", forecast[0].count === 1 && forecast.reduce((a, d) => a + d.count, 0) === 1, forecast.map((d) => d.count).join());
+
+  // Listing.
+  const listed = listTrickyCards(deckOf([reviewCard("ok"), s4Leech("b", { lapses: 6 }), s4Leech("a", { lapses: 6 }), s4Leech("c", { lapses: 9 })]));
+  check("list: only tricky cards, most forgotten first, then by key", keys(listed) === "c,a,b", keys(listed));
+  check("list: empty deck gives an empty list", listTrickyCards({}).length === 0);
+}
+
+section("S4: Put back");
+
+{
+  const aside = s4Leech("pb", { ease: 0.85, reps: 4 });
+  const back = putBackLeech(aside, TODAY_NOON);
+  check("put back: the flag and the ease are removed (omitted, not false or undefined)", !("leech" in back) && !("ease" in back) && !containsUndefined(back));
+  check("put back: level 0 and lapses 0", back.level === 0 && back.lapses === 0);
+  check("put back: it was already due, so nextReview is left alone", back.nextReview === aside.nextReview, `${back.nextReview} vs ${aside.nextReview}`);
+  check("put back: lastReviewed, reps, type and key are untouched",
+    back.lastReviewed === aside.lastReviewed && back.reps === 4 && back.type === aside.type && back.itemKey === "pb");
+  check("put back: it does not turn into a new card", !isNewCard(back));
+  const future = putBackLeech(s4Leech("pb-future", { nextReview: TODAY_NOON + 3 * DAY }), TODAY_NOON);
+  check("put back: a card scheduled in the future becomes due now", future.nextReview === TODAY_NOON, String(future.nextReview));
+  check("put back: a card that is not tricky is returned untouched (same object)", (() => { const plainCard = reviewCard("plain"); return putBackLeech(plainCard, TODAY_NOON) === plainCard; })());
+  check("put back: the input card is not mutated", aside.leech === true && aside.ease === 0.85 && aside.lapses === 6);
+
+  const before = buildSessionPlan(deckOf([aside, reviewCard("other")]), defaultSrsSettings(), TODAY_NOON);
+  const after = buildSessionPlan(deckOf([back, reviewCard("other")]), defaultSrsSettings(), TODAY_NOON);
+  check("put back: the card returns to the session queue", !before.queue.some((c) => c.itemKey === "pb") && after.queue.some((c) => c.itemKey === "pb"));
+  check("put back: tricky count drops and it is not an answer, so today's reviewed count does not move",
+    before.trickyCount === 1 && after.trickyCount === 0 && before.reviewedToday === after.reviewedToday, `${before.reviewedToday}/${after.reviewedToday}`);
+  check("put back: it is picked first (it has been waiting longest)", after.queue[0].itemKey === "pb", keys(after.queue));
+
+  // Its next answer is the plain ladder: no overdue credit for a card that was failed, not remembered.
+  const late = TODAY_NOON + 30 * DAY;
+  check("put back: no overdue credit on its next Got it (late or not, same interval)",
+    gradeIntervalMs(back, "gotIt", late) === gradeIntervalMs(back, "gotIt", back.nextReview), `${gradeIntervalMs(back, "gotIt", late)} vs ${gradeIntervalMs(back, "gotIt", back.nextReview)}`);
+  check("put back: six more Forgot answers are needed before it is set aside again", (() => {
+    let card: SRSCard = back;
+    for (let i = 1; i <= 5; i++) card = scheduleGrade(card, "forgot", TODAY_NOON + i * HOUR);
+    const fiveLater = !("leech" in card) && card.lapses === 5;
+    card = scheduleGrade(card, "forgot", TODAY_NOON + 6 * HOUR);
+    return fiveLater && card.leech === true && card.lapses === 6;
+  })());
+}
+
+section("S4: merge keeps a put-back card put back");
+
+{
+  const aside = s4Leech("m");
+  const back = putBackLeech(aside, TODAY_NOON);
+  const a = s4MergeAt(aside, back, TODAY_NOON);
+  const b = s4MergeAt(back, aside, TODAY_NOON);
+  check("merge: a put-back card beats the older leech copy, whichever device syncs first", !("leech" in a) && !("leech" in b), `${a.leech}/${b.leech}`);
+  check("merge: and the result is the same both ways round", stable(a) === stable(b));
+  check("merge: merging the result again changes nothing", stable(s4MergeAt(a, aside, TODAY_NOON)) === stable(a) && stable(s4MergeAt(a, back, TODAY_NOON)) === stable(a));
+  const reflagged = s4Leech("m", { lastReviewed: TODAY_NOON - HOUR, nextReview: TODAY_NOON - HOUR + RELEARN_INTERVAL_MS, lapses: 6 });
+  check("merge: a later Forgot that set the card aside again beats the put-back copy", s4MergeAt(back, reflagged, TODAY_NOON).leech === true && s4MergeAt(reflagged, back, TODAY_NOON).leech === true);
+  const answered = scheduleGrade(back, "gotIt", TODAY_NOON);
+  check("merge: an answer given after Put back beats the old leech copy", !("leech" in s4MergeAt(aside, answered, TODAY_NOON)) && !("leech" in s4MergeAt(answered, aside, TODAY_NOON)));
+  check("merge: two identical tricky copies stay tricky", s4MergeAt(aside, { ...aside }, TODAY_NOON).leech === true);
+  const deckMerge = mergeSrsCards(deckOf([aside, reviewCard("x")]), deckOf([back, reviewCard("x")]), TODAY_NOON);
+  check("merge: on a whole deck the put-back card is not resurrected as tricky", !("leech" in deckMerge.m) && !containsUndefined(deckMerge));
+}
+
+section("S4: very overdue cards");
+
+{
+  check("very overdue: constants are 60 days and a ratio of 2", VERY_OVERDUE_MIN_MS === 60 * DAY && VERY_OVERDUE_RATIO === 2);
+  check("very overdue: 200 days late on a 7-day interval is", isVeryOverdue(s4Ancient("a"), TODAY_NOON));
+  check("very overdue: 59 days late is not (even though 59 / 1 day is far over the ratio)",
+    !isVeryOverdue(reviewCard("b", { level: 1, nextReview: TODAY_NOON - 59 * DAY, lastReviewed: TODAY_NOON - 60 * DAY }), TODAY_NOON));
+  check("very overdue: 61 days late on a 1-day interval is",
+    isVeryOverdue(reviewCard("b2", { level: 1, nextReview: TODAY_NOON - 61 * DAY, lastReviewed: TODAY_NOON - 62 * DAY }), TODAY_NOON));
+  check("very overdue: 90 days late on a 60-day interval is not (ratio 1.5)",
+    !isVeryOverdue(reviewCard("c", { level: 6, nextReview: TODAY_NOON - 90 * DAY, lastReviewed: TODAY_NOON - 150 * DAY }), TODAY_NOON));
+  check("very overdue: exactly twice the interval is not (it must be more than 2x)",
+    !isVeryOverdue(reviewCard("d", { level: 6, nextReview: TODAY_NOON - 120 * DAY, lastReviewed: TODAY_NOON - 180 * DAY }), TODAY_NOON));
+  check("very overdue: 130 days late on a 60-day interval is",
+    isVeryOverdue(reviewCard("e", { level: 6, nextReview: TODAY_NOON - 130 * DAY, lastReviewed: TODAY_NOON - 190 * DAY }), TODAY_NOON));
+  check("very overdue: a legacy card (no history) uses its level's interval", isVeryOverdue({ level: 5, nextReview: TODAY_NOON - 100 * DAY, type: "vocab", itemKey: "legacy" }, TODAY_NOON));
+  check("very overdue: a card that is not due yet is not", !isVeryOverdue(s4Ancient("f", -2), TODAY_NOON));
+  check("very overdue: a new card that was never answered is not", !isVeryOverdue(newCard("g", TODAY_NOON - 200 * DAY), TODAY_NOON));
+  check("very overdue: a tricky card is not", !isVeryOverdue(s4Ancient("h", 200, { leech: true, lapses: 6 }), TODAY_NOON));
+
+  // The offer: more than 3 x the review cap in due reviews, and at least one very overdue card.
+  const sixty = deckOf(Array.from({ length: 60 }, (_, i) => s4Ancient(`o${i}`)));
+  const sixtyOne = deckOf(Array.from({ length: 61 }, (_, i) => s4Ancient(`o${i}`)));
+  check("offer: exactly 3 x the cap (60 with a cap of 20) is not enough", !buildSessionPlan(sixty, s4Cap20, TODAY_NOON).backlogOffer);
+  const offered = buildSessionPlan(sixtyOne, s4Cap20, TODAY_NOON);
+  check("offer: one more than 3 x the cap is offered, with the exact count", offered.backlogOffer && offered.veryOverdueCount === 61 && offered.overdueBacklog === 61, `${offered.backlogOffer}/${offered.veryOverdueCount}`);
+  const recentBacklog = deckOf(Array.from({ length: 61 }, (_, i) => reviewCard(`rb${i}`, { nextReview: TODAY_NOON - 5 * DAY, lastReviewed: TODAY_NOON - 8 * DAY })));
+  const recentPlan = buildSessionPlan(recentBacklog, s4Cap20, TODAY_NOON);
+  check("offer: a big backlog of only recently overdue cards is not offered", !recentPlan.backlogOffer && recentPlan.veryOverdueCount === 0);
+  const unlimitedPlan = buildSessionPlan(deckOf(Array.from({ length: 1000 }, (_, i) => s4Ancient(`u${i}`))), { dailyReviewCap: UNLIMITED_REVIEWS, dailyNewCap: 10 }, TODAY_NOON);
+  check("offer: never with 'No limit' (the learner opted out of caps), though the count is still reported", !unlimitedPlan.backlogOffer && unlimitedPlan.veryOverdueCount === 1000);
+  const defaultCap = (n: number) => buildSessionPlan(deckOf(Array.from({ length: n }, (_, i) => s4Ancient(`d${i}`))), defaultSrsSettings(), TODAY_NOON).backlogOffer;
+  check("offer: with the default cap of 50 the line is between 150 and 151", !defaultCap(150) && defaultCap(151));
+  check("offer: an empty deck offers nothing", !buildSessionPlan({}, defaultSrsSettings(), TODAY_NOON).backlogOffer);
+}
+
+section("S4: spreading very overdue cards");
+
+{
+  const dflt = defaultSrsSettings();
+  check("spread: no cards → 0 days", rescheduleSpreadDays(0, dflt) === 0 && rescheduleSpreadDays(-3, dflt) === 0);
+  check("spread: never more days than cards", rescheduleSpreadDays(1, dflt) === 1 && rescheduleSpreadDays(2, dflt) === 2);
+  check("spread: at least 3 days when there are 3 or more cards", rescheduleSpreadDays(3, dflt) === 3 && rescheduleSpreadDays(60, dflt) === 3);
+  check("spread: about half a daily cap per day (cap 50 → 25 a day)", rescheduleSpreadDays(100, dflt) === 4 && rescheduleSpreadDays(700, dflt) === 28);
+  check("spread: at most 30 days", rescheduleSpreadDays(1000, dflt) === 30 && rescheduleSpreadDays(100000, dflt) === 30);
+  check("spread: cap 20 → 10 a day", rescheduleSpreadDays(100, s4Cap20) === 10);
+  check("spread: 'No limit' uses the default cap of 50", rescheduleSpreadDays(100, { dailyReviewCap: UNLIMITED_REVIEWS, dailyNewCap: 10 }) === 4);
+  check("spread: nonsense settings fall back to the defaults", rescheduleSpreadDays(100, null) === 4 && rescheduleSpreadDays(100, "x") === 4);
+
+  // A mixed deck: a0..a9 are very overdue (a0 the most, a9 the least), plus cards that must not be touched.
+  const ancientCards = Array.from({ length: 10 }, (_, i) => s4Ancient(`a${i}`, 209 - i, { ease: 1.1, lapses: 2, reps: 5 }));
+  const untouched: SRSCard[] = [
+    reviewCard("r0"), reviewCard("r1"), reviewCard("r2"),                                                  // due, recent
+    reviewCard("later", { nextReview: TODAY_NOON + 20 * DAY, lastReviewed: TODAY_NOON - DAY }),            // not due
+    newCard("fresh", TODAY_NOON - 10 * HOUR),                                                              // new, due
+    s4Leech("tricky", { nextReview: TODAY_NOON - 300 * DAY, lastReviewed: TODAY_NOON - 300 * DAY - RELEARN_INTERVAL_MS }), // tricky, absurdly old
+  ];
+  const deck = deckOf([...ancientCards, ...untouched]);
+  const snapshot = stable(deck);
+  const planBefore = buildSessionPlan(deck, dflt, TODAY_NOON);
+  const result = rescheduleVeryOverdue(deck, dflt, TODAY_NOON);
+
+  check("reschedule: moves exactly the very overdue cards, over 3 days", result.count === 10 && result.days === 3, `${result.count}/${result.days}`);
+  check("reschedule: the count equals what the banner would have shown", result.count === planBefore.veryOverdueCount, `${result.count} vs ${planBefore.veryOverdueCount}`);
+  check("reschedule: the input deck is not mutated and a new deck is returned", stable(deck) === snapshot && result.cards !== deck);
+  check("reschedule: every other card is the very same object", untouched.every((card) => result.cards[card.itemKey] === deck[card.itemKey]));
+  check("reschedule: the result is plain data (no undefined anywhere)", !containsUndefined(result.cards));
+  check("reschedule: every moved card is back at level 1", ancientCards.every((card) => result.cards[card.itemKey].level === 1));
+  check("reschedule: history, ease, lapses and type are untouched on moved cards",
+    ancientCards.every((card) => {
+      const moved = result.cards[card.itemKey];
+      return moved.lastReviewed === card.lastReviewed && moved.reps === 5 && moved.lapses === 2 && moved.ease === 1.1 && moved.type === card.type && moved.itemKey === card.itemKey;
+    }));
+  check("reschedule: most overdue first, dealt round-robin to tomorrow, day 2 and day 3 at local midnight",
+    ancientCards.every((card, i) => result.cards[card.itemKey].nextReview === localAt(1 + (i % 3), 0)),
+    ancientCards.map((card) => new Date(result.cards[card.itemKey].nextReview).getDate()).join());
+  const perDay = [1, 2, 3].map((day) => ancientCards.filter((card) => result.cards[card.itemKey].nextReview === localAt(day, 0)).length);
+  check("reschedule: day sizes differ by at most one (4, 3, 3)", perDay.join() === "4,3,3", perDay.join());
+  check("reschedule: nothing is due today any more", ancientCards.every((card) => result.cards[card.itemKey].nextReview > TODAY_NOON));
+
+  const planAfter = buildSessionPlan(result.cards, dflt, TODAY_NOON);
+  check("reschedule: the backlog is down to the ordinary due cards and the offer is gone", planAfter.overdueBacklog === 3 && planAfter.veryOverdueCount === 0 && !planAfter.backlogOffer, `${planAfter.overdueBacklog}`);
+  check("reschedule: it is not an answer, so today's reviewed count does not move", planAfter.reviewedToday === planBefore.reviewedToday && planAfter.newToday === planBefore.newToday);
+  check("reschedule: the forecast shows them on the next three days", buildForecast(result.cards, TODAY_NOON).map((day) => day.count).join() === "4,3,3,0,0,0,0", buildForecast(result.cards, TODAY_NOON).map((day) => day.count).join());
+  const again = rescheduleVeryOverdue(result.cards, dflt, TODAY_NOON);
+  check("reschedule: doing it again moves nothing and returns the same deck", again.count === 0 && again.days === 0 && again.cards === result.cards);
+  check("reschedule: an empty deck moves nothing", rescheduleVeryOverdue({}, dflt, TODAY_NOON).count === 0);
+
+  // A level-0 card is never raised; a high one comes down to 1.
+  const levels = rescheduleVeryOverdue(deckOf([s4Ancient("zero", 200, { level: 0 }), s4Ancient("five", 200, { level: 5 })]), dflt, TODAY_NOON);
+  check("reschedule: level = min(level, 1): 0 stays 0, 5 becomes 1", levels.cards.zero.level === 0 && levels.cards.five.level === 1);
+
+  // Merge: the moved copy beats the old overdue copy whichever way round they meet.
+  const old = ancientCards[0];
+  const moved = result.cards[old.itemKey];
+  check("merge: a rescheduled card beats its old overdue copy, both ways round",
+    stable(s4MergeAt(old, moved, TODAY_NOON)) === stable(moved) && stable(s4MergeAt(moved, old, TODAY_NOON)) === stable(moved));
+  check("merge: a deck merge keeps the rescheduled cards rescheduled", (() => {
+    const merged = mergeSrsCards(deck, result.cards, TODAY_NOON);
+    return ancientCards.every((card) => merged[card.itemKey].nextReview > TODAY_NOON && merged[card.itemKey].level === 1);
+  })());
+  check("merge: an answer given on another device after the reschedule still wins",
+    s4MergeAt(moved, scheduleGrade(old, "gotIt", TODAY_NOON + HOUR), TODAY_NOON + HOUR).lastReviewed === TODAY_NOON + HOUR);
+}
+
+section("S4: a tricky card through a whole deck lifecycle");
+
+{
+  // 30 cards, one of them impossible: forgotten at every showing. It is set aside after its 6th Forgot, stops costing sessions,
+  // can be put back, and is not counted as due, waiting or coming up while it is set aside.
+  let deck = deckOf(Array.from({ length: 30 }, (_, i) => reviewCard(`k${i}`, { nextReview: TODAY_NOON - 3 * HOUR - i * MIN })));
+  deck.hard = reviewCard("hard", { nextReview: TODAY_NOON - 4 * HOUR });
+  let day = 0;
+  let flaggedOnDay = -1;
+  for (; day < 12; day++) {
+    const now = TODAY_NOON + day * DAY;
+    const plan = buildSessionPlan(deck, defaultSrsSettings(), now);
+    for (const card of plan.queue) {
+      const grade: SrsGrade = card.itemKey === "hard" ? "forgot" : "gotIt";
+      deck[card.itemKey] = scheduleGrade(deck[card.itemKey], grade, now);
+      if (deck.hard.leech === true && flaggedOnDay < 0) flaggedOnDay = day;
+    }
+    // Force "hard" due again each morning (a relearn step plus a night is always past).
+    if (deck.hard.leech !== true) deck.hard = { ...deck.hard, nextReview: now + DAY - 12 * HOUR };
+  }
+  check("lifecycle: the impossible card is flagged after 6 days of one Forgot a day", flaggedOnDay === 5, String(flaggedOnDay));
+  check("lifecycle: once flagged it is no longer in any queue", !buildSessionPlan(deck, defaultSrsSettings(), TODAY_NOON + 20 * DAY).queue.some((c) => c.itemKey === "hard"));
+  check("lifecycle: it stays at 6 lapses (no further Forgot was possible)", deck.hard.lapses === 6 && deck.hard.leech === true, String(deck.hard.lapses));
+  const listed = listTrickyCards(deck);
+  check("lifecycle: it is the only entry in the Tricky cards list", keys(listed) === "hard");
+  deck = { ...deck, hard: putBackLeech(deck.hard, TODAY_NOON + 20 * DAY) };
+  const backPlan = buildSessionPlan(deck, defaultSrsSettings(), TODAY_NOON + 20 * DAY);
+  check("lifecycle: after Put back it is due again and the list is empty", backPlan.queue.some((c) => c.itemKey === "hard") && listTrickyCards(deck).length === 0);
+}
+
 // ─── 7. Optional: a real exported deck ───────────────────────────────────────
 
 const backupPath = process.argv[2];
@@ -1345,4 +1660,4 @@ if (failures.length > 0) {
   failures.forEach((failure) => console.log(`  ✗ ${failure}`));
   process.exit(1);
 }
-console.log("S1 + S2 + S3 scheduler checks: all green.");
+console.log("S1 + S2 + S3 + S4 scheduler checks: all green.");

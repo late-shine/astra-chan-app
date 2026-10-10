@@ -78,6 +78,10 @@ export interface SRSCard {
   // Phase S3: per-card ease multiplier on the ladder interval (default 1.0, kept within 0.8–1.4). Omitted until
   // the card has been graded once; a card without it behaves as ease 1.0. Never `undefined`.
   ease?: number;
+  // Phase S4: true once a first-pass "Forgot" brings `lapses` to 6 or more. The card is set aside: it is left out of
+  // every session, the forecast and the due counts until the learner puts it back (which removes the field) or removes
+  // it. Only ever `true`; a card that is not set aside has no `leech` field at all (never `false`, never `undefined`).
+  leech?: boolean;
 }
 
 /**

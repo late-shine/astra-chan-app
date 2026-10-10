@@ -1,10 +1,11 @@
 import { useState } from "react";
 import type React from "react";
 import { motion } from "motion/react";
-import { CheckCircle2, ChevronLeft, Minus, Settings2, X } from "lucide-react";
+import { CheckCircle2, ChevronLeft, Flag, Minus, Settings2, X } from "lucide-react";
 import { KANJI_DATA, VOCABULARY_DATA } from "../data";
 import type { SRSCard, SrsSettings } from "../types";
 import {
+  LEECH_LAPSE_THRESHOLD,
   MAX_LEVEL,
   MAX_RELEARN_REQUEUES,
   NEW_CAP_OPTIONS,
@@ -14,6 +15,7 @@ import {
   formatIntervalShort,
   localDayRange,
   previewIntervals,
+  rescheduleSpreadDays,
   scheduleGrade,
   type ForecastDay,
   type SessionSummary,
@@ -49,6 +51,12 @@ interface ReviewDeckScreenProps {
   onChangeSrsSettings: (next: { dailyReviewCap: number; dailyNewCap: number }) => void;
   /** S3: cards scheduled for each of the next 7 days (starting tomorrow), for the forecast strip. */
   forecast: ForecastDay[];
+  /** S4: cards set aside as tricky (6 or more first-pass Forgot answers), most forgotten first. */
+  trickyCards: SRSCard[];
+  /** S4: "Put back": a tricky card returns at level 0, due in the next session. */
+  putBackCard: (itemKey: string) => void;
+  /** S4: the backlog tool. Moves very old overdue cards back to level 1 over the next days; null when nothing moved. */
+  rescheduleOverdueCards: () => { count: number; days: number; queue: SRSCard[] } | null;
 }
 
 /** "in 25 min", "in 3 h", "tomorrow", "in 4 days" for the next-card-due line. */
@@ -65,6 +73,18 @@ function formatNextDue(at: number, now: number): string {
 }
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+
+/** What to show for a card in the Tricky cards list: the word or kanji and a short meaning. Falls back to the key. */
+function describeCard(card: SRSCard): { title: string; detail: string } {
+  if (card.type === "vocab") {
+    const vocab = VOCABULARY_DATA.find((v) => v.word === card.itemKey);
+    if (vocab) return { title: vocab.word, detail: `${vocab.hiragana !== vocab.word ? `${vocab.hiragana} · ` : ""}${vocab.english}` };
+  } else if (card.type === "kanji") {
+    const kanji = KANJI_DATA.find((k) => k.kanji === card.itemKey);
+    if (kanji) return { title: kanji.kanji, detail: kanji.meaning };
+  }
+  return { title: card.itemKey, detail: "Card not found" };
+}
 
 /** A quiet progress ring for a card's level (0 to 8). Colours come from the kz-* tokens, so every theme works. */
 function LevelRing({ level }: { level: number }) {
@@ -154,8 +174,20 @@ export default function ReviewDeckScreen({
   srsSettings,
   onChangeSrsSettings,
   forecast,
+  trickyCards,
+  putBackCard,
+  rescheduleOverdueCards,
 }: ReviewDeckScreenProps) {
             const [showSettings, setShowSettings] = useState(false);
+            // S4: the Tricky cards panel, the inline "Remove for good?" confirmation, and plain status lines.
+            const [showTricky, setShowTricky] = useState(false);
+            const [confirmRemoveKey, setConfirmRemoveKey] = useState<string | null>(null);
+            const [trickyNotice, setTrickyNotice] = useState<string | null>(null);
+            // Cards that this sitting's Forgot answers set aside (reported plainly; never hidden).
+            const [setAsideThisSession, setSetAsideThisSession] = useState(0);
+            // S4: backlog tool: asking for confirmation, and the result line.
+            const [confirmingReschedule, setConfirmingReschedule] = useState(false);
+            const [rescheduleNotice, setRescheduleNotice] = useState<string | null>(null);
             // First-pass answers given in this sitting: what the end screen reports and what XP was awarded for.
             const [answeredThisSession, setAnsweredThisSession] = useState(0);
             const isDone = srsQueue.length === 0 || srsQueueIndex >= srsQueue.length;
@@ -186,11 +218,17 @@ export default function ReviewDeckScreen({
                 awardSRSXP(5);
                 setAnsweredThisSession((count) => count + 1);
               }
-              // A forgotten card comes back at the end of this session, at most twice. It is queued in its
-              // post-forgot state (halved level), so the re-show's ring and previews match what is stored.
-              if (grade === "forgot" && canRequeue && hasCardData) {
+              setRescheduleNotice(null);
+              if (grade === "forgot") {
                 const afterForgot = isRelearnPass ? card : scheduleGrade(card, "forgot", Date.now());
-                setSrsQueue((prev) => [...prev, afterForgot]);
+                if (afterForgot.leech === true) {
+                  // S4: this Forgot set the card aside as tricky, so it is not re-shown. It is counted and reported.
+                  if (!isRelearnPass && card.leech !== true) setSetAsideThisSession((count) => count + 1);
+                } else if (canRequeue && hasCardData) {
+                  // A forgotten card comes back at the end of this session, at most twice. It is queued in its
+                  // post-forgot state (halved level), so the re-show's ring and previews match what is stored.
+                  setSrsQueue((prev) => [...prev, afterForgot]);
+                }
               }
               setSrsQueueIndex((prev) => prev + 1);
               setSrsRevealed(false);
@@ -206,9 +244,44 @@ export default function ReviewDeckScreen({
 
             const startAnotherSet = () => {
               setAnsweredThisSession(0);
+              setSetAsideThisSession(0);
               setSrsQueue(getSessionQueue());
               setSrsQueueIndex(0);
               setSrsRevealed(false);
+            };
+
+            /** S4: open or close the Tricky cards panel (it shares the spot of the daily limits panel). */
+            const toggleTricky = () => {
+              setShowTricky((open) => !open);
+              setShowSettings(false);
+              setConfirmRemoveKey(null);
+              setTrickyNotice(null);
+            };
+            const openTricky = () => {
+              setShowTricky(true);
+              setShowSettings(false);
+              setConfirmRemoveKey(null);
+              setTrickyNotice(null);
+            };
+
+            /** S4: the backlog banner is only offered before a session starts or after it ends, never in the middle of one. */
+            const backlogBannerVisible = sessionSummary.backlogOffer && (srsQueueIndex === 0 || isDone);
+            const rescheduleDays = rescheduleSpreadDays(sessionSummary.veryOverdueCount, srsSettings);
+
+            /** S4: the learner confirmed. A session that has not started gets its queue rebuilt; a finished one is left alone. */
+            const confirmReschedule = () => {
+              const outcome = rescheduleOverdueCards();
+              setConfirmingReschedule(false);
+              if (!outcome) {
+                setRescheduleNotice("Nothing needed rescheduling.");
+                return;
+              }
+              if (!isDone) {
+                setSrsQueue(outcome.queue);
+                setSrsQueueIndex(0);
+                setSrsRevealed(false);
+              }
+              setRescheduleNotice(`${plural(outcome.count, "card")} rescheduled over the next ${plural(outcome.days, "day")}.`);
             };
 
 
@@ -238,10 +311,29 @@ export default function ReviewDeckScreen({
                     )}
                   </div>
                   {/* Daily limits (S2); also keeps the header centred */}
-                  <div className="w-16 flex justify-end">
+                  <div className="min-w-16 flex justify-end items-center gap-1.5">
+                    {(trickyCards.length > 0 || showTricky) && (
+                      <button
+                        type="button"
+                        onClick={toggleTricky}
+                        aria-label={`Tricky cards: ${trickyCards.length} set aside`}
+                        aria-expanded={showTricky}
+                        className={`p-2 border rounded-lg transition cursor-pointer flex items-center gap-1 ${
+                          showTricky
+                            ? "bg-natural-forest/10 border-natural-forest text-natural-forest"
+                            : "bg-natural-bg/40 border-natural-border text-natural-forest-light hover:border-natural-forest hover:text-natural-forest"
+                        }`}
+                      >
+                        <Flag className="w-4 h-4" />
+                        <span className="text-[10px] font-mono font-bold leading-none">{trickyCards.length}</span>
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => setShowSettings((open) => !open)}
+                      onClick={() => {
+                        setShowSettings((open) => !open);
+                        setShowTricky(false);
+                      }}
                       aria-label="Daily limits"
                       aria-expanded={showSettings}
                       className={`p-2 border rounded-lg transition cursor-pointer ${
@@ -257,6 +349,53 @@ export default function ReviewDeckScreen({
 
                 {/* ── 7-day forecast (S3) ───────────────────────────────── */}
                 {totalCount > 0 && <ForecastStrip forecast={forecast} />}
+
+                {/* ── Backlog recovery (S4): quiet, only when far behind, only with a confirmation ───── */}
+                {backlogBannerVisible && (
+                  <div className="kz-inset px-3 py-3 flex flex-col gap-2" role="region" aria-label="Review backlog">
+                    <p className="text-xs text-natural-forest-light font-medium leading-relaxed">
+                      {plural(sessionSummary.overdueBacklog, "card")} are waiting for review, and {sessionSummary.veryOverdueCount}{" "}
+                      of them {sessionSummary.veryOverdueCount === 1 ? "is" : "are"} more than 60 days late.
+                    </p>
+                    {confirmingReschedule ? (
+                      <>
+                        <p className="text-xs text-natural-forest font-semibold leading-relaxed">
+                          This moves {plural(sessionSummary.veryOverdueCount, "card")} back to level 1 and spreads them over the next{" "}
+                          {plural(rescheduleDays, "day")}. Your other cards are not touched.
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={confirmReschedule}
+                            className="py-2 px-2 bg-natural-forest text-natural-bg rounded-lg text-xs font-bold hover:bg-natural-forest/90 transition cursor-pointer"
+                          >
+                            Reschedule {sessionSummary.veryOverdueCount}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmingReschedule(false)}
+                            className="py-2 px-2 border border-natural-border text-natural-forest-light rounded-lg text-xs font-bold hover:border-natural-forest hover:text-natural-forest transition cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmingReschedule(true)}
+                        className="py-2 px-3 border border-natural-border text-natural-forest-light rounded-lg text-xs font-bold hover:border-natural-forest hover:text-natural-forest transition cursor-pointer"
+                      >
+                        Reschedule very old overdue cards ({sessionSummary.veryOverdueCount})
+                      </button>
+                    )}
+                  </div>
+                )}
+                {rescheduleNotice && (
+                  <p role="status" className="text-center text-[11px] font-mono font-bold text-natural-clay">
+                    {rescheduleNotice}
+                  </p>
+                )}
 
                 {/* ── Daily limits panel (S2) ───────────────────────────── */}
                 {showSettings && (
@@ -311,6 +450,94 @@ export default function ReviewDeckScreen({
                   </div>
                 )}
 
+                {/* ── Tricky cards panel (S4) ───────────────────────────── */}
+                {showTricky && (
+                  <div
+                    className="bg-natural-card border border-natural-border/70 rounded-2xl p-4 flex flex-col gap-3 shadow-sm"
+                    role="region"
+                    aria-label="Tricky cards"
+                  >
+                    <div>
+                      <p className="text-[10px] font-mono font-extrabold uppercase tracking-widest text-natural-forest-light mb-1">
+                        Tricky cards
+                      </p>
+                      <p className="text-[11px] text-natural-forest-light/80 font-medium leading-relaxed">
+                        A card you have forgotten {LEECH_LAPSE_THRESHOLD} times is set aside so it stops crowding your sessions. Put it back
+                        to start it again at level 0, or remove it for good.
+                      </p>
+                    </div>
+                    {trickyNotice && (
+                      <p role="status" className="text-[11px] font-mono font-bold text-natural-clay">
+                        {trickyNotice}
+                      </p>
+                    )}
+                    {trickyCards.length === 0 ? (
+                      <p className="text-xs text-natural-forest-light font-medium">No tricky cards right now.</p>
+                    ) : (
+                      <ul className="flex flex-col gap-2">
+                        {trickyCards.map((card) => {
+                          const { title, detail } = describeCard(card);
+                          return (
+                            <li key={card.itemKey} className="kz-inset px-3 py-2.5 flex flex-col gap-2">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <span className="text-xl font-serif font-extrabold text-natural-forest break-words">{title}</span>
+                                  <span className="block text-xs text-natural-forest-light font-medium break-words">{detail}</span>
+                                </div>
+                                <span className="shrink-0 text-[10px] font-mono font-bold text-natural-forest-light">
+                                  forgotten {plural(card.lapses ?? 0, "time")}
+                                </span>
+                              </div>
+                              {confirmRemoveKey === card.itemKey ? (
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      removeCard(card.itemKey);
+                                      setConfirmRemoveKey(null);
+                                      setTrickyNotice(`${title} removed.`);
+                                    }}
+                                    className="py-2 px-2 border border-natural-terracotta/40 text-natural-terracotta rounded-lg text-xs font-bold hover:bg-natural-terracotta/10 transition cursor-pointer"
+                                  >
+                                    Remove for good
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmRemoveKey(null)}
+                                    className="py-2 px-2 border border-natural-border text-natural-forest-light rounded-lg text-xs font-bold hover:border-natural-forest hover:text-natural-forest transition cursor-pointer"
+                                  >
+                                    Keep it
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      putBackCard(card.itemKey);
+                                      setTrickyNotice(`${title} put back at level 0. It will come up in your next session.`);
+                                    }}
+                                    className="py-2 px-2 bg-natural-forest/10 border border-natural-forest/40 text-natural-forest rounded-lg text-xs font-bold hover:bg-natural-forest/20 transition cursor-pointer"
+                                  >
+                                    Put back
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmRemoveKey(card.itemKey)}
+                                    className="py-2 px-2 border border-natural-terracotta/40 text-natural-terracotta rounded-lg text-xs font-bold hover:bg-natural-terracotta/10 transition cursor-pointer"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
                 {/* ── Progress bar ──────────────────────────────────────── */}
                 <div className="w-full bg-natural-border/30 rounded-full h-1.5">
                   <div
@@ -318,6 +545,11 @@ export default function ReviewDeckScreen({
                     style={{ width: `${pct}%` }}
                   />
                 </div>
+                {!isDone && setAsideThisSession > 0 && (
+                  <p className="text-center text-[11px] font-mono font-bold text-natural-clay">
+                    {plural(setAsideThisSession, "tricky card")} set aside this session · see the flag above
+                  </p>
+                )}
 
                 {isDone ? (
                   /* ── Session end / nothing to do today ──────────────────── */
@@ -348,6 +580,21 @@ export default function ReviewDeckScreen({
                         <p className="mt-2 text-[11px] text-natural-forest-light/80 font-medium">
                           New cards are paused until your reviews catch up.
                         </p>
+                      )}
+                      {totalCount > 0 && trickyCards.length > 0 && (
+                        <div className="mt-2 flex flex-col items-center gap-1">
+                          <p className="text-xs font-mono font-bold text-natural-clay">
+                            {plural(trickyCards.length, "tricky card")} set aside
+                            {setAsideThisSession > 0 ? ` · ${setAsideThisSession} new this session` : ""}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={openTricky}
+                            className="text-[11px] font-mono font-bold underline underline-offset-2 text-natural-forest-light hover:text-natural-forest cursor-pointer"
+                          >
+                            View tricky cards
+                          </button>
+                        </div>
                       )}
                       {cardsReviewed > 0 && (
                         <p className="mt-3 text-xs font-mono font-bold text-natural-clay bg-natural-clay/10 px-3 py-1.5 rounded-lg inline-block">

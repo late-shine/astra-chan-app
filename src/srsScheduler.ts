@@ -1,6 +1,6 @@
 // src/srsScheduler.ts
 // ─────────────────────────────────────────────────────────────────────────────
-// Phases S1 + S2 + S3 — the Review Deck scheduling engine, as a PURE module.
+// Phases S1 + S2 + S3 + S4 — the Review Deck scheduling engine, as a PURE module.
 //
 // No React, no localStorage, no Firebase, no clock reads of its own: every
 // function that needs "now" takes it as a parameter (mergeSrsCards defaults it).
@@ -15,6 +15,9 @@
 //     credit, the 365-day ceiling, previewIntervals (the labels under the buttons)
 //     and buildForecast (the 7-day strip). scheduleGrade and previewIntervals share
 //     one interval function, so a preview can never disagree with the schedule.
+// S4: tricky cards ("leeches": 6 or more first-pass Forgot answers) are flagged and set aside from every
+//     session, the forecast and the due counts until put back; and a backlog tool that spreads very old
+//     overdue cards over the next days (rescheduleVeryOverdue).
 //
 // Ladder (a card's `level` is its position on this ladder, 0–8):
 //   0: 8h   1: 1d   2: 3d   3: 7d   4: 14d   5: 30d   6: 60d   7: 120d   8: 240d
@@ -88,6 +91,25 @@ export const HARD_INTERVAL_FACTOR = 0.8;
 export const MIN_RECALL_INTERVAL_MS = DAY_MS;
 /** Overdue credit (Got it only) never grants more than this many times the new ladder interval. */
 export const OVERDUE_CREDIT_CAP_FACTOR = 2;
+
+// ── Tricky cards and backlog recovery constants (S4) ─────────────────────────
+
+/** A first-pass Forgot that brings a card's `lapses` to this number or more flags it as tricky (`leech: true`). */
+export const LEECH_LAPSE_THRESHOLD = 6;
+/** A card counts as "very overdue" only when it is later than this past its due time... */
+export const VERY_OVERDUE_MIN_MS = 60 * DAY_MS;
+/** ...and later than this many times the interval it was scheduled for (overdueRatio). */
+export const VERY_OVERDUE_RATIO = 2;
+/** The backlog tool is offered when the due reviews exceed this many daily review caps. */
+export const BACKLOG_OFFER_FACTOR = 3;
+/** Rescheduled cards are spread over at least this many days (or fewer when there are fewer cards)... */
+export const RESCHEDULE_MIN_DAYS = 3;
+/** ...at most this many days... */
+export const RESCHEDULE_MAX_DAYS = 30;
+/** ...and, when the days are not capped, at most about half a daily review cap (never fewer than this) per day. */
+export const RESCHEDULE_MIN_PER_DAY = 5;
+/** A rescheduled card goes back to this level at most (a card already lower keeps its level). */
+export const RESCHEDULE_LEVEL = 1;
 
 // ── Small helpers ────────────────────────────────────────────────────────────
 
@@ -169,10 +191,11 @@ function toTimestamp(value: unknown): number | undefined {
  *    only when valid and OMITTED otherwise (never `undefined`).
  *  • Optional `ease` (S3) is clamped to 0.8–1.4 when it is a number (or numeric string) and OMITTED
  *    otherwise. A legacy card is never given an `ease` it did not have.
+ *  • Optional `leech` (S4) is kept only when it is exactly `true` and OMITTED otherwise, so a stored
+ *    `false`, a string or a number can never set a card aside (and `false` is never written back).
  *  • Any other primitive field (string/boolean/finite number) is passed through
- *    untouched, so an older client cannot strip fields that later phases add
- *    (`leech`, ...). Objects, arrays, null and non-finite
- *    numbers are dropped.
+ *    untouched, so an older client cannot strip fields that later phases add. Objects, arrays, null
+ *    and non-finite numbers are dropped.
  */
 export function normalizeCard(raw: unknown, now: number, fallbackKey?: string): SRSCard | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
@@ -208,6 +231,8 @@ export function normalizeCard(raw: unknown, now: number, fallbackKey?: string): 
   const ease = toFiniteNumber(source.ease);
   if (ease !== undefined) out.ease = clampEase(ease);
   else delete out.ease;
+  if (source.leech === true) out.leech = true;
+  else delete out.leech;
 
   return out as unknown as SRSCard;
 }
@@ -323,7 +348,8 @@ export function relearnIntervalMs(card: SRSCard, grade: SrsGrade): number {
  *           `lastReviewed` = now, `reps` + 1 (it was recalled), ease − 0.1.
  *  forgot → level = floor(level / 2), due in 10 minutes (the relearn step), `lastReviewed` = now,
  *           `lapses` + 1, ease − 0.15. `reps` is unchanged (it counts successful reviews); a legacy card
- *           without `reps` stays without it.
+ *           without `reps` stays without it. When `lapses` reaches LEECH_LAPSE_THRESHOLD (6) the card is
+ *           also flagged `leech: true` (S4) and is set aside from sessions until it is put back.
  *
  * Ease is kept within 0.8–1.4 and rounded to 2 decimals. A card that was brand new (see isNewCard) also
  * gets `introducedAt` = now, once, whatever the grade.
@@ -340,14 +366,18 @@ export function scheduleGrade(card: SRSCard, grade: SrsGrade, now: number, rando
   const ease = easeAfter(current, grade);
 
   if (grade === "forgot") {
+    const lapses = (current.lapses ?? 0) + 1;
     return {
       ...current,
       ...introduced,
       level: Math.floor(current.level / 2),
       nextReview: now + gradeIntervalMs(current, "forgot", now),
       lastReviewed: now,
-      lapses: (current.lapses ?? 0) + 1,
+      lapses,
       ease,
+      // S4: the Forgot that brings the card to 6 lapses sets it aside. Spread order matters: a card that is
+      // already set aside keeps its flag through `...current`; the field is never written as false or undefined.
+      ...(lapses >= LEECH_LAPSE_THRESHOLD ? { leech: true } : {}),
     };
   }
 
@@ -455,9 +485,15 @@ export function formatIntervalShort(ms: number): string {
  *     If those tie too, fall through to rule 3.
  *  2. Exactly one has `lastReviewed` → that one wins (a legacy copy carries no
  *     timestamp, so it is assumed older).
- *  3. Neither has it (or a full tie) → the pre-S1 rule: a future local schedule beats a
+ *  3. S4: still tied (same `lastReviewed` and `reps`, or neither has one) and exactly one copy is set
+ *     aside as tricky → the copy that is NOT set aside wins. A leech flag is only ever set by an answer,
+ *     which stamps a new `lastReviewed`, so a non-leech copy with the same stamp can only be the same card
+ *     after "Put back" (which is not an answer and does not stamp). This is how a put-back card is never
+ *     resurrected as a leech by an older copy on another device.
+ *  4. Otherwise the pre-S1 rule: a future local schedule beats a
  *     cloud copy that still says "due"; otherwise the later `nextReview` wins. Equal →
- *     the cloud copy.
+ *     the cloud copy. (Rescheduled very-overdue cards are decided here: they keep `lastReviewed` and
+ *     get a later `nextReview`.)
  */
 function preferLocalCard(local: SRSCard, cloud: SRSCard, now: number): boolean {
   const localReviewed = local.lastReviewed;
@@ -471,6 +507,9 @@ function preferLocalCard(local: SRSCard, cloud: SRSCard, now: number): boolean {
   } else if (localReviewed !== undefined || cloudReviewed !== undefined) {
     return localReviewed !== undefined;
   }
+
+  const localSetAside = local.leech === true;
+  if (localSetAside !== (cloud.leech === true)) return !localSetAside;
 
   return (local.nextReview > now && cloud.nextReview <= now) || local.nextReview > cloud.nextReview;
 }
@@ -576,9 +615,17 @@ export interface SessionPlan {
   reviewedToday: number;
   /** Cards introduced (first answered) today. */
   newToday: number;
-  /** Earliest `nextReview` among cards that are not due yet, or null. */
+  /** Earliest `nextReview` among cards that are not due yet (tricky cards are ignored), or null. */
   nextDueAt: number | null;
   estimatedMinutes: number;
+  /** S4: cards set aside as tricky (`leech`). They are in no queue, no forecast and no due count. */
+  trickyCount: number;
+  /** S4: due, non-new, non-tricky cards: the review backlog, before the daily cap. */
+  overdueBacklog: number;
+  /** S4: how many of those are "very overdue" (isVeryOverdue): exactly what rescheduleVeryOverdue would move. */
+  veryOverdueCount: number;
+  /** S4: true when the backlog exceeds 3 × the review cap and there is at least one very overdue card (never with "No limit"). */
+  backlogOffer: boolean;
 }
 
 /** A plan without the queue itself: small enough to pass around the menu. */
@@ -623,6 +670,9 @@ export function overdueRatio(card: SRSCard, now: number): number {
  *      is more than 2 × the review cap. This measures the backlog from the start of the
  *      day, so it does not flip back the moment the learner has done part of it.
  *   4. Everything beyond the caps simply stays due; nothing is changed or lost.
+ *   5. S4: cards set aside as tricky (`leech: true`) are never queued, never counted as due or waiting and
+ *      never counted in the backlog. An answer they received today still counts toward today's budget
+ *      (it was a real review); they only stop being scheduled.
  */
 export function buildSessionPlan(
   cards: Record<string, SRSCard>,
@@ -640,16 +690,28 @@ export function buildSessionPlan(
   let reviewedTodayNotDue = 0;
   let newToday = 0;
   let nextDueAt: number | null = null;
+  let trickyCount = 0;
+  let veryOverdueCount = 0;
 
   for (const card of Object.values(cards)) {
+    const setAside = card.leech === true;
     if (today(card.introducedAt)) newToday++;
     else if (today(card.lastReviewed)) {
       reviewedToday++;
-      if (card.nextReview > now) reviewedTodayNotDue++;
+      if (!setAside && card.nextReview > now) reviewedTodayNotDue++;
     }
 
-    if (card.nextReview <= now) (isNewCard(card) ? dueNew : dueReviews).push(card);
-    else if (nextDueAt === null || card.nextReview < nextDueAt) nextDueAt = card.nextReview;
+    if (setAside) {
+      trickyCount++;
+      continue;
+    }
+    if (card.nextReview <= now) {
+      if (isNewCard(card)) dueNew.push(card);
+      else {
+        dueReviews.push(card);
+        if (isVeryOverdue(card, now)) veryOverdueCount++;
+      }
+    } else if (nextDueAt === null || card.nextReview < nextDueAt) nextDueAt = card.nextReview;
   }
 
   const byKey = (a: SRSCard, b: SRSCard) => (a.itemKey < b.itemKey ? -1 : a.itemKey > b.itemKey ? 1 : 0);
@@ -680,6 +742,10 @@ export function buildSessionPlan(
     newToday,
     nextDueAt,
     estimatedMinutes: total === 0 ? 0 : Math.ceil((total * SECONDS_PER_CARD) / 60),
+    trickyCount,
+    overdueBacklog: dueReviews.length,
+    veryOverdueCount,
+    backlogOffer: !unlimited && dueReviews.length > BACKLOG_OFFER_FACTOR * settings.dailyReviewCap && veryOverdueCount > 0,
   };
 }
 
@@ -714,7 +780,7 @@ export interface ForecastDay {
 
 /**
  * How many cards fall due on each of the next `days` local calendar days, starting TOMORROW. Derived
- * from `nextReview` only. Cards that are due now or later today (including overdue and waiting cards)
+ * from `nextReview` only. Tricky cards (S4) are left out. Cards that are due now or later today (including overdue and waiting cards)
  * are not counted here: they belong to today's session and the "waiting" line. Pure; day boundaries use
  * the calendar (not 24-hour steps), so a daylight-saving change cannot shift a bucket.
  */
@@ -729,6 +795,7 @@ export function buildForecast(cards: Record<string, SRSCard>, now: number, days 
   const forecast: ForecastDay[] = Array.from({ length: days }, (_, index) => ({ dayStart: bounds[index], count: 0 }));
 
   for (const card of Object.values(cards)) {
+    if (card.leech === true) continue; // S4: a tricky card is set aside, so it is never "coming up"
     const due = card.nextReview;
     if (!(due >= bounds[0]) || !(due < bounds[days])) continue;
     let index = 0;
@@ -744,4 +811,110 @@ export function formatForecastLine(forecast: ForecastDay[]): string {
   if (total === 0) return `Nothing due in the next ${forecast.length} days`;
   const tomorrow = forecast[0]?.count ?? 0;
   return `${total} due in the next ${forecast.length} days · ${tomorrow} tomorrow`;
+}
+
+// ── Tricky cards (S4) ────────────────────────────────────────────────────────
+
+/** True when the card has been set aside as tricky. */
+export function isLeech(card: Pick<SRSCard, "leech">): boolean {
+  return card.leech === true;
+}
+
+/**
+ * The cards set aside as tricky, for the "Tricky cards" list: most forgotten first, then by key. Pure.
+ */
+export function listTrickyCards(cards: Record<string, SRSCard>): SRSCard[] {
+  return Object.values(cards)
+    .filter((card) => card.leech === true)
+    .sort((a, b) => (b.lapses ?? 0) - (a.lapses ?? 0) || (a.itemKey < b.itemKey ? -1 : a.itemKey > b.itemKey ? 1 : 0));
+}
+
+/**
+ * "Put back": a tricky card returns to rotation as a fresh start. Pure; returns a new card.
+ *
+ *  • `leech` and `ease` are REMOVED (omitted, never set to false/undefined): the card behaves as ease 1.0 again.
+ *  • `level` = 0 and `lapses` = 0, so it takes six more Forgot answers to set it aside again.
+ *  • `nextReview` = now, or earlier if it already was: the card is due in the next session. A card that was set aside
+ *    straight after its Forgot still has `nextReview` = `lastReviewed` + 10 minutes, so S3's overdue credit does not
+ *    apply to its next answer (it was failed, not remembered).
+ *  • `lastReviewed`, `reps`, `addedAt`, `introducedAt` are untouched. Put back is not an answer: it does not stamp
+ *    `lastReviewed`, so it does not use up today's review budget, and the card never turns "new" again.
+ *    Across devices it wins over the leech copy it came from through the tie-break in preferLocalCard.
+ *
+ * A card that is not set aside is returned unchanged.
+ */
+export function putBackLeech(card: SRSCard, now: number): SRSCard {
+  const current = normalizeCard(card, now, card?.itemKey);
+  if (!current || current.leech !== true) return card;
+  const { leech: _leech, ease: _ease, ...rest } = current;
+  return { ...rest, level: 0, lapses: 0, nextReview: Math.min(current.nextReview, now) };
+}
+
+// ── Backlog recovery (S4) ────────────────────────────────────────────────────
+
+/**
+ * A "very overdue" card: a review card (not new, not set aside) that is more than 60 days past its due time AND
+ * more than 2 × the interval it was scheduled for past it (overdueRatio > 2). The one definition used by the
+ * count on the banner and by rescheduleVeryOverdue, so the number shown is exactly the number moved.
+ */
+export function isVeryOverdue(card: SRSCard, now: number): boolean {
+  if (card.leech === true || isNewCard(card)) return false;
+  return now - card.nextReview > VERY_OVERDUE_MIN_MS && overdueRatio(card, now) > VERY_OVERDUE_RATIO;
+}
+
+/**
+ * Over how many days `count` very overdue cards are spread: about half a daily review cap per day (never fewer than
+ * 5 per day), at least 3 days and at most 30, and never more days than cards. 0 for no cards. With "No limit" the
+ * default cap (50) is used. The banner and rescheduleVeryOverdue both call this, so the text matches the action.
+ */
+export function rescheduleSpreadDays(count: number, settingsInput: unknown): number {
+  if (!(count > 0)) return 0;
+  const settings = normalizeSrsSettings(settingsInput);
+  const cap = settings.dailyReviewCap >= UNLIMITED_REVIEWS ? DEFAULT_DAILY_REVIEW_CAP : settings.dailyReviewCap;
+  const perDay = Math.max(RESCHEDULE_MIN_PER_DAY, Math.floor(cap / 2));
+  const days = Math.min(RESCHEDULE_MAX_DAYS, Math.max(RESCHEDULE_MIN_DAYS, Math.ceil(count / perDay)));
+  return Math.min(Math.floor(count), days);
+}
+
+/** What rescheduleVeryOverdue did: the new deck, how many cards moved, over how many days. */
+export interface RescheduleResult {
+  cards: Record<string, SRSCard>;
+  count: number;
+  days: number;
+}
+
+/**
+ * "Reschedule very old overdue cards". Pure; the input deck is not mutated and only very overdue cards (isVeryOverdue)
+ * are touched; every other card is returned as the very same object.
+ *
+ *  • The affected cards are ordered most overdue first and dealt out round-robin over the next `days` local days
+ *    (rescheduleSpreadDays), starting TOMORROW, so each day gets a mix and day sizes differ by at most one. Each is due
+ *    from the start (local midnight) of its day.
+ *  • `level` = min(level, 1): back to level 1, but a card already at level 0 is never raised.
+ *  • `lastReviewed`, `reps`, `lapses`, `ease`, `addedAt`, `introducedAt` are untouched. This is not an answer, so it does
+ *    not spend today's budget. Across devices the moved copy wins through the later `nextReview` (merge rule 4).
+ *  • If nothing is very overdue, `{ cards: <same deck>, count: 0, days: 0 }`.
+ */
+export function rescheduleVeryOverdue(cards: Record<string, SRSCard>, settingsInput: unknown, now: number): RescheduleResult {
+  const affected = Object.entries(cards).filter(([, card]) => isVeryOverdue(card, now));
+  const count = affected.length;
+  if (count === 0) return { cards, count: 0, days: 0 };
+
+  affected.sort(
+    ([keyA, a], [keyB, b]) => overdueRatio(b, now) - overdueRatio(a, now) || (keyA < keyB ? -1 : keyA > keyB ? 1 : 0)
+  );
+  const days = rescheduleSpreadDays(count, settingsInput);
+  const [todayStart] = localDayRange(now);
+  const dayStarts: number[] = [];
+  for (let offset = 1; offset <= days; offset++) {
+    const day = new Date(todayStart);
+    day.setDate(day.getDate() + offset);
+    dayStarts.push(day.getTime());
+  }
+
+  const next: Record<string, SRSCard> = { ...cards };
+  affected.forEach(([key, card], index) => {
+    next[key] = { ...card, level: Math.min(card.level, RESCHEDULE_LEVEL), nextReview: dayStarts[index % days] };
+  });
+  return { cards: next, count, days };
 }

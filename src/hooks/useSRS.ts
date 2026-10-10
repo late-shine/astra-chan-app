@@ -7,7 +7,10 @@ import {
   buildForecast,
   buildSessionPlan,
   createNewCard,
+  listTrickyCards,
   normalizeSrsCards,
+  putBackLeech,
+  rescheduleVeryOverdue,
   scheduleAnswer,
   scheduleGrade,
   scheduleRelearnAnswer,
@@ -115,12 +118,12 @@ export function useSRS(
   // ── getDueCards ────────────────────────────────────────────────────────────
   /**
    * Returns all cards whose nextReview timestamp is in the past,
-   * sorted oldest-due first.
+   * sorted oldest-due first. Cards set aside as tricky (S4) are not "due": they stay out until put back.
    */
   const getDueCards = useCallback((): SRSCard[] => {
     const now = Date.now();
     return (Object.values(srsCards) as SRSCard[])
-      .filter((card) => card.nextReview <= now)
+      .filter((card) => card.leech !== true && card.nextReview <= now)
       .sort((a, b) => a.nextReview - b.nextReview);
   }, [srsCards]);
 
@@ -128,7 +131,7 @@ export function useSRS(
   /**
    * Today's session: due reviews (most overdue first, trimmed to the daily budget) followed by
    * new cards (up to the daily new-card budget). Every Review Deck entry point uses this; none
-   * may bypass the budget. getDueCards() above still returns every due card.
+   * may bypass the budget. getDueCards() above still returns every due card (except tricky ones).
    */
   const getSessionQueue = useCallback(
     (): SRSCard[] => buildSessionPlan(srsCards, settings, Date.now()).queue,
@@ -258,6 +261,43 @@ export function useSRS(
     });
   }, [publishCards]);
 
+  // ── putBackCard (S4) ───────────────────────────────────────────────────────
+  /**
+   * Puts a tricky card back into rotation: level 0, lapses 0, no ease, due now (see putBackLeech).
+   * Does nothing for a missing card or one that is not set aside.
+   */
+  const putBackCard = useCallback(
+    (itemKey: string) => {
+      const now = Date.now(); // read once, so a repeated updater call yields the same card
+      setSrsCards((prev) => {
+        const card = prev[itemKey];
+        if (!card || card.leech !== true) return prev;
+
+        const next = { ...prev, [itemKey]: putBackLeech(card, now) };
+        publishCards(next);
+        return next;
+      });
+    },
+    [publishCards]
+  );
+
+  // ── rescheduleOverdueCards (S4) ────────────────────────────────────────────
+  /**
+   * The backlog tool: moves every very overdue card back to level 1 and spreads them over the next days
+   * (see rescheduleVeryOverdue). Returns how many cards moved, over how many days, and the rebuilt session
+   * queue (so a screen that has not started its session can swap it in), or null when nothing needed moving.
+   * The caller must have shown the count and asked for confirmation first.
+   */
+  const rescheduleOverdueCards = useCallback((): { count: number; days: number; queue: SRSCard[] } | null => {
+    const at = Date.now();
+    const result = rescheduleVeryOverdue(srsCards, settings, at);
+    if (result.count === 0) return null;
+
+    setSrsCards(result.cards);
+    publishCards(result.cards);
+    return { count: result.count, days: result.days, queue: buildSessionPlan(result.cards, settings, at).queue };
+  }, [srsCards, settings, publishCards]);
+
   /**
    * Replace the local deck after cloud hydration (for example, when the user
    * signs in on a new browser or phone).
@@ -282,8 +322,11 @@ export function useSRS(
   // Derived inline on every render so consumers always see the latest values
   // without needing to call getDueCards() / getTotalCards() themselves.
   const now = Date.now();
-  const dueCount   = (Object.values(srsCards) as SRSCard[]).filter((c) => c.nextReview <= now).length;
+  const dueCount   = (Object.values(srsCards) as SRSCard[]).filter((c) => c.leech !== true && c.nextReview <= now).length;
   const totalCount = Object.keys(srsCards).length;
+
+  // The cards set aside as tricky (S4), most forgotten first, for the "Tricky cards" list.
+  const trickyCards: SRSCard[] = useMemo(() => listTrickyCards(srsCards), [srsCards]);
 
   // The summary (counts for the menu text) is recomputed when the deck or the limits change,
   // and once a minute so a card that falls due while the menu is open shows up.
@@ -312,10 +355,13 @@ export function useSRS(
     answerRelearnCard,
     gradeRelearnCard,
     removeCard,
+    putBackCard,
+    rescheduleOverdueCards,
     replaceCards,
     getSessionQueue,
     sessionSummary,
     forecast,
+    trickyCards,
     dueCount,
     totalCount,
   };
