@@ -7,6 +7,18 @@
 
 > Status: Active personal project / learning app. Some features require Firebase and Google Gemini credentials.
 
+<p align="center">
+  <a href="#features">Features</a> ·
+  <a href="#-spaced-repetition-srs">Spaced repetition</a> ·
+  <a href="#the-story">The story</a> ·
+  <a href="#how-i-work-with-ai">How it's built</a> ·
+  <a href="#tech-stack">Tech stack</a> ·
+  <a href="#setup-local-development">Run it locally</a> ·
+  <a href="#roadmap">Roadmap</a>
+</p>
+
+**At a glance:** N5 Japanese · 145 kanji with stroke demonstrations · 691 vocabulary words · 12 grammar patterns · reading passages · spaced repetition · online duels · 6 themes · English and Japanese interface
+
 ![Astra-chan's Study Room — the atmospheric home screen](docs/study-room.png)
 
 ---
@@ -33,7 +45,7 @@ I do not treat AI as a vending machine for finished software, or as a tool that 
 
 The important part is the loop: I set the direction, describe the experience I want, provide the relevant files, test the result in the running app, take screenshots, question confusing behavior, and decide what survives. AI can write a lot of code quickly. It cannot decide what Astra should feel like for a beginner unless I keep making those decisions.
 
-Large changes are divided into named phases. Each phase has a narrow file scope, a handoff, a working copy, and a verification pass. One collaborator may build while another checks the result, but neither replaces my own local testing. I keep recovery copies and old phase archives instead of deleting them. That sounds overly careful until an AI session edits the wrong version, a design needs to be compared with yesterday's design, or a promising change needs to be safely backed out. The context files and handoffs are the project's memory between sessions.
+Large changes are divided into named phases. Each phase has a narrow file scope, a handoff, a working copy, and a verification pass. The `App.tsx` split and the Review Deck rebuild below were both done this way, and the phase handoffs are kept in the `handoffs/` folder. One collaborator may build while another checks the result, but neither replaces my own local testing. I keep recovery copies and old phase archives instead of deleting them. That sounds overly careful until an AI session edits the wrong version, a design needs to be compared with yesterday's design, or a promising change needs to be safely backed out. The context files and handoffs are the project's memory between sessions.
 
 This process is slower than accepting the first generated answer. It is also how a chaotic experiment became an app I can keep improving without losing track of what changed.
 
@@ -95,6 +107,28 @@ End result: `App.tsx` was cut nearly in half, with 9 new screen components and z
 
 ---
 
+### Rebuilding the Review Deck — a case study in phased, verified changes
+
+The first spaced repetition system worked, but it was simple: five levels, a wrong answer dropped a card one level, and tapping the Review Box started a session with **every** due card. After a few weeks away that could mean hundreds of cards in one sitting, which is the fastest way to make someone stop reviewing.
+
+I did not ask for a rewrite in one go. An earlier plan from another AI was checked against the real code and revised, and the work became **five phases**:
+
+| Phase | What it changed |
+|---|---|
+| **S1** | A pure scheduling engine (`src/srsScheduler.ts`) with a nine-step ladder, and a safer cross-device merge based on last review time instead of due time |
+| **S2** | A daily session: limits for reviews and new cards, a 10-minute relearn step, and honest "Today" counts |
+| **S3** | Three grades (Forgot / Hard / Got it), per-card ease, interval previews, a level ring and a 7-day forecast |
+| **S4** | Tricky cards that are set aside after repeated misses, and an optional backlog recovery tool |
+| **S5** | Fixing a key collision so the kanji 山 and the word 山 can both be cards, with a migration for existing decks |
+
+How it was kept safe:
+- The scheduler is a plain module with no React, storage, or Firebase inside it, so it can be tested alone. `scripts/srs-sim.ts` replays decks and a 365-day simulation as a long list of checks; it can also read an exported backup and report what would change, without writing anything.
+- Existing decks had to load unchanged: every card keeps its level and due time, and new fields are optional.
+- One Claude session built each phase and a separate one reviewed it. I ran the real lint, build, and simulation checks, then used the running app. Several decisions came from that last step, not from the code: after a real session, I noticed a forgotten card could come back three times and, near the end of a session, straight away. That became a written open decision instead of a silent change.
+- The S5 problem was found by reading the code before building (41 vocabulary words are also single kanji), so it was planned as its own phase with a migration rather than patched in passing.
+
+---
+
 ## Why I Built This
 
 I am an 18-year-old CST diploma student from Bangladesh, learning Japanese while hoping to study and eventually live in Japan. Japan represents more than a career destination to me: a quieter life, beautiful nature, and a place to breathe. I am aiming toward MEXT scholarship and KOSEN admission.
@@ -111,7 +145,7 @@ The home screen is Astra-chan's room — each object is a destination:
 - **Writing Desk** — Practice quizzes and timed rounds
 - **Star Window** — Online duel with a friend
 - **Mirror** — Profile, stats, and progress archive
-- **Review Box** — SRS review deck with live due card count
+- **Review Box** — SRS review deck with today's session summary (reviews, new cards, estimated time)
 - **Record Player** — Music and atmosphere controls
 - **Reference Charts** — Grammar tables and quick reference
 - **Grammar Dojo** — N5 grammar patterns and practice
@@ -119,7 +153,7 @@ The home screen is Astra-chan's room — each object is a destination:
 ### 📚 Learning
 - **Hiragana & Katakana** — full character grids with pronunciation, flashcard mode, and example words
 - **Kanji** — 145 current N5-level single-character cards with meanings, readings, stroke count, and example sentences. A **Digital / Written / Compare** specimen shows the same kanji in a clean gothic font and a handwriting-style font side by side, and a recall mode hides meanings and readings so you can test yourself
-- **N5 Vocabulary** — 694 words across 11 categories (greetings, food, places, actions, adjectives, body, weather, and more)
+- **N5 Vocabulary** — 691 words across 11 categories (greetings, food, places, actions, adjectives, body, weather, and more)
 - **Daily Spell** — a suggested next action shown on the home screen each session
 
 <p align="center">
@@ -194,11 +228,16 @@ The home screen is Astra-chan's room — each object is a destination:
 </p>
 
 ### 🔁 Spaced Repetition (SRS)
-- Add any word or kanji to your personal Review Deck
-- Cards resurface on a 6-level interval system (8h → 1d → 3d → 7d → 14d → 30d)
-- Wrong answers pull cards back; correct answers push them forward
-- Due count shown live on the home screen Review Box
-- XP awarded for every card reviewed
+- **Personal Review Deck** — add any word or kanji, or the words you missed in the Reading Room. A kanji and a word that share a character (like 山) are separate cards
+- **Nine-step schedule** — 8 hours → 1 → 3 → 7 → 14 → 30 → 60 → 120 → 240 days (never more than a year), with a small ±12% spread on longer intervals so cards do not all return on the same day
+- **Three-button grading** — **Forgot / Hard / Got it**, each showing when the card will come back. Every card also remembers how easy you find it, so easy cards space out faster and hard ones return sooner
+- **Relearning** — a forgotten card drops back and returns later in the same session (about ten minutes later); the re-show earns no extra XP
+- **A session that fits in a day** — 50 reviews and 10 new cards by default, adjustable from the gear in the Review Deck (up to no limit). The home screen shows a line like "Today: 25 reviews · 5 new · about 5 min", extra cards simply wait, and "Study N more" is there when you want to go further
+- **Level ring and 7-day forecast** — see how well a card is known, and how many reviews are coming over the next week
+- **Tricky cards** — a card you have forgotten six times is set aside so it stops crowding your sessions. A small flag opens the list, where you can put a card back (starting again at level 0) or remove it
+- **Backlog recovery** — if you have been away and are far behind, an optional tool, with a confirmation that shows the exact number, spreads the most overdue cards over the coming days instead of facing you with one huge pile
+- **Safe with old data and across devices** — decks from before the rebuild load with their levels and due dates intact; signed-in devices merge by most recent review instead of overwriting each other; the daily limits follow your account
+- XP is awarded for every first-time answer in a session, and total reviews count toward badges like *Deck Master*
 
 ### 🌐 Online Multiplayer
 - Create or join rooms with a 6-character room code
@@ -217,9 +256,10 @@ The home screen is Astra-chan's room — each object is a destination:
 
 ### 👤 Profile, Voice Control & Bilingual Support
 - **Optional Cloud Account** — create an account with email/password or Google from the visible account shortcut or Profile; the existing anonymous Firebase identity is upgraded without changing the user's friend code when possible
-- **Cloud Progress Sync** — XP, streaks, mastery, vocabulary progress, SRS cards, study dates, survival records, and reading notes sync to the user's private Firebase progress record
+- **Cloud Progress Sync** — XP, streaks, mastery, vocabulary progress, SRS cards and daily limits, study dates, survival records, and reading notes sync to the user's private Firebase progress record. Display name and avatar stay consistent across devices
 - **Account Recovery** — email/password users can request a Firebase password-reset link without visiting the Firebase Console
-- **Offline Fallback** — local browser storage remains available when the user is not signed in or temporarily offline; account preferences such as theme, font, and browser-provided voice remain device-specific
+- **Synced Preferences** — theme, font, language, romaji and kanji-form choices, practice grid, auto-pronounce, voice mode, the chosen Gemini voice, and the atmosphere settings follow the account. The browser's own Japanese voice, music track and volume, ambient sound, and the current background scene stay on each device
+- **Offline Fallback** — local browser storage remains available when the user is not signed in or temporarily offline
 - **Dual-Language Interface** — complete bilingual support! Toggle the entire application interface between English and Japanese with a single click
 - **Hybrid Japanese Voice Engine** — choose fixed Gemini Japanese voices from Astra's catalog, or use browser voices for free/offline playback; Gemini TTS tries the 3.8 Flash-Lite and Flash models before legacy fallbacks, then the browser engine if every Gemini attempt is unavailable
 - **Monthly Study Calendar** — detailed tracking calendar showing daily active study streaks, streak counts, and XP milestones
@@ -268,6 +308,7 @@ The home screen is Astra-chan's room — each object is a destination:
 | Stroke Data | KanjiVG-derived stroke paths (CC BY-SA 3.0) |
 | Deployment | Vercel (serverless functions for API proxy) |
 | Icons | Lucide React |
+| Checks | `tsc --noEmit`, plus plain `tsx` simulation scripts for the SRS scheduler and account sync (`scripts/srs-sim.ts`, `scripts/acc-sim.ts`) |
 
 ## Credits & Licenses
 
@@ -315,6 +356,7 @@ The list matters less than the method: describe a real goal, give the collaborat
 - That a prompt isn't memory — plans, context files, and handoffs are what let a brand-new chat pick up where the last one stopped
 - When to trust an AI's output and when to verify it with a different one
 - That "it passed" and "it's right" are different sentences — a clean build can't tell you whether the screen actually looks right
+- That a simulation script catches what clicking around can't (a year of reviews in seconds), and clicking around catches what the script can't (a card coming back three times in one sitting)
 - That design decisions, product decisions, and debugging instincts can't be delegated — those stayed with me
 - That building something for yourself, for a real reason, makes every frustrating session worth it
 - That the best portfolio piece isn't the most technically impressive one — it's the one with a real story behind it
@@ -362,6 +404,17 @@ For the fixed Astra Gemini voice catalog, add the same server-side `GEMINI_API_K
 
 > ⚠️ **AI drawing analysis limit:** The drawing checker tries several Gemini Flash models when one is unavailable or rate-limited. If the available model quotas are exhausted, the checker may stop responding until a model window resets.
 
+### Useful commands
+
+```bash
+npm run dev        # run the app locally
+npm run lint       # type-check (tsc --noEmit)
+npm run build      # production build
+npx tsx scripts/srs-sim.ts       # SRS scheduler checks and 365-day simulation
+npx tsx scripts/srs-sim.ts backup.json   # optional: read-only report on an exported backup
+npx tsx scripts/acc-sim.ts       # account/profile/preferences sync checks
+```
+
 ### Firebase Realtime Database Paths
 
 Online multiplayer and account sync use Firebase Authentication and these Realtime Database paths:
@@ -390,6 +443,8 @@ V1 protects authentication, room membership IDs, invite ownership, profiles, and
 - [x] Natural Conversation Phrases in Reference Charts with register filters and usage examples
 - [x] Grammar Dojo with N5 patterns and fill-in-the-blank practice
 - [x] Spaced Repetition System (SRS)
+- [x] Review Deck rebuild in five phases — nine-step ladder, daily limits, three-grade review, forecast, tricky cards, backlog recovery, and separate kanji and word cards
+- [x] Synced preferences and consistent profile name and avatar across devices
 - [x] Online multiplayer — competitive and parallel modes
 - [x] Optional email/password and Google accounts with Firebase cloud progress sync and password recovery
 - [x] Hybrid Japanese voice system with fixed Gemini TTS voices and browser fallback
