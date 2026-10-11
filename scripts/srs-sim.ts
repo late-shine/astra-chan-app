@@ -4,7 +4,7 @@
  */
 
 /**
- * Phase S1 + S2 + S3 + S4 check script — a standalone dev tool, NOT a UI feature. It exercises the
+ * Phase S1 + S2 + S3 + S4 + S5 check script — a standalone dev tool, NOT a UI feature. It exercises the
  * pure scheduler in src/srsScheduler.ts:
  *
  *   1. a legacy deck loads unchanged (levels, nextReview, due count)
@@ -19,6 +19,9 @@
  *      simulation that uses all three grades
  *   8. (S4) tricky cards (leeches): flagged on the 6th Forgot, set aside from queues, counts and the forecast,
  *      Put back, the merge, and the backlog tool (very overdue cards spread over the next days)
+ *   9. (S5) kanji cards live under the deck key `kanji:<char>`: the key helpers, the migration of old
+ *      bare-key kanji cards (load, merge, import; idempotent; no duplicates; nothing but the key changes),
+ *      a kanji and a word with the same character as two cards, and the session queue with both
  *
  * It never touches the app, Firebase, localStorage, or any data file. The "old rules"
  * below are a verbatim model of the pre-S1 hook and the pre-S1 mergeSrsCards, kept here
@@ -57,20 +60,24 @@ import {
   RESCHEDULE_MIN_DAYS,
   RESCHEDULE_MIN_PER_DAY,
   SRS_GRADES,
+  KANJI_KEY_PREFIX,
   UNLIMITED_REVIEWS,
   VERY_OVERDUE_MIN_MS,
   VERY_OVERDUE_RATIO,
   applyFuzz,
   buildForecast,
   buildSessionPlan,
+  cardDeckKey,
   cardEase,
   createNewCard,
+  deckKey,
   defaultSrsSettings,
   formatForecastLine,
   formatIntervalShort,
   formatSessionLine,
   formatWaitingLine,
   gradeIntervalMs,
+  hasLegacyKanjiKeys,
   isLeech,
   isNewCard,
   isVeryOverdue,
@@ -197,11 +204,18 @@ section("A legacy deck loads unchanged");
 {
   const legacy = legacyDeck(600, 11);
   const loaded = normalizeSrsCards(JSON.parse(JSON.stringify(legacy)), NOW);
-  check("every legacy card is deep-equal after normalizing (nothing invented)", stable(loaded) === stable(legacy));
+  // S5: the one intended difference is the KEY of a kanji card (bare itemKey → `kanji:<itemKey>`); the card itself is unchanged.
+  const newKey = (k: string) => deckKey(legacy[k].type, legacy[k].itemKey);
+  const expected: Record<string, SRSCard> = {};
+  for (const k of Object.keys(legacy)) expected[newKey(k)] = legacy[k];
+  check("every legacy card is deep-equal after normalizing (nothing invented; kanji cards only change key, S5)", stable(loaded) === stable(expected));
+  check("the 150 kanji cards moved to `kanji:` keys and no other key changed",
+    Object.keys(legacy).every((k) => (legacy[k].type === "kanji" ? newKey(k) === `${KANJI_KEY_PREFIX}${k}` && !(k in loaded) : newKey(k) === k && k in loaded)) &&
+    Object.keys(loaded).length === 600);
   check("no legacy card gained reps/lapses/addedAt/lastReviewed",
     Object.values(loaded).every((c) => !("reps" in c) && !("lapses" in c) && !("addedAt" in c) && !("lastReviewed" in c)));
   check("level and nextReview are identical for all 600 cards",
-    Object.keys(legacy).every((k) => loaded[k].level === legacy[k].level && loaded[k].nextReview === legacy[k].nextReview));
+    Object.keys(legacy).every((k) => loaded[newKey(k)].level === legacy[k].level && loaded[newKey(k)].nextReview === legacy[k].nextReview));
   check("due count is identical at the same clock", dueCount(loaded, NOW) === dueCount(legacy, NOW));
   check("due count is identical a day later too", dueCount(loaded, NOW + DAY) === dueCount(legacy, NOW + DAY));
   check("a legacy card is never treated as new", Object.values(loaded).every((c) => !isNewCard(c)));
@@ -1613,6 +1627,287 @@ section("S4: a tricky card through a whole deck lifecycle");
   check("lifecycle: after Put back it is due again and the list is empty", backPlan.queue.some((c) => c.itemKey === "hard") && listTrickyCards(deck).length === 0);
 }
 
+// ─── 6e. S5: kanji cards live under `kanji:<char>` ───────────────────────────
+
+/** A kanji or word card with some history, for the key-migration checks. `type` decides what the deck key is. */
+const s5Card = (itemKey: string, type: SRSCard["type"], extra: Partial<SRSCard> = {}): SRSCard =>
+  reviewCard(itemKey, { type, ...extra });
+/** A deck as the S4 app stored it: every card, kanji included, under its bare itemKey. */
+const s5OldDeck = (cards: SRSCard[]): Record<string, SRSCard> => Object.fromEntries(cards.map((c) => [c.itemKey, c]));
+/** A deck as the S5 app stores it: under the deck key. */
+const s5NewDeck = (cards: SRSCard[]): Record<string, SRSCard> => Object.fromEntries(cards.map((c) => [cardDeckKey(c), c]));
+const s5Rich = (itemKey: string, type: SRSCard["type"]): SRSCard =>
+  s5Card(itemKey, type, { level: 5, ease: 1.25, reps: 9, lapses: 2, addedAt: NOW - 90 * DAY, introducedAt: NOW - 89 * DAY, lastReviewed: NOW - 4 * DAY, nextReview: NOW + 26 * DAY });
+
+section("S5: deck keys");
+
+{
+  check("a kanji card's deck key is `kanji:<char>`", deckKey("kanji", "山") === "kanji:山" && cardDeckKey(s5Card("山", "kanji")) === "kanji:山");
+  check("a vocabulary card keeps its bare key (so existing vocabulary keys never change)", deckKey("vocab", "山") === "山" && cardDeckKey(s5Card("食べる", "vocab")) === "食べる");
+  check("hiragana and katakana cards keep their bare key too (nothing adds them today)", deckKey("hiragana", "あ") === "あ" && deckKey("katakana", "ア") === "ア");
+  check("the kanji and the word 山 have different deck keys", deckKey("kanji", "山") !== deckKey("vocab", "山"));
+  check("the prefix is `kanji:` and the key has no character Realtime Database forbids (. $ # [ ] /)",
+    KANJI_KEY_PREFIX === "kanji:" && !/[.$#\[\]\/]/.test(deckKey("kanji", "山")));
+  const fresh = createNewCard("山", "kanji", NOW);
+  check("a new kanji card still stores the bare char as its itemKey (only the map key changes)", fresh.itemKey === "山" && cardDeckKey(fresh) === "kanji:山");
+}
+
+section("S5: migrating an old deck");
+
+{
+  const old = s5OldDeck([s5Rich("山", "kanji"), s5Rich("人", "vocab"), s5Rich("食べる", "vocab"), s5Rich("川", "kanji")]);
+  const migrated = normalizeSrsCards(JSON.parse(JSON.stringify(old)), NOW);
+  check("kanji cards move to `kanji:<char>` and leave their bare key", "kanji:山" in migrated && "kanji:川" in migrated && !("山" in migrated) && !("川" in migrated));
+  check("vocabulary cards stay exactly where they were", "人" in migrated && "食べる" in migrated && Object.keys(migrated).length === 4);
+  check("a migrated card is otherwise untouched: level, nextReview, lastReviewed, reps, lapses, ease, addedAt, introducedAt, type, itemKey",
+    stable(migrated["kanji:山"]) === stable(old["山"]) && stable(migrated["kanji:川"]) === stable(old["川"]));
+  check("migrating the same deck twice gives the same result (idempotent)", stable(normalizeSrsCards(migrated, NOW + 9 * DAY)) === stable(migrated));
+  check("a deck already in the new format is returned unchanged", stable(normalizeSrsCards(s5NewDeck(Object.values(migrated)), NOW)) === stable(migrated));
+  check("the migrated deck is plain JSON with no undefined", !containsUndefined(migrated) && stable(JSON.parse(JSON.stringify(migrated))) === stable(migrated));
+  check("every migrated card is stored under cardDeckKey(card)", Object.entries(migrated).every(([key, c]) => key === cardDeckKey(c)));
+  check("a card's due state does not change: dueCount is identical before and after migrating",
+    dueCount(migrated, NOW + 30 * DAY) === dueCount(old, NOW + 30 * DAY) && dueCount(migrated, NOW) === dueCount(old, NOW));
+}
+
+{
+  // leech and every other S1 to S4 field survive the move
+  const tricky = s5Card("山", "kanji", { lapses: 7, leech: true, level: 1 });
+  const normal = s5Card("川", "kanji");
+  const migrated = normalizeSrsCards(s5OldDeck([tricky, normal]), NOW);
+  check("`leech: true` survives the migration", migrated["kanji:山"].leech === true && listTrickyCards(migrated).length === 1);
+  check("a card with no `leech` gets none (never false, never undefined)", !("leech" in migrated["kanji:川"]));
+  check("lastReviewed and reps are left alone by the migration (the put-back merge tie-break depends on them)",
+    migrated["kanji:山"].lastReviewed === tricky.lastReviewed && migrated["kanji:山"].reps === tricky.reps);
+  const legacyCard: SRSCard = { level: 3, nextReview: NOW + DAY, type: "kanji", itemKey: "木" };
+  const legacyMigrated = normalizeSrsCards({ "木": legacyCard }, NOW)["kanji:木"];
+  check("a legacy kanji card (no history fields at all) moves without gaining any field", stable(legacyMigrated) === stable(legacyCard));
+}
+
+section("S5: migration edge cases");
+
+{
+  const strange = normalizeSrsCards({ "kanji:山": { level: 2, nextReview: NOW, type: "kanji" } }, NOW);
+  check("a kanji card under `kanji:山` with no itemKey gets itemKey 山 (not `kanji:山`)", strange["kanji:山"]?.itemKey === "山" && Object.keys(strange).length === 1);
+  const wordLike = normalizeSrsCards({ "kanji:山": { level: 2, nextReview: NOW, type: "vocab" } }, NOW);
+  check("only a kanji card has the prefix stripped when its itemKey is missing", wordLike["kanji:山"]?.itemKey === "kanji:山");
+  const mismatched = normalizeSrsCards({ "foo": { level: 2, nextReview: NOW, type: "kanji", itemKey: "山" } }, NOW);
+  check("a kanji card whose key is not its itemKey is left where it is (only the exact old shape is migrated)", "foo" in mismatched && Object.keys(mismatched).length === 1);
+  const broken = normalizeSrsCards({ "山": { level: "x", nextReview: "soon", type: "kanji", itemKey: "山" }, "bad": null, "worse": 7 }, NOW);
+  check("a corrupt kanji card is repaired and migrated; junk entries are still dropped; nothing throws",
+    Object.keys(broken).join() === "kanji:山" && broken["kanji:山"].level === 0 && broken["kanji:山"].nextReview === NOW);
+  const hostile = normalizeSrsCards(JSON.parse('{"__proto__":{"level":1,"nextReview":1,"type":"kanji","itemKey":"__proto__"},"山":{"level":1,"nextReview":1,"type":"kanji","itemKey":"山"}}'), NOW);
+  check("`__proto__` is still skipped and the other kanji card still migrates", Object.keys(hostile).join() === "kanji:山" && ({} as any).level === undefined);
+  check("a non-object deck is still an empty deck", [null, undefined, 3, "x"].every((v) => Object.keys(normalizeSrsCards(v, NOW)).length === 0));
+}
+
+section("S5: an old client writes the bare key again (no duplicates; the newer review wins)");
+
+{
+  const answeredEarly = s5Card("山", "kanji", { level: 2, reps: 4, lastReviewed: NOW - 10 * DAY, nextReview: NOW - 1 * DAY });
+  const answeredLate = s5Card("山", "kanji", { level: 3, reps: 5, lastReviewed: NOW - 2 * DAY, nextReview: NOW + 5 * DAY });
+  const both = (canonical: SRSCard, bare: SRSCard, bareFirst: boolean): Record<string, SRSCard> =>
+    bareFirst ? { "山": bare, "kanji:山": canonical } : { "kanji:山": canonical, "山": bare };
+
+  for (const bareFirst of [false, true]) {
+    const order = bareFirst ? "bare key listed first" : "new key listed first";
+    const newerBare = normalizeSrsCards(both(answeredEarly, answeredLate, bareFirst), NOW);
+    check(`two copies of the same kanji become one card (${order})`, Object.keys(newerBare).join() === "kanji:山");
+    check(`the copy reviewed later wins when it is the old-key one (${order})`, stable(newerBare["kanji:山"]) === stable(answeredLate));
+    const newerCanonical = normalizeSrsCards(both(answeredLate, answeredEarly, bareFirst), NOW);
+    check(`the copy reviewed later wins when it is the new-key one (${order})`, stable(newerCanonical["kanji:山"]) === stable(answeredLate));
+  }
+
+  const legacyBare: SRSCard = { level: 4, nextReview: NOW + 3 * DAY, type: "kanji", itemKey: "山" };
+  check("a copy with lastReviewed beats a legacy copy without one, whichever key it is under",
+    stable(normalizeSrsCards({ "山": legacyBare, "kanji:山": answeredLate }, NOW)["kanji:山"]) === stable(answeredLate) &&
+    stable(normalizeSrsCards({ "山": answeredLate, "kanji:山": legacyBare }, NOW)["kanji:山"]) === stable(answeredLate));
+
+  const twin = s5Card("山", "kanji", { level: 2 });
+  const twinOther = { ...twin, level: 5 };
+  check("an exact tie (same lastReviewed and reps) keeps the copy that was already under the new key, in either listing order",
+    stable(normalizeSrsCards({ "kanji:山": twin, "山": twinOther }, NOW)["kanji:山"]) === stable(twin) &&
+    stable(normalizeSrsCards({ "山": twinOther, "kanji:山": twin }, NOW)["kanji:山"]) === stable(twin));
+
+  const putBack = s5Card("山", "kanji", { level: 0, lapses: 0, lastReviewed: NOW - 2 * DAY, reps: 6, nextReview: NOW });
+  const staleLeech = { ...putBack, level: 1, lapses: 6, leech: true as const };
+  check("a put-back card is not resurrected as a tricky card by an old-key copy (same stamp and reps), in either direction",
+    normalizeSrsCards({ "kanji:山": putBack, "山": staleLeech }, NOW)["kanji:山"].leech !== true &&
+    normalizeSrsCards({ "kanji:山": staleLeech, "山": putBack }, NOW)["kanji:山"].leech !== true);
+
+  const word = s5Card("山", "vocab", { level: 6, reps: 11, lastReviewed: NOW - DAY });
+  const withWord = normalizeSrsCards({ "山": word, "kanji:山": answeredLate }, NOW);
+  check("the word 山 under its bare key is never treated as a collision with the kanji 山", Object.keys(withWord).sort().join() === ["kanji:山", "山"].sort().join() && stable(withWord["山"]) === stable(word));
+}
+
+section("S5: detecting an old deck");
+
+{
+  const old = s5OldDeck([s5Card("山", "kanji"), s5Card("人", "vocab")]);
+  check("hasLegacyKanjiKeys is true for a deck with a kanji under its bare key", hasLegacyKanjiKeys(old));
+  check("hasLegacyKanjiKeys is false once migrated", !hasLegacyKanjiKeys(normalizeSrsCards(old, NOW)));
+  check("hasLegacyKanjiKeys is false for a vocabulary-only deck", !hasLegacyKanjiKeys(s5OldDeck([s5Card("山", "vocab"), s5Card("人", "vocab")])));
+  check("hasLegacyKanjiKeys is true when both an old-key and a new-key copy exist", hasLegacyKanjiKeys({ "山": s5Card("山", "kanji"), "kanji:山": s5Card("山", "kanji") }));
+  check("hasLegacyKanjiKeys is false for empty and non-object input and never throws",
+    [null, undefined, {}, 4, "x", [], { a: null }, { a: "x" }].every((v) => hasLegacyKanjiKeys(v) === false));
+  check("a corrupt entry alone is not a legacy key", !hasLegacyKanjiKeys({ "山": { level: "x" } }));
+  check("a corrupt kanji entry under its bare key is a legacy key (it will be repaired and moved)", hasLegacyKanjiKeys({ "山": { type: "kanji", itemKey: "山", level: "x" } }));
+}
+
+section("S5: the kanji 山 and the word 山 are two cards");
+
+{
+  // What the hook does: addCard stores under deckKey(type, itemKey), hasCard asks with the same key (vocab by default).
+  let deck: Record<string, SRSCard> = {};
+  const has = (itemKey: string, type: SRSCard["type"] = "vocab") => deckKey(type, itemKey) in deck;
+  const add = (itemKey: string, type: SRSCard["type"]) => {
+    const key = deckKey(type, itemKey);
+    if (deck[key]) return;
+    deck = { ...deck, [key]: createNewCard(itemKey, type, NOW) };
+  };
+  add("山", "kanji");
+  check("after adding the kanji 山, the kanji is in the deck", has("山", "kanji"));
+  check("…but the word 山 is not (this was the bug: it said \"Already in your Review Deck\")", !has("山"));
+  add("山", "vocab");
+  check("adding the word 山 now works: two cards", Object.keys(deck).length === 2 && has("山") && has("山", "kanji"));
+  add("山", "vocab");
+  add("山", "kanji");
+  check("adding either one again is still a no-op (no duplicates)", Object.keys(deck).length === 2);
+  check("each card keeps its own type and the same itemKey", deck["kanji:山"].type === "kanji" && deck["山"].type === "vocab" && deck["kanji:山"].itemKey === "山" && deck["山"].itemKey === "山");
+
+  // The same in the other order, and removing one leaves the other.
+  let other: Record<string, SRSCard> = {};
+  other = { ...other, "山": createNewCard("山", "vocab", NOW) };
+  check("with the word 山 first, the kanji 山 is not 'already in the deck'", !(deckKey("kanji", "山") in other));
+  const removed = { ...deck };
+  delete removed[cardDeckKey(deck["kanji:山"])];
+  check("removing the kanji by its deck key leaves the word", Object.keys(removed).join() === "山");
+
+  // Session queue with both due.
+  const bothDue = s5NewDeck([s5Card("山", "vocab"), s5Card("山", "kanji"), s5Card("川", "kanji")]);
+  const reversed = Object.fromEntries(Object.entries(bothDue).reverse());
+  const plan = buildSessionPlan(bothDue, defaultSrsSettings(), TODAY_NOON);
+  const planReversed = buildSessionPlan(reversed, defaultSrsSettings(), TODAY_NOON);
+  check("both 山 cards are in the session queue (3 cards in all)", plan.queue.length === 3);
+  check("the queue order does not depend on the order the deck was built in (same itemKey: the deck key decides)",
+    plan.queue.map(cardDeckKey).join() === planReversed.queue.map(cardDeckKey).join(), plan.queue.map(cardDeckKey).join());
+  check("every queued card has its own deck key", new Set(plan.queue.map(cardDeckKey)).size === plan.queue.length);
+
+  // The screen decides "is this a relearn re-show?" by deck key. By itemKey the second 山 would be called a re-show.
+  const isRelearnByKey = (queue: SRSCard[], index: number) => queue.findIndex((c) => cardDeckKey(c) === cardDeckKey(queue[index])) !== index;
+  const isRelearnByItemKey = (queue: SRSCard[], index: number) => queue.findIndex((c) => c.itemKey === queue[index].itemKey) !== index;
+  const queue = [s5Card("山", "kanji"), s5Card("山", "vocab"), s5Card("川", "vocab")];
+  check("by deck key the word 山 after the kanji 山 is a first showing, not a relearn re-show", !isRelearnByKey(queue, 1));
+  check("(by itemKey it would wrongly look like a re-show: this is why the screen uses the deck key)", isRelearnByItemKey(queue, 1));
+  check("a real re-show of the same card is still recognised by deck key", isRelearnByKey([...queue, queue[0]], 3) && !isRelearnByKey([...queue, queue[0]], 0));
+}
+
+section("S5: tricky list, put back, reschedule and merge with both cards");
+
+{
+  const kanjiLeech = s4Leech("山", { type: "kanji", lapses: 7 });
+  const wordLeech = s4Leech("山", { type: "vocab", lapses: 7 });
+  const deck = s5NewDeck([kanjiLeech, wordLeech, s5Card("川", "kanji")]);
+  const reversed = Object.fromEntries(Object.entries(deck).reverse());
+  check("both tricky 山 cards are listed, and in a fixed order whatever the deck order",
+    listTrickyCards(deck).length === 2 && listTrickyCards(deck).map(cardDeckKey).join() === listTrickyCards(reversed).map(cardDeckKey).join(), listTrickyCards(deck).map(cardDeckKey).join());
+  check("tricky cards are in no queue even when two share an itemKey", buildSessionPlan(deck, defaultSrsSettings(), TODAY_NOON).queue.map(cardDeckKey).join() === "kanji:川");
+
+  // The hook's putBackCard works on the deck key: only that card changes.
+  const putBack: Record<string, SRSCard> = { ...deck, "kanji:山": putBackLeech(deck["kanji:山"], TODAY_NOON) };
+  check("Put back on the kanji (by deck key) leaves the word 山 tricky",
+    putBack["kanji:山"].leech !== true && putBack["山"].leech === true && listTrickyCards(putBack).map(cardDeckKey).join() === "山");
+  check("Put back keeps lastReviewed and reps (S4 rule) on a kanji card",
+    putBack["kanji:山"].lastReviewed === kanjiLeech.lastReviewed && putBack["kanji:山"].reps === kanjiLeech.reps && putBack["kanji:山"].level === 0 && putBack["kanji:山"].lapses === 0);
+
+  // Reschedule keeps the deck keys.
+  const ancient = s5NewDeck([s4Ancient("山", 200, { type: "kanji" }), s4Ancient("山", 200, { type: "vocab" }), s4Ancient("川", 200, { type: "kanji" })]);
+  const rescheduled = rescheduleVeryOverdue(ancient, defaultSrsSettings(), TODAY_NOON);
+  check("the reschedule counts both 山 cards separately (3 very overdue)", rescheduled.count === 3);
+  check("the reschedule leaves every deck key as it was (no bare kanji key appears)",
+    Object.keys(rescheduled.cards).sort().join() === Object.keys(ancient).sort().join() && Object.entries(rescheduled.cards).every(([key, c]) => key === cardDeckKey(c)));
+  const twoDue = s5NewDeck([s5Card("山", "kanji"), s5Card("山", "vocab")]);
+  const summary = summarizeSession(buildSessionPlan(twoDue, defaultSrsSettings(), TODAY_NOON));
+  check("the session summary counts both 山 cards as reviews", summary.reviewCount === 2 && summary.total === 2);
+  const later = s5NewDeck([s5Card("山", "kanji", { nextReview: TODAY_NOON + 2 * DAY }), s5Card("山", "vocab", { nextReview: TODAY_NOON + 2 * DAY })]);
+  check("the forecast counts both 山 cards on the day they are due", buildForecast(later, TODAY_NOON).reduce((sum, day) => sum + day.count, 0) === 2);
+}
+
+{
+  // Two devices on different versions. A = still on S4 (bare kanji keys). B = on S5.
+  const early = s5Card("山", "kanji", { level: 2, reps: 4, lastReviewed: NOW - 10 * DAY, nextReview: NOW - 2 * DAY });
+  const late = s5Card("山", "kanji", { level: 3, reps: 5, lastReviewed: NOW - 1 * DAY, nextReview: NOW + 6 * DAY });
+  const words = s5Card("山", "vocab", { level: 4, reps: 8, lastReviewed: NOW - 3 * DAY });
+
+  const merged1 = mergeSrsCards({ "kanji:山": early }, { "山": late }, NOW);
+  check("S5 local + S4 cloud: one kanji card, under the new key, the later review wins", Object.keys(merged1).join() === "kanji:山" && stable(merged1["kanji:山"]) === stable(late));
+  const merged2 = mergeSrsCards({ "山": late }, { "kanji:山": early }, NOW);
+  check("S4 local + S5 cloud: the same result in the other direction", stable(merged2) === stable(merged1));
+  const merged3 = mergeSrsCards({ "山": early }, { "山": late }, NOW);
+  check("two S4 decks (both bare keys) merge into the new key as well", Object.keys(merged3).join() === "kanji:山" && stable(merged3["kanji:山"]) === stable(late));
+  check("merge result has no bare-key kanji card and is idempotent: merge(merge(a, b), b) equals merge(a, b)",
+    !hasLegacyKanjiKeys(merged1) && stable(mergeSrsCards(merged1, { "山": late }, NOW)) === stable(merged1) && stable(mergeSrsCards(merged2, { "kanji:山": early }, NOW)) === stable(merged2));
+
+  // The old device saves the old key again after the new device migrated: the next sync must not duplicate it.
+  const cloudAfterRewrite = { "kanji:山": late, "山": early };
+  const afterSync = mergeSrsCards({ "kanji:山": late }, cloudAfterRewrite, NOW);
+  check("the cloud holding both the new and the re-written old key still gives one card (the newer review)", Object.keys(afterSync).join() === "kanji:山" && stable(afterSync["kanji:山"]) === stable(late));
+
+  // Kanji and word together, both formats.
+  const mixedLocal = { "山": words, "kanji:山": early };
+  const mixedCloud = { "山": late }; // an S4 device: its 山 is a KANJI card under the bare key
+  const mixed = mergeSrsCards(mixedLocal, mixedCloud, NOW);
+  check("a local word 山 and kanji 山 merged with an old cloud kanji 山: two cards, the word untouched, the kanji the later review",
+    Object.keys(mixed).sort().join() === ["kanji:山", "山"].sort().join() && stable(mixed["山"]) === stable(words) && stable(mixed["kanji:山"]) === stable(late));
+
+  // A put-back kanji on S5 versus the old tricky copy on an S4 device (same stamp, same reps).
+  const putBack = s5Card("山", "kanji", { level: 0, lapses: 0, reps: 6, lastReviewed: NOW - 2 * DAY, nextReview: NOW });
+  const oldTricky = { ...putBack, level: 1, lapses: 6, leech: true as const };
+  check("a kanji put back on S5 stays put back when an S4 device still has it tricky, both ways round",
+    mergeSrsCards({ "kanji:山": putBack }, { "山": oldTricky }, NOW)["kanji:山"].leech !== true &&
+    mergeSrsCards({ "山": oldTricky }, { "kanji:山": putBack }, NOW)["kanji:山"].leech !== true);
+}
+
+section("S5: an old exported deck migrates without losing level or schedule");
+
+{
+  // 120 kanji + 120 word cards, as an S4 export (all bare keys; a kanji and a word never share a key in the old format).
+  const random = lcg(51);
+  const cards: SRSCard[] = [];
+  for (let i = 0; i < 240; i++) {
+    const kanji = i % 2 === 0;
+    const answered = random() < 0.8;
+    cards.push({
+      level: Math.floor(random() * 9),
+      nextReview: NOW + Math.round((random() - 0.4) * 60 * DAY),
+      type: kanji ? "kanji" : "vocab",
+      itemKey: kanji ? `K${i}` : `W${i}`,
+      ...(answered ? { reps: 1 + Math.floor(random() * 9), lapses: Math.floor(random() * 4), lastReviewed: NOW - Math.floor(random() * 30) * DAY, addedAt: NOW - 100 * DAY } : {}),
+      ...(answered && random() < 0.5 ? { ease: 0.8 + Math.round(random() * 60) / 100 } : {}),
+      ...(i % 40 === 0 ? { leech: true as const, lapses: 6 } : {}),
+    });
+  }
+  const exported = JSON.parse(JSON.stringify(s5OldDeck(cards)));
+  const imported = normalizeSrsCards(exported, NOW);
+  check("all 240 cards are still there", Object.keys(imported).length === 240);
+  check("every kanji card is under `kanji:<char>` and every word under its own key",
+    cards.every((c) => (c.type === "kanji" ? `kanji:${c.itemKey}` : c.itemKey) in imported) && cards.filter((c) => c.type === "kanji").every((c) => !(c.itemKey in imported)));
+  check("level, nextReview, lastReviewed, reps, lapses, ease, leech are identical for every card",
+    cards.every((c) => stable(imported[cardDeckKey(c)]) === stable(normalizeCard(c, NOW))));
+  check("the due count, the tricky count and the very overdue count are identical before and after",
+    dueCount(imported, NOW) === dueCount(s5OldDeck(cards), NOW) && listTrickyCards(imported).length === listTrickyCards(s5OldDeck(cards)).length);
+  const sessionOf = (deck: Record<string, SRSCard>) =>
+    stable(buildSessionPlan(deck, defaultSrsSettings(), TODAY_NOON).queue.map((c) => [c.itemKey, c.type, c.level, c.nextReview]));
+  check("today's session is exactly the same cards in the same order before and after (the keys are not part of the choice)",
+    sessionOf(imported) === sessionOf(s5OldDeck(cards)) && buildSessionPlan(imported, defaultSrsSettings(), TODAY_NOON).queue.length > 0);
+
+  // Answering through the new key works exactly as before.
+  const target = cards.find((c) => c.type === "kanji" && c.leech !== true)!;
+  const answered = { ...imported, [cardDeckKey(target)]: scheduleGrade(imported[cardDeckKey(target)], "gotIt", NOW) };
+  check("grading a migrated kanji card through its deck key schedules it like any other card",
+    answered[cardDeckKey(target)].level === Math.min(MAX_LEVEL, imported[cardDeckKey(target)].level + 1) && Object.keys(answered).length === 240);
+  check("the S1 to S4 history survives a second migration after an answer", stable(normalizeSrsCards(answered, NOW + DAY)) === stable(answered));
+}
+
 // ─── 7. Optional: a real exported deck ───────────────────────────────────────
 
 const backupPath = process.argv[2];
@@ -1631,22 +1926,27 @@ if (backupPath) {
       typeof c.nextReview === "number" && Number.isFinite(c.nextReview) &&
       ["vocab", "kanji", "hiragana", "katakana"].includes(c.type) && typeof c.itemKey === "string";
 
+    // S5: a kanji card stored under its bare key is loaded under `kanji:<char>`; every other card keeps its key.
+    const loadedKey = (k: string, c: any) => (c.type === "kanji" && c.itemKey === k ? deckKey("kanji", k) : k);
     const validEntries = rawEntries.filter(([, c]) => isValid(c));
-    const changed = validEntries.filter(([k, c]) => loaded[k]?.level !== c.level || loaded[k]?.nextReview !== c.nextReview);
+    const changed = validEntries.filter(([k, c]) => loaded[loadedKey(k, c)]?.level !== c.level || loaded[loadedKey(k, c)]?.nextReview !== c.nextReview);
     const repaired = rawEntries.length - validEntries.length;
     const rawDue = rawEntries.filter(([, c]) => isValid(c) && c.nextReview <= clockNow).length;
-    const loadedDue = validEntries.filter(([k]) => loaded[k] && loaded[k].nextReview <= clockNow).length;
+    const loadedDue = validEntries.filter(([k, c]) => loaded[loadedKey(k, c)] && loaded[loadedKey(k, c)].nextReview <= clockNow).length;
     const histogram: Record<number, number> = {};
     validEntries.forEach(([, c]) => { histogram[c.level] = (histogram[c.level] ?? 0) + 1; });
+    const movedKanji = validEntries.filter(([k, c]) => loadedKey(k, c) !== k).length;
 
     console.log(`  cards in file: ${rawEntries.length}   valid: ${validEntries.length}   needing repair or dropped: ${repaired}`);
     console.log(`  levels (valid cards): ${Object.entries(histogram).map(([l, n]) => `L${l}:${n}`).join("  ") || "none"}`);
     console.log(`  due right now: ${rawDue} before, ${loadedDue} after loading`);
+    console.log(`  kanji cards moved to \`kanji:\` keys on load: ${movedKanji}   (cards not moved: ${validEntries.length - movedKanji})`);
     console.log(`  cards with S1 history fields already: ${validEntries.filter(([, c]) => c.reps !== undefined || c.lastReviewed !== undefined).length}`);
 
     check("your deck: every valid card keeps its level and nextReview", changed.length === 0, `${changed.length} changed`);
     check("your deck: due count is identical before and after loading", rawDue === loadedDue, `${rawDue} vs ${loadedDue}`);
-    check("your deck: no valid card was invented or dropped", validEntries.every(([k]) => k in loaded));
+    check("your deck: no valid card was invented or dropped (a kanji card is found under its new key)", validEntries.every(([k, c]) => loadedKey(k, c) in loaded));
+    check("your deck: loading it again changes nothing (the migration is idempotent)", stable(normalizeSrsCards(loaded, clockNow)) === stable(loaded));
   } catch (error) {
     check("your deck: the file could be read as an Astra backup", false, error instanceof Error ? error.message : String(error));
   }
@@ -1660,4 +1960,4 @@ if (failures.length > 0) {
   failures.forEach((failure) => console.log(`  ✗ ${failure}`));
   process.exit(1);
 }
-console.log("S1 + S2 + S3 + S4 scheduler checks: all green.");
+console.log("S1 + S2 + S3 + S4 + S5 scheduler checks: all green.");

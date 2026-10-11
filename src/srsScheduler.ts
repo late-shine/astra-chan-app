@@ -18,6 +18,9 @@
 // S4: tricky cards ("leeches": 6 or more first-pass Forgot answers) are flagged and set aside from every
 //     session, the forecast and the due counts until put back; and a backlog tool that spreads very old
 //     overdue cards over the next days (rescheduleVeryOverdue).
+// S5: kanji cards are stored under the deck key `kanji:<char>` so a kanji and a vocabulary word with the same
+//     character are two cards (deckKey / cardDeckKey). normalizeSrsCards migrates old bare-key kanji cards
+//     every time a deck is loaded, merged or imported.
 //
 // Ladder (a card's `level` is its position on this ladder, 0–8):
 //   0: 8h   1: 1d   2: 3d   3: 7d   4: 14d   5: 30d   6: 60d   7: 120d   8: 240d
@@ -72,6 +75,48 @@ export const FUZZ_RATIO = 0.12;
 export const MAX_INTERVAL_MS = 365 * DAY_MS;
 
 export const CARD_TYPES: readonly SRSCard["type"][] = ["vocab", "kanji", "hiragana", "katakana"];
+
+// ── Deck keys (S5) ───────────────────────────────────────────────────────────
+
+/**
+ * Kanji cards are stored in the deck map under `kanji:<char>`. Every other type keeps its bare `itemKey`, so
+ * existing vocabulary keys never change. (`:` is allowed in Realtime Database keys; `. $ # [ ] /` are not.)
+ */
+export const KANJI_KEY_PREFIX = "kanji:";
+
+/** The deck-map key for a card of this type and itemKey: `kanji:<char>` for a kanji, the bare itemKey otherwise. */
+export function deckKey(type: SRSCard["type"], itemKey: string): string {
+  return type === "kanji" ? KANJI_KEY_PREFIX + itemKey : itemKey;
+}
+
+/**
+ * The deck-map key of a card. A card does not store its own map key, so anything that calls the hook with a key
+ * (grade, remove, put back) or compares two cards must use this, never `card.itemKey`.
+ */
+export function cardDeckKey(card: Pick<SRSCard, "type" | "itemKey">): string {
+  return deckKey(card.type, card.itemKey);
+}
+
+/**
+ * The key a stored card belongs under. A kanji card still stored under its bare itemKey (every deck before S5)
+ * belongs under `kanji:<char>`; anything else stays where it is.
+ */
+function migratedDeckKey(key: string, card: SRSCard): string {
+  return card.type === "kanji" && key === card.itemKey ? KANJI_KEY_PREFIX + key : key;
+}
+
+/** The itemKey to assume for a stored card that has none: the map key, minus the `kanji:` prefix for a kanji card. */
+function fallbackItemKey(key: string, raw: unknown): string {
+  const isKanji = !!raw && typeof raw === "object" && (raw as { type?: unknown }).type === "kanji";
+  return isKanji && key.startsWith(KANJI_KEY_PREFIX) && key.length > KANJI_KEY_PREFIX.length
+    ? key.slice(KANJI_KEY_PREFIX.length)
+    : key;
+}
+
+/** Text order that does not depend on the locale (the order the queue's last tie-break has always used). */
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
 
 // ── Grading constants (S3) ───────────────────────────────────────────────────
 
@@ -238,18 +283,48 @@ export function normalizeCard(raw: unknown, now: number, fallbackKey?: string): 
 }
 
 /**
- * Normalize a whole deck. Entries that cannot be cards are dropped; the map keys
- * are kept as they are. A non-object input gives an empty deck. Never throws.
+ * Normalize a whole deck. Entries that cannot be cards are dropped. A non-object input gives an empty deck.
+ * Never throws.
+ *
+ * S5 key migration (runs on every call, so it covers loading, cloud hydrate, merge and backup import): a card
+ * with `type === "kanji"` stored under its bare itemKey moves to `kanji:<itemKey>`. Nothing else about the card
+ * changes (level, nextReview, lastReviewed, reps, lapses, ease, leech all stay). If that key is already taken
+ * (an older client wrote the bare key again after a newer one had migrated it) the two copies are resolved by
+ * the same rule as the cloud merge (later lastReviewed, then more reps, ...), and a full tie keeps the copy that
+ * was already under the new key. After one pass no bare-key kanji card is left, so running it again changes nothing.
  */
 export function normalizeSrsCards(raw: unknown, now: number): Record<string, SRSCard> {
   const out: Record<string, SRSCard> = {};
   if (!raw || typeof raw !== "object") return out;
+
+  const legacy: Array<[string, SRSCard]> = []; // bare-key kanji cards, placed after the cards already under their key
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
     if (key === "__proto__") continue;
-    const card = normalizeCard(value, now, key);
-    if (card) out[key] = card;
+    const card = normalizeCard(value, now, fallbackItemKey(key, value));
+    if (!card) continue;
+    const target = migratedDeckKey(key, card);
+    if (target === key) out[key] = card;
+    else legacy.push([target, card]);
+  }
+  for (const [target, card] of legacy) {
+    const existing = Object.prototype.hasOwnProperty.call(out, target) ? out[target] : undefined;
+    out[target] = existing && !preferLocalCard(card, existing, now) ? existing : card;
   }
   return out;
+}
+
+/**
+ * True when a stored deck still holds a kanji card under its old bare key, i.e. normalizing it would rename keys.
+ * The hook uses this once at start-up to rewrite the stored deck, so code that reads the stored keys directly
+ * never sees the old ones. Pure; never throws.
+ */
+export function hasLegacyKanjiKeys(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object") return false;
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const card = normalizeCard(value, 0, fallbackItemKey(key, value));
+    if (card && migratedDeckKey(key, card) !== key) return true;
+  }
+  return false;
 }
 
 // ── Creating and answering cards ─────────────────────────────────────────────
@@ -714,7 +789,9 @@ export function buildSessionPlan(
     } else if (nextDueAt === null || card.nextReview < nextDueAt) nextDueAt = card.nextReview;
   }
 
-  const byKey = (a: SRSCard, b: SRSCard) => (a.itemKey < b.itemKey ? -1 : a.itemKey > b.itemKey ? 1 : 0);
+  // Last tie-break: the itemKey (as always), then the deck key, so a kanji and a word with the same character have a fixed order (S5).
+  const byKey = (a: SRSCard, b: SRSCard) =>
+    compareText(a.itemKey, b.itemKey) || compareText(cardDeckKey(a), cardDeckKey(b));
   dueReviews.sort(
     (a, b) =>
       overdueRatio(b, now) - overdueRatio(a, now) || a.level - b.level || a.nextReview - b.nextReview || byKey(a, b)
@@ -826,7 +903,10 @@ export function isLeech(card: Pick<SRSCard, "leech">): boolean {
 export function listTrickyCards(cards: Record<string, SRSCard>): SRSCard[] {
   return Object.values(cards)
     .filter((card) => card.leech === true)
-    .sort((a, b) => (b.lapses ?? 0) - (a.lapses ?? 0) || (a.itemKey < b.itemKey ? -1 : a.itemKey > b.itemKey ? 1 : 0));
+    .sort(
+      (a, b) =>
+        (b.lapses ?? 0) - (a.lapses ?? 0) || compareText(a.itemKey, b.itemKey) || compareText(cardDeckKey(a), cardDeckKey(b))
+    );
 }
 
 /**

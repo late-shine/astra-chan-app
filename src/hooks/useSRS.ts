@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { SRSCard, SrsSettings, StudentStats } from "../types";
 import {
   ForecastDay,
@@ -7,6 +7,8 @@ import {
   buildForecast,
   buildSessionPlan,
   createNewCard,
+  deckKey,
+  hasLegacyKanjiKeys,
   listTrickyCards,
   normalizeSrsCards,
   putBackLeech,
@@ -31,6 +33,7 @@ const STORAGE_KEY = "hirachan_master_stats_v1";
  * Returns an empty object if nothing is saved yet or parsing fails.
  * Cards are normalized (S1): invalid fields are repaired and unusable entries dropped,
  * while a valid legacy card keeps its level and nextReview exactly.
+ * S5: kanji cards stored under their old bare key come back under `kanji:<char>`.
  */
 function loadCards(): Record<string, SRSCard> {
   try {
@@ -75,6 +78,17 @@ function persistCards(cards: Record<string, SRSCard>): void {
   }
 }
 
+/** S5: does the stored deck still hold kanji cards under their old bare keys? (Read-only.) */
+function storedDeckHasLegacyKanjiKeys(): boolean {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    return hasLegacyKanjiKeys((JSON.parse(raw) as StudentStats).srsCards);
+  } catch {
+    return false;
+  }
+}
+
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -95,19 +109,30 @@ export function useSRS(
     [onCardsChanged]
   );
 
+  // S5: the deck in state is already migrated (loadCards normalizes), but the stored copy and the app's stats
+  // mirror still hold the old bare kanji keys until something is written. Write the migrated deck once, right at
+  // start-up, so nothing that reads the stored keys directly (the Reading Room) or syncs the blob to the cloud
+  // sees the old ones. Idempotent: it runs only while the stored deck still has an old key.
+  useEffect(() => {
+    if (storedDeckHasLegacyKanjiKeys()) publishCards(srsCards);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── addCard ────────────────────────────────────────────────────────────────
   /**
    * Adds a new card at level 0, due in 8 hours, with reps 0 / lapses 0 / addedAt set.
-   * If a card for itemKey already exists, this is a no-op (no duplicates).
+   * If the deck already has this card, this is a no-op (no duplicates). S5: a kanji card is stored under
+   * `kanji:<itemKey>`, so the kanji 山 and the word 山 are two different cards.
    */
   const addCard = useCallback(
     (itemKey: string, type: SRSCard["type"]) => {
       const now = Date.now(); // read once, so a repeated updater call yields the same card
+      const key = deckKey(type, itemKey);
       setSrsCards((prev) => {
-        if (prev[itemKey]) return prev; // already exists — bail out
+        if (prev[key]) return prev; // already exists — bail out
 
         const card = createNewCard(itemKey, type, now);
-        const next = { ...prev, [itemKey]: card };
+        const next = { ...prev, [key]: card };
         publishCards(next);
         return next;
       });
@@ -146,6 +171,9 @@ export function useSRS(
   );
 
   // ── answerCard ─────────────────────────────────────────────────────────────
+  // NOTE (S5): every function below that takes `itemKey` (answerCard, gradeCard, answerRelearnCard,
+  // gradeRelearnCard, removeCard, putBackCard) takes the card's DECK KEY, i.e. `cardDeckKey(card)` from
+  // srsScheduler (`kanji:<char>` for a kanji, the bare word for the rest), NOT `card.itemKey`. An unknown key is a no-op.
   /**
    * Records the user's answer for a card and schedules the next review
    * (rules in scheduleAnswer, src/srsScheduler.ts). The two-button form: true is "Got it", false is "Forgot".
@@ -312,9 +340,12 @@ export function useSRS(
   );
 
   // ── hasCard ────────────────────────────────────────────────────────────────
-  /** Returns true if a card with the given itemKey already exists in the deck. */
+  /**
+   * Returns true if the deck already has this card. `type` defaults to "vocab" (so every vocabulary caller is
+   * unchanged); the kanji screen passes "kanji" (S5), because a kanji card lives under `kanji:<char>`.
+   */
   const hasCard = useCallback(
-    (itemKey: string): boolean => itemKey in srsCards,
+    (itemKey: string, type: SRSCard["type"] = "vocab"): boolean => deckKey(type, itemKey) in srsCards,
     [srsCards]
   );
 

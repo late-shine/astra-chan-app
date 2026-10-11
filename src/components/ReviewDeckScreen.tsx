@@ -11,6 +11,7 @@ import {
   NEW_CAP_OPTIONS,
   REVIEW_CAP_OPTIONS,
   UNLIMITED_REVIEWS,
+  cardDeckKey,
   formatForecastLine,
   formatIntervalShort,
   localDayRange,
@@ -32,12 +33,15 @@ interface ReviewDeckScreenProps {
   setSrsQueueIndex: React.Dispatch<React.SetStateAction<number>>;
   srsRevealed: boolean;
   setSrsRevealed: React.Dispatch<React.SetStateAction<boolean>>;
-  /** S3: three-button grade for a first showing (Forgot / Hard / Got it). Replaces S2's `answerCard` prop. */
-  gradeCard: (itemKey: string, grade: SrsGrade) => void;
-  /** S3: grades the in-session re-show of a forgotten card (no XP, no second penalty). Replaces S2's `answerRelearnCard` prop. */
-  gradeRelearnCard: (itemKey: string, grade: SrsGrade) => void;
-  /** S2: used by the "Remove this card" action on an orphan card. */
-  removeCard: (itemKey: string) => void;
+  /**
+   * S3: three-button grade for a first showing (Forgot / Hard / Got it). Replaces S2's `answerCard` prop.
+   * S5: the first argument is the card's DECK KEY (`cardDeckKey(card)`), not `card.itemKey`.
+   */
+  gradeCard: (deckKey: string, grade: SrsGrade) => void;
+  /** S3: grades the in-session re-show of a forgotten card (no XP, no second penalty). Replaces S2's `answerRelearnCard` prop. Takes a deck key (S5). */
+  gradeRelearnCard: (deckKey: string, grade: SrsGrade) => void;
+  /** S2: used by the "Remove this card" action on an orphan card, and by the Tricky cards list. Takes a deck key (S5). */
+  removeCard: (deckKey: string) => void;
   awardSRSXP: (xp: number) => void;
   playChime: (success: boolean) => void;
   setCurrentScreen: React.Dispatch<React.SetStateAction<CurrentScreen>>;
@@ -53,8 +57,8 @@ interface ReviewDeckScreenProps {
   forecast: ForecastDay[];
   /** S4: cards set aside as tricky (6 or more first-pass Forgot answers), most forgotten first. */
   trickyCards: SRSCard[];
-  /** S4: "Put back": a tricky card returns at level 0, due in the next session. */
-  putBackCard: (itemKey: string) => void;
+  /** S4: "Put back": a tricky card returns at level 0, due in the next session. Takes a deck key (S5). */
+  putBackCard: (deckKey: string) => void;
   /** S4: the backlog tool. Moves very old overdue cards back to level 1 over the next days; null when nothing moved. */
   rescheduleOverdueCards: () => { count: number; days: number; queue: SRSCard[] } | null;
 }
@@ -81,7 +85,8 @@ function describeCard(card: SRSCard): { title: string; detail: string } {
     if (vocab) return { title: vocab.word, detail: `${vocab.hiragana !== vocab.word ? `${vocab.hiragana} · ` : ""}${vocab.english}` };
   } else if (card.type === "kanji") {
     const kanji = KANJI_DATA.find((k) => k.kanji === card.itemKey);
-    if (kanji) return { title: kanji.kanji, detail: kanji.meaning };
+    // S5: a kanji and a word can now both be in the deck with the same character, so the kanji says so.
+    if (kanji) return { title: kanji.kanji, detail: `Kanji · ${kanji.meaning}` };
   }
   return { title: card.itemKey, detail: "Card not found" };
 }
@@ -199,8 +204,11 @@ export default function ReviewDeckScreen({
 
             // S2: a card forgotten earlier in this session is queued again at the end. An entry is that
             // re-show (a "relearn pass") when the same card also appears earlier in the queue.
-            const sameCardCount = currentCard ? srsQueue.filter((c) => c.itemKey === currentCard.itemKey).length : 0;
-            const isRelearnPass = currentCard ? srsQueue.findIndex((c) => c.itemKey === currentCard.itemKey) !== srsQueueIndex : false;
+            // S5: "the same card" is the same DECK KEY. The kanji 山 and the word 山 share an itemKey but are two cards,
+            // so comparing itemKey would call the second one a relearn pass.
+            const currentKey = currentCard ? cardDeckKey(currentCard) : null;
+            const sameCardCount = currentKey !== null ? srsQueue.filter((c) => cardDeckKey(c) === currentKey).length : 0;
+            const isRelearnPass = currentKey !== null ? srsQueue.findIndex((c) => cardDeckKey(c) === currentKey) !== srsQueueIndex : false;
             const canRequeue   = sameCardCount - 1 < MAX_RELEARN_REQUEUES;
             const hasCardData  = !!(vocabData || kanjiData);
             const cardsReviewed = answeredThisSession; // first passes only: relearn re-shows earn no XP and are not counted
@@ -212,9 +220,9 @@ export default function ReviewDeckScreen({
             const gradeCurrent = (grade: SrsGrade) => {
               const card = currentCard!;
               if (isRelearnPass) {
-                gradeRelearnCard(card.itemKey, grade);
+                gradeRelearnCard(cardDeckKey(card), grade);
               } else {
-                gradeCard(card.itemKey, grade);
+                gradeCard(cardDeckKey(card), grade);
                 awardSRSXP(5);
                 setAnsweredThisSession((count) => count + 1);
               }
@@ -237,7 +245,7 @@ export default function ReviewDeckScreen({
 
             /** Orphan card (its word or kanji no longer exists): delete it and move on. */
             const removeCurrent = () => {
-              removeCard(currentCard!.itemKey);
+              removeCard(cardDeckKey(currentCard!));
               setSrsQueueIndex((prev) => prev + 1);
               setSrsRevealed(false);
             };
@@ -477,8 +485,9 @@ export default function ReviewDeckScreen({
                       <ul className="flex flex-col gap-2">
                         {trickyCards.map((card) => {
                           const { title, detail } = describeCard(card);
+                          const key = cardDeckKey(card); // S5: the deck key (itemKey alone is not unique: a kanji and a word can match)
                           return (
-                            <li key={card.itemKey} className="kz-inset px-3 py-2.5 flex flex-col gap-2">
+                            <li key={key} className="kz-inset px-3 py-2.5 flex flex-col gap-2">
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
                                   <span className="text-xl font-serif font-extrabold text-natural-forest break-words">{title}</span>
@@ -488,12 +497,12 @@ export default function ReviewDeckScreen({
                                   forgotten {plural(card.lapses ?? 0, "time")}
                                 </span>
                               </div>
-                              {confirmRemoveKey === card.itemKey ? (
+                              {confirmRemoveKey === key ? (
                                 <div className="grid grid-cols-2 gap-2">
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      removeCard(card.itemKey);
+                                      removeCard(key);
                                       setConfirmRemoveKey(null);
                                       setTrickyNotice(`${title} removed.`);
                                     }}
@@ -514,7 +523,7 @@ export default function ReviewDeckScreen({
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      putBackCard(card.itemKey);
+                                      putBackCard(key);
                                       setTrickyNotice(`${title} put back at level 0. It will come up in your next session.`);
                                     }}
                                     className="py-2 px-2 bg-natural-forest/10 border border-natural-forest/40 text-natural-forest rounded-lg text-xs font-bold hover:bg-natural-forest/20 transition cursor-pointer"
@@ -523,7 +532,7 @@ export default function ReviewDeckScreen({
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => setConfirmRemoveKey(card.itemKey)}
+                                    onClick={() => setConfirmRemoveKey(key)}
                                     className="py-2 px-2 border border-natural-terracotta/40 text-natural-terracotta rounded-lg text-xs font-bold hover:bg-natural-terracotta/10 transition cursor-pointer"
                                   >
                                     Remove

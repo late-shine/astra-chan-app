@@ -44,7 +44,8 @@ interface KanjiScrollScreenProps {
   analysisError: string | null;
   speakJapanese: (phrase: string) => void;
   setCurrentScreen: React.Dispatch<React.SetStateAction<CurrentScreen>>;
-  hasCard: (itemKey: string) => boolean;
+  /** S5: a kanji card is stored under `kanji:<char>`, so the kanji screen asks with type "kanji" (the type defaults to "vocab"). */
+  hasCard: (itemKey: string, type?: "vocab" | "kanji" | "hiragana" | "katakana") => boolean;
   addCard: (itemKey: string, type: "vocab" | "kanji" | "hiragana" | "katakana") => void;
   showToast: (message: string) => void;
   handleKanjiNav: (dir: "prev" | "next") => void;
@@ -819,7 +820,7 @@ export default function KanjiScrollScreen({
             <button
               type="button"
               onClick={() => {
-                if (hasCard(currentKanji.kanji)) {
+                if (hasCard(currentKanji.kanji, "kanji")) {
                   showToast("Already in your review schedule!");
                 } else {
                   addCard(currentKanji.kanji, "kanji");
@@ -827,13 +828,13 @@ export default function KanjiScrollScreen({
                 }
               }}
               className={`flex min-h-10 cursor-pointer items-center justify-center gap-1.5 self-center rounded-xl border px-4 font-mono text-xs font-extrabold tracking-wider transition-all ${
-                hasCard(currentKanji.kanji)
+                hasCard(currentKanji.kanji, "kanji")
                   ? "bg-natural-sage/10 border-natural-sage/30 text-natural-sage/70"
                   : "border-transparent text-natural-forest-light hover:border-natural-clay hover:bg-natural-clay/10 hover:text-natural-clay"
               }`}
             >
-              {hasCard(currentKanji.kanji) ? <BookmarkCheck className="w-3.5 h-3.5 text-natural-sage" /> : <ListPlus className="w-3.5 h-3.5" />}
-              {hasCard(currentKanji.kanji) ? "SRS SCHEDULED" : "ADD TO REVIEW DECK"}
+              {hasCard(currentKanji.kanji, "kanji") ? <BookmarkCheck className="w-3.5 h-3.5 text-natural-sage" /> : <ListPlus className="w-3.5 h-3.5" />}
+              {hasCard(currentKanji.kanji, "kanji") ? "SRS SCHEDULED" : "ADD TO REVIEW DECK"}
             </button>
           </div>
         </div>

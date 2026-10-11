@@ -78,11 +78,20 @@ const comprehension: Record<string, { question: string; choices: string[]; answe
   ],
 };
 
+/**
+ * The deck keys of the saved VOCABULARY cards (the Reading Room's tokens are words). Since S5 a kanji card is stored
+ * under `kanji:<char>`, which never matches a word; entries typed "kanji" are skipped as well, so a kanji card that is
+ * still under its old bare key (before the start-up migration has rewritten storage) cannot make the word look saved.
+ */
 function getSavedDeckKeys(): Set<string> {
   try {
     const raw = localStorage.getItem("hirachan_master_stats_v1");
     const cards = raw ? (JSON.parse(raw) as { srsCards?: Record<string, unknown> }).srsCards : undefined;
-    return new Set(Object.keys(cards ?? {}));
+    return new Set(
+      Object.entries(cards ?? {})
+        .filter(([, card]) => !(card && typeof card === "object" && (card as { type?: unknown }).type === "kanji"))
+        .map(([key]) => key)
+    );
   } catch {
     return new Set();
   }
