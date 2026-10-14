@@ -7,14 +7,10 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence, useTransform, useReducedMotion } from "motion/react";
 import {
   Flame,
-  Volume2,
-  VolumeX,
   BookOpen,
   Award,
   Sparkles,
-  ChevronLeft,
   ChevronRight,
-  Clock,
   ArrowBigRight,
   BookMarked,
   Info,
@@ -27,8 +23,6 @@ import {
   HelpCircle,
   Activity,
   BookOpenCheck,
-  Sun,
-  Moon,
   Trophy,
   Globe,
   Copy,
@@ -105,6 +99,7 @@ import { HiraganaItem, KatakanaItem, KanjiItem, VocabularyItem, StudentStats, SR
 import type { ReadingToken } from "./reading/readingData";
 import MascotCompanion from "./components/MascotCompanion";
 import AtmosphereCanvas from "./components/AtmosphereCanvas";
+import SoundAtmosphereDock, { MUSIC_TRACKS, type DockPanelId, type MusicTrackId } from "./components/SoundAtmosphereDock";
 import { useMouseParallax } from "./hooks/useMouseParallax";
 import ReferenceCharts from "./components/ReferenceCharts";
 import GrammarDojo from "./components/GrammarDojo";
@@ -276,6 +271,40 @@ const SCREEN_VARIANTS_REDUCED = {
   exit: { opacity: 0 },
 };
 
+// Polish A1: the music track, volume and a hand-picked background scene are remembered on
+// this device only (never synced, never auto-playing). Every read is validated and falls
+// back to the old default.
+function readSavedMusicTrack(): MusicTrackId {
+  try {
+    const stored = localStorage.getItem("astra_music_track");
+    const match = MUSIC_TRACKS.find((track) => track.id === stored);
+    if (match) return match.id;
+  } catch (e) { }
+  return "ten_no_yowai";
+}
+
+function readSavedMusicVolume(): number {
+  try {
+    const stored = localStorage.getItem("astra_music_volume");
+    if (stored !== null && stored.trim() !== "") {
+      const value = Number(stored);
+      if (Number.isFinite(value) && value >= 0 && value <= 1) return value;
+    }
+  } catch (e) { }
+  return 0.35;
+}
+
+// The saved scene applies only while auto-cycle is off: with it on (the default) the cycle
+// owns the scene, and an auto-picked scene is never saved.
+function readSavedBgScene(): number {
+  try {
+    if (localStorage.getItem("astra_auto_cycle_bg") !== "false") return 0;
+    const stored = localStorage.getItem("astra_bg_scene");
+    if (stored !== null && /^[0-3]$/.test(stored)) return Number(stored);
+  } catch (e) { }
+  return 0;
+}
+
 export default function App() {
   const { x: parallaxX, y: parallaxY } = useMouseParallax();
   const bgParallaxX = useTransform(parallaxX, (v) => v * -16);
@@ -408,7 +437,7 @@ export default function App() {
 
   // Zen Soundscape synthesizer engine state
   const [isMusicPlaying, setIsMusicPlaying] = useState<boolean>(false);
-  const [musicVolume, setMusicVolume] = useState<number>(0.35);
+  const [musicVolume, setMusicVolume] = useState<number>(readSavedMusicVolume);
   const [ambientSoundType, setAmbientSoundType] = useState<"zen" | "rain" | "bell">("zen");
   const [activeMediaSource, setActiveMediaSource] = useState<"synth" | "yt-temple" | "yt-kyoto">("synth");
 
@@ -421,11 +450,11 @@ export default function App() {
   const musicAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Music track selection: "synth" = built-in synth, "ten_no_yowai" = Akie track, "one_voice" = Rokudenashi track
-  const [selectedMusicTrack, setSelectedMusicTrack] = useState<"ten_no_yowai" | "one_voice" | "amakigoe" | "sparkle" | "columbinas_lullaby">("ten_no_yowai");
+  const [selectedMusicTrack, setSelectedMusicTrack] = useState<MusicTrackId>(readSavedMusicTrack);
   const [numChoices, setNumChoices] = useState<4 | 6>(4);
 
   // Background scene cycling (0=Rainy Window, 1=Astra's Garden, 2=Sakura Dawn, 3=Moonlit Study)
-  const [activeBgScene, setActiveBgScene] = useState(0);
+  const [activeBgScene, setActiveBgScene] = useState<number>(readSavedBgScene);
 
   // Vocabulary navigation & search
   const [vocabsCategory, setVocabsCategory] = useState<string>("all");
@@ -472,8 +501,7 @@ export default function App() {
   const cloudAudioRef = useRef<HTMLAudioElement | null>(null);
   const cloudSpeechRequestRef = useRef(0);
   const cloudFallbackNoticeRef = useRef(false);
-  const [isAtmosphereExpanded, setIsAtmosphereExpanded] = useState(false);
-  const [isMusicExpanded, setIsMusicExpanded] = useState(false);
+  const [dockPanel, setDockPanel] = useState<DockPanelId | null>(null);
   const [profileAvatar, setProfileAvatar] = useState<string>(() => localStorage.getItem("astra_profile_avatar") || "");
 
   // Mascot dynamic overrides
@@ -581,6 +609,21 @@ export default function App() {
       localStorage.setItem("hira_theme_mode", theme);
     } catch (e) { }
   }, [theme]);
+
+  // Polish A1: remember the music track and volume on this device only. Never synced,
+  // never auto-plays (playback state is not stored). The scene is saved only when it is
+  // picked by hand (handleDockSelectScene), never by the auto-cycle timer.
+  useEffect(() => {
+    try {
+      localStorage.setItem("astra_music_track", selectedMusicTrack);
+    } catch (e) { }
+  }, [selectedMusicTrack]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("astra_music_volume", String(musicVolume));
+    } catch (e) { }
+  }, [musicVolume]);
 
   useEffect(() => {
     try {
@@ -3596,6 +3639,80 @@ export default function App() {
     return "Silent Scribbler";
   };
 
+  // ── Polish A1: floating sound + atmosphere dock ────────────────────────────
+  // The dock (src/components/SoundAtmosphereDock.tsx) is presentational. State, the
+  // audio element and every storage write stay in this component. One panel at a
+  // time; it closes on a screen change and when the character picker opens.
+  useEffect(() => {
+    setDockPanel(null);
+  }, [currentScreen]);
+
+  useEffect(() => {
+    if (showCharPicker) setDockPanel(null);
+  }, [showCharPicker]);
+
+  // Quiz-type screens get only the small faded music button.
+  const dockQuiet =
+    currentScreen === "quiz" ||
+    currentScreen === "vocab-quiz" ||
+    currentScreen === "kanji-quiz" ||
+    currentScreen === "online-multiplayer" ||
+    currentScreen === "review-deck";
+
+  const handleDockSelectTrack = (track: MusicTrackId, label: string) => {
+    playClickTick();
+    setSelectedMusicTrack(track);
+    if (!isMusicPlaying) {
+      setIsMusicPlaying(true);
+      showToast(`Now playing: ${label}!`);
+    } else {
+      showToast(`Switched to: ${label}!`);
+    }
+  };
+
+  const handleDockTogglePlay = () => {
+    playClickTick();
+    const next = !isMusicPlaying;
+    setIsMusicPlaying(next);
+    if (next) {
+      const trackName = MUSIC_TRACKS.find((track) => track.id === selectedMusicTrack)?.toastName ?? "";
+      showToast(`Now playing: ${trackName}`);
+    } else {
+      showToast("Music paused.");
+    }
+  };
+
+  const handleDockSelectScene = (index: number, title: string) => {
+    setActiveBgScene(index);
+    // Remembered only for a scene picked by hand; the auto-cycle timer never writes this key.
+    try {
+      localStorage.setItem("astra_bg_scene", String(index));
+    } catch (e) { }
+    showToast(`Scene: ${title}`);
+  };
+
+  const handleDockToggleAutoCycle = () => {
+    setAutoCycleBg(!autoCycleBg);
+    showToast(autoCycleBg ? "Auto-cycle OFF" : "Auto-cycle ON (every 1m)");
+  };
+
+  const handleDockSetTheme = (next: "light" | "dark-cosmic") => {
+    setTheme(next);
+    showToast(next === "light" ? "Light mode on!" : "Dark mode on!");
+  };
+
+  const handleDockSetFont = (next: "digital" | "written") => {
+    setFontStyle(next);
+    showToast(next === "digital" ? "Digital font on!" : "Written font on!");
+  };
+
+  // MenuScreen still receives the two old "expand" setters (its Record Player tile
+  // calls both). Both now open the Music panel; Atmosphere opens only from the dock.
+  const requestMusicPanel: React.Dispatch<React.SetStateAction<boolean>> = (value) => {
+    const wantsOpen = typeof value === "function" ? value(dockPanel === "music") : value;
+    setDockPanel((current) => (wantsOpen ? "music" : current === "music" ? null : current));
+  };
+
   // Props for the extracted MenuScreen component (Phase 1 of the App.tsx split).
   const menuScreenProps = {
     setCurrentScreen,
@@ -3610,8 +3727,8 @@ export default function App() {
     setActiveHubTab,
     mascotMood,
     setMascotMood,
-    setIsMusicExpanded,
-    setIsAtmosphereExpanded,
+    setIsMusicExpanded: requestMusicPanel,
+    setIsAtmosphereExpanded: requestMusicPanel,
     sessionSummary,
     totalCount,
     getSessionQueue,
@@ -4044,9 +4161,9 @@ export default function App() {
             initial={{ opacity: 0, y: 30, x: "-50%" }}
             animate={{ opacity: 1, y: 0, x: "-50%" }}
             exit={{ opacity: 0, y: 15, x: "-50%" }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-2xl border border-natural-clay/40 bg-natural-card text-natural-clay text-xs font-mono shadow-xl flex items-center gap-2"
+            className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] sm:bottom-6 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100vw-2rem)] sm:max-w-sm leading-snug px-5 py-2.5 rounded-2xl border border-natural-clay/40 bg-natural-card text-natural-clay text-xs font-mono shadow-xl flex items-center gap-2"
           >
-            <Sparkles className="w-3.5 h-3.5 animate-spin text-natural-clay" />
+            <Sparkles className="w-3.5 h-3.5 shrink-0 motion-safe:animate-spin text-natural-clay" />
             <span className="font-semibold">{toastMessage}</span>
           </motion.div>
         )}
@@ -4304,7 +4421,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* MAIN LAYOUT WRAPPER */}
-      <div className={`w-full ${(currentScreen === "charts" || currentScreen === "grammar-dojo" || currentScreen === "reading-room") ? "max-w-5xl px-2 sm:px-4" : "max-w-4xl"} mx-auto flex-grow flex flex-col z-10 relative`}>
+      <div className={`w-full ${(currentScreen === "charts" || currentScreen === "grammar-dojo" || currentScreen === "reading-room") ? "max-w-5xl px-2 sm:px-4" : "max-w-4xl"} mx-auto flex-grow flex flex-col z-10 relative`} style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" }}>
 
         {/* APP HEADER */}
         <header className="flex flex-col sm:flex-row items-center justify-between gap-4 py-3 border-b border-natural-border/60 mb-4">
@@ -4709,352 +4826,6 @@ export default function App() {
         </header>
 
 
-        {/* WITCH'S GRIMOIRE ATMOSPHERE SETUP CONTROLS */}
-        {currentScreen === "menu" && (
-        <div id="witch-grimoire-controls" className="mb-3 bg-natural-card/50 border border-natural-border/60 p-3 rounded-2xl shadow-sm relative overflow-hidden backdrop-blur-sm">
-          <button
-            type="button"
-            onClick={() => setIsAtmosphereExpanded((value) => !value)}
-            className="w-full flex items-center justify-between gap-3 text-left cursor-pointer"
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-base">🎨</span>
-              <p className="text-xs font-semibold text-natural-forest-light">Atmosphere</p>
-            </div>
-            <span className="flex items-center gap-2 text-[10px] font-mono font-bold text-natural-forest-light">
-              Scene {activeBgScene + 1} · {bgAnimationType === "none" ? "No FX" : `${bgAnimationType} FX`}
-              {isAtmosphereExpanded ? <ChevronLeft className="w-3.5 h-3.5 rotate-90" /> : <ChevronRight className="w-3.5 h-3.5 rotate-90" />}
-            </span>
-          </button>
-
-          {isAtmosphereExpanded && (
-          <div className="mt-3 flex items-center flex-wrap gap-2.5">
-            {/* 0. Background Scene Selector */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-mono text-natural-sage font-semibold">Scene</span>
-              <div className="flex items-center bg-natural-card/85 p-1 rounded-xl border border-natural-border/75 gap-0.5">
-                {[
-                  { idx: 0, label: "🌫️", title: "Misty Sakura Path" },
-                  { idx: 1, label: "🌸", title: "Sakura Train" },
-                  { idx: 2, label: "✨", title: "Night Sparkler" },
-                  { idx: 3, label: "🌧️", title: "Rainy Window Anime" },
-                ].map((scene) => (
-                  <button
-                    key={scene.idx}
-                    type="button"
-                    title={scene.title}
-                    onClick={() => {
-                      setActiveBgScene(scene.idx);
-                      showToast(`Scene: ${scene.title}`);
-                    }}
-                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${activeBgScene === scene.idx
-                      ? "bg-natural-forest text-natural-bg shadow-sm"
-                      : "text-natural-forest-light hover:text-natural-forest hover:bg-natural-bg/40"
-                      }`}
-                  >
-                    {scene.label}
-                  </button>
-                ))}
-              </div>
-              {/* Auto Cycle Scene Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  setAutoCycleBg(!autoCycleBg);
-                  showToast(autoCycleBg ? "Auto-cycle OFF" : "Auto-cycle ON (every 1m)");
-                }}
-                className={`p-1.5 rounded-xl border text-xs font-bold transition cursor-pointer flex items-center justify-center ${
-                  autoCycleBg
-                    ? "bg-natural-forest/15 border-natural-forest/35 text-natural-forest shadow-xs"
-                    : "bg-natural-card/85 border-natural-border/75 text-natural-forest-light hover:text-natural-forest"
-                }`}
-                title={autoCycleBg ? "Auto-Cycle Scenes: Active (Changes every 1m)" : "Auto-Cycle Scenes: Paused"}
-              >
-                <Clock className={`w-3.5 h-3.5 ${autoCycleBg ? "animate-pulse" : ""}`} />
-              </button>
-            </div>
-            {/* 1. Theme Toggle Pill (Light / Dark) */}
-            <div className="flex items-center bg-natural-card/85 p-1 rounded-xl border border-natural-border/75">
-              <button
-                type="button"
-                id="toggle-theme-light"
-                onClick={() => {
-                  setTheme("light");
-                  showToast("Light mode on!");
-                }}
-                className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-bold transition cursor-pointer ${theme === "light"
-                  ? "bg-natural-forest text-natural-bg shadow-sm"
-                  : "text-natural-forest-light hover:text-natural-forest hover:bg-natural-bg/40"
-                  }`}
-                title="Washi Light Mode"
-              >
-                <Sun className="w-3.5 h-3.5" />
-                Light
-              </button>
-              <button
-                type="button"
-                id="toggle-theme-dark"
-                className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-bold transition cursor-pointer ${theme === "dark"
-                  ? "bg-natural-forest text-natural-bg shadow-sm"
-                  : "text-natural-forest-light hover:text-[#BCA3F0] hover:bg-natural-bg/40"
-                  }`}
-                onClick={() => {
-                  setTheme("dark");
-                  showToast("Dark mode on!");
-                }}
-                title="Witchy Dark Mode"
-              >
-                <Moon className="w-3.5 h-3.5" />
-                Dark
-              </button>
-            </div>
-
-            {/* 1b. Font Style Toggle Pill (Digital / Written) */}
-            <div className="flex items-center bg-natural-card/85 p-1 rounded-xl border border-natural-border/75">
-              <button
-                type="button"
-                id="toggle-font-digital"
-                onClick={() => {
-                  setFontStyle("digital");
-                  showToast("Digital font on!");
-                }}
-                className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-xs font-bold transition cursor-pointer ${fontStyle === "digital"
-                  ? "bg-natural-forest text-natural-bg shadow-sm"
-                  : "text-natural-forest-light hover:text-natural-forest hover:bg-natural-bg/40"
-                  }`}
-                title="Noto Sans JP — Clean & Digital"
-              >
-                <span className="font-mono text-[10px]">Aa</span>
-                Digital
-              </button>
-              <button
-                type="button"
-                id="toggle-font-written"
-                onClick={() => {
-                  setFontStyle("written");
-                  showToast("Written font on!");
-                }}
-                className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-xs font-bold transition cursor-pointer ${fontStyle === "written"
-                  ? "bg-natural-forest text-natural-bg shadow-sm"
-                  : "text-natural-forest-light hover:text-natural-forest hover:bg-natural-bg/40"
-                  }`}
-                title="Klee One — Handwritten & Warm"
-              >
-                <span className="text-[11px]">書</span>
-                Written
-              </button>
-            </div>
-
-            {/* 2. Particle Type Selector Dropdown */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-mono text-natural-sage font-semibold">FX</span>
-              <select
-                id="effect-type-selector"
-                value={bgAnimationType}
-                onChange={(e) => {
-                  const val = e.target.value as "auto" | "snow" | "sakura" | "sparkles" | "rain" | "letters" | "both" | "none";
-                  setBgAnimationType(val);
-                  showToast(`Effect: ${val === "auto" ? "Theme-Based" : val}`);
-                }}
-                className="bg-natural-card border border-natural-border/80 text-natural-forest text-[11px] font-bold font-serif px-2.5 py-1.5 rounded-xl cursor-pointer focus:outline-none focus:border-natural-forest transition"
-              >
-                <option value="auto">🌟 Theme Particles (Auto)</option>
-                <option value="snow">❄️ Cozy Snow</option>
-                <option value="sakura">🌸 Cherry Blossoms</option>
-                <option value="sparkles">✨ Magic Sparkles</option>
-                <option value="rain">🌧️ Gentle Rain</option>
-                <option value="letters">🔮 Magic Runes</option>
-                <option value="both">💫 Runes &amp; Theme-FX</option>
-                <option value="none">❌ None</option>
-              </select>
-            </div>
-
-            {/* 3. Intensity Level Selector Dropdown */}
-            {bgAnimationType !== "none" && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-mono text-natural-sage font-semibold">Intensity</span>
-                <select
-                  id="intensity-selector"
-                  value={bgIntensity}
-                  onChange={(e) => {
-                    const val = e.target.value as "low" | "medium" | "high";
-                    setBgIntensity(val);
-                    showToast(`Intensity: ${val}`);
-                  }}
-                  className="bg-natural-card border border-natural-border/80 text-natural-forest text-[11px] font-bold font-serif px-2.5 py-1.5 rounded-xl cursor-pointer focus:outline-none focus:border-natural-forest transition"
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-              </div>
-            )}
-
-            {/* 4. Backdrop Blur Slider */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-mono text-natural-sage font-semibold">Blur</span>
-              <input
-                type="range"
-                min="0"
-                max="20"
-                step="0.5"
-                value={bgBlur}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  setBgBlur(val);
-                }}
-                className="w-20 h-1 bg-natural-border rounded-lg appearance-none cursor-pointer accent-natural-forest hover:accent-natural-clay transition"
-                title={`Background blur: ${bgBlur === 0 ? "None" : bgBlur.toFixed(1) + "px"}`}
-              />
-              <span className="text-[10px] font-mono text-natural-forest font-bold min-w-8">
-                {bgBlur === 0 ? "Off" : `${bgBlur.toFixed(0)}px`}
-              </span>
-            </div>
-
-            {/* 5. Backdrop Opacity Preset */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-mono text-natural-sage font-semibold">Opacity</span>
-              <select
-                id="bg-opacity-selector"
-                value={bgOpacity}
-                onChange={(e) => {
-                  const val = e.target.value as "very-dim" | "low" | "medium" | "vivid";
-                  setBgOpacity(val);
-                  showToast(`Opacity: ${val}`);
-                }}
-                className="bg-natural-card border border-natural-border/80 text-natural-forest text-[11px] font-bold font-serif px-2.5 py-1.5 rounded-xl cursor-pointer focus:outline-none focus:border-natural-forest transition"
-              >
-                <option value="very-dim">Dim (10%)</option>
-                <option value="low">Soft (25%)</option>
-                <option value="medium">Balanced (45%)</option>
-                <option value="vivid">Vivid (70%)</option>
-              </select>
-            </div>
-          </div>
-          )}
-        </div>
-        )}
-
-        {/* ZEN COZY SOUNDSCAPE MUSIC STATION */}
-        {currentScreen === "menu" && (
-        <div id="zen-soundscape-station" className="mb-3 bg-natural-card/50 border border-natural-border/60 p-3 rounded-2xl shadow-sm relative overflow-hidden backdrop-blur-sm">
-          <button
-            type="button"
-            onClick={() => setIsMusicExpanded((value) => !value)}
-            className="w-full flex items-center justify-between gap-3 text-left cursor-pointer"
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-base">🎵</span>
-              <p className="text-xs font-semibold text-natural-forest-light">Music</p>
-            </div>
-            <span className="flex items-center gap-2 text-[10px] font-mono font-bold text-natural-forest-light">
-              {isMusicPlaying ? "Playing" : "Paused"} · {Math.round(musicVolume * 100)}%
-              {isMusicExpanded ? <ChevronLeft className="w-3.5 h-3.5 rotate-90" /> : <ChevronRight className="w-3.5 h-3.5 rotate-90" />}
-            </span>
-          </button>
-
-          {isMusicExpanded && (
-          <div className="mt-3 flex items-center flex-wrap gap-3 w-full md:justify-end">
-            {/* Music source / track selection */}
-            <div className="flex flex-col gap-1.5 w-full md:w-auto">
-              <span className="text-[10px] font-mono text-natural-sage font-semibold">Track</span>
-              <div className="flex items-center gap-1 bg-natural-card/85 p-1 rounded-xl border border-natural-border/75 flex-wrap">
-                {[
-                  { id: "ten_no_yowai" as const, label: "🌸 天ノ弱", title: "Akie - 天ノ弱 Piano Cover" },
-                  { id: "one_voice" as const, label: "🎤 One Voice", title: "Rokudenashi - One Voice" },
-                  { id: "amakigoe" as const, label: "🌧️ 雨き声残響", title: "Akie - 雨き声残響 (Rain Voice Echo)" },
-                  { id: "sparkle" as const, label: "✨ スパークル", title: "RADWIMPS - スパークル (Your Name)" },
-                  { id: "columbinas_lullaby" as const, label: "🎭 Columbina's Lullaby", title: "Columbina's Lullaby — Shania Yan Cover" },
-                ].map((track) => (
-                  <button
-                    key={track.id}
-                    type="button"
-                    title={track.title}
-                    onClick={() => {
-                      playClickTick();
-                      setSelectedMusicTrack(track.id);
-                      if (!isMusicPlaying) {
-                        setIsMusicPlaying(true);
-                        showToast(`Now playing: ${track.label}!`);
-                      } else {
-                        showToast(`Switched to: ${track.label}!`);
-                      }
-                    }}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-serif font-bold transition cursor-pointer whitespace-nowrap ${selectedMusicTrack === track.id
-                      ? "bg-natural-forest text-natural-bg shadow-sm"
-                      : "text-natural-forest-light hover:text-natural-forest hover:bg-natural-bg/40 font-semibold"
-                      }`}
-                  >
-                    {track.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Toggle Play / Pause */}
-            <button
-              type="button"
-              onClick={() => {
-                playClickTick();
-                const newVal = !isMusicPlaying;
-                setIsMusicPlaying(newVal);
-                if (newVal) {
-                  const trackName = selectedMusicTrack === "ten_no_yowai"
-                    ? "天ノ弱 Piano Cover"
-                      : selectedMusicTrack === "one_voice"
-                        ? "One Voice"
-                        : selectedMusicTrack === "amakigoe"
-                          ? "雨き声残響 (Akie)"
-                          : selectedMusicTrack === "columbinas_lullaby"
-                            ? "Columbina's Lullaby"
-                            : "スパークル — Your Name";
-                  showToast(`Now playing: ${trackName}`);
-                } else {
-                  showToast("Music paused.");
-                }
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-serif font-bold tracking-wide transition cursor-pointer flex items-center gap-1.5 border shadow-sm ${isMusicPlaying
-                ? "bg-natural-clay text-natural-bg border-natural-clay animate-pulse"
-                : "bg-natural-card border-natural-border text-natural-forest hover:border-natural-forest"
-                }`}
-            >
-              {isMusicPlaying ? (
-                <>
-                  <Volume2 className="w-3.5 h-3.5 animate-bounce" />
-                  Playing
-                </>
-              ) : (
-                <>
-                  <VolumeX className="w-3.5 h-3.5" />
-                  Paused
-                </>
-              )}
-            </button>
-
-            {/* Volume dial */}
-            <div className="flex items-center gap-1.5 pl-1.5">
-              <span className="text-[10px] font-mono text-natural-sage font-semibold">Vol</span>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={musicVolume}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  setMusicVolume(val);
-                }}
-                className="w-16 h-1 bg-natural-border rounded-lg appearance-none cursor-pointer accent-natural-forest hover:accent-natural-clay transition"
-              />
-              <span className="text-[10px] font-mono text-natural-forest font-bold min-w-8">
-                {Math.round(musicVolume * 100)}%
-              </span>
-            </div>
-          </div>
-          )}
-        </div>
-        )}
-
         {/* COMPANION STATUS BOARD */}
         {(currentScreen === "menu" || currentScreen === "kanji-scroll" || currentScreen === "reading-room") && (
         <div id="companion-section-wrapper" className="mb-4">
@@ -5170,6 +4941,38 @@ export default function App() {
         </motion.div>
         </AnimatePresence>
         </main>
+
+        {/* FLOATING SOUND + ATMOSPHERE DOCK (Polish A1). Outside <main> (never inside the flip node),
+            inside the layout wrapper so the Charts drawer, word-family modal and profile menu
+            (all z-50 in this stacking context) cover it. */}
+        <SoundAtmosphereDock
+          openPanel={dockPanel}
+          onOpenPanelChange={setDockPanel}
+          quiet={dockQuiet}
+          isMusicPlaying={isMusicPlaying}
+          musicVolume={musicVolume}
+          selectedMusicTrack={selectedMusicTrack}
+          onSelectTrack={handleDockSelectTrack}
+          onTogglePlay={handleDockTogglePlay}
+          onVolumeChange={setMusicVolume}
+          activeBgScene={activeBgScene}
+          autoCycleBg={autoCycleBg}
+          theme={theme}
+          fontStyle={fontStyle}
+          bgAnimationType={bgAnimationType}
+          bgIntensity={bgIntensity}
+          bgBlur={bgBlur}
+          bgOpacity={bgOpacity}
+          onSelectScene={handleDockSelectScene}
+          onToggleAutoCycle={handleDockToggleAutoCycle}
+          onSetTheme={handleDockSetTheme}
+          onSetFont={handleDockSetFont}
+          onSetAnimation={setBgAnimationType}
+          onSetIntensity={setBgIntensity}
+          onSetBlur={setBgBlur}
+          onSetOpacity={setBgOpacity}
+          showToast={showToast}
+        />
 
         {/* FOOTER METRICS AND CREDITS */}
         <footer className="text-center py-4 border-t border-natural-border mt-6 relative select-none">

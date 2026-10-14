@@ -22,8 +22,10 @@
 // Deliberately NOT synced:
 //   • The browser-specific Japanese voice (`astra_japanese_voice_uri/name`):
 //     voice identifiers differ between browsers and operating systems.
-//   • Music track, volume, ambient sound, current background scene and quiz
-//     choice count: none of these are persisted locally today.
+//   • Music track, volume and a hand-picked background scene: remembered on this
+//     device only (localStorage keys astra_music_track, astra_music_volume and
+//     astra_bg_scene, written by App.tsx), never synced and never auto-playing.
+//   • Ambient sound and quiz choice count: not persisted at all.
 //
 // This file has no React and no Firebase imports, so scripts/acc-sim.ts can run
 // it under plain Node. localStorage access is guarded and optional.
