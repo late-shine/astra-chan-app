@@ -448,6 +448,9 @@ export default function App() {
   const noiseNodeRef = useRef<any>(null);
   // Ref for real music tracks (HTML Audio)
   const musicAudioRef = useRef<HTMLAudioElement | null>(null);
+  // Mirrors isMusicPlaying for audio callbacks that outlive a render (Polish A2).
+  const musicPlayingRef = useRef(false);
+  musicPlayingRef.current = isMusicPlaying;
 
   // Music track selection: "synth" = built-in synth, "ten_no_yowai" = Akie track, "one_voice" = Rokudenashi track
   const [selectedMusicTrack, setSelectedMusicTrack] = useState<MusicTrackId>(readSavedMusicTrack);
@@ -502,6 +505,7 @@ export default function App() {
   const cloudSpeechRequestRef = useRef(0);
   const cloudFallbackNoticeRef = useRef(false);
   const [dockPanel, setDockPanel] = useState<DockPanelId | null>(null);
+  const [dockPanelHeight, setDockPanelHeight] = useState(0);
   const [profileAvatar, setProfileAvatar] = useState<string>(() => localStorage.getItem("astra_profile_avatar") || "");
 
   // Mascot dynamic overrides
@@ -933,6 +937,29 @@ export default function App() {
     }
   }, [musicVolume]);
 
+  // Polish A2: a track that cannot play (blocked by the browser, or a missing / unsupported file)
+  // must not stay on "Playing". Acts only when the learner asked for music, and only once per
+  // attempt (the play() rejection and the audio error event can both fire).
+  const handleMusicFailure = (reason: "blocked" | "unavailable") => {
+    if (!musicPlayingRef.current) return;
+    musicPlayingRef.current = false;
+    setIsMusicPlaying(false);
+    const trackName = MUSIC_TRACKS.find((track) => track.id === selectedMusicTrack)?.toastName ?? "that track";
+    showToast(
+      reason === "blocked"
+        ? "Your browser blocked the music. Tap Play to try again."
+        : `Couldn't play ${trackName}. The file may be missing.`
+    );
+  };
+
+  const handleMusicPlayRejection = (audio: HTMLAudioElement, error: unknown) => {
+    console.warn("Audio play failed:", error);
+    if (musicAudioRef.current !== audio) return; // a newer track replaced this one
+    const errorName = (error as { name?: string } | null)?.name ?? "";
+    if (errorName === "AbortError") return; // interrupted by pause() or a track change, not a failure
+    handleMusicFailure(errorName === "NotAllowedError" ? "blocked" : "unavailable");
+  };
+
   // HTML Audio track: create/swap audio element when track changes
   useEffect(() => {
     // Stop & clean up previous HTML audio
@@ -958,11 +985,20 @@ export default function App() {
     audio.volume = Math.max(0, Math.min(1, musicVolume));
     musicAudioRef.current = audio;
 
+    // A missing or unreadable file fires "error". Ignored unless the learner asked for music
+    // (the file preloads and may fail while paused), and ignored for a replaced element.
+    const handleAudioError = () => {
+      if (musicAudioRef.current !== audio) return;
+      handleMusicFailure("unavailable");
+    };
+    audio.addEventListener("error", handleAudioError);
+
     if (isMusicPlaying) {
-      audio.play().catch(e => console.warn("Audio play failed:", e));
+      audio.play().catch(e => handleMusicPlayRejection(audio, e));
     }
 
     return () => {
+      audio.removeEventListener("error", handleAudioError);
       audio.pause();
       audio.src = "";
     };
@@ -974,7 +1010,8 @@ export default function App() {
     if (!musicAudioRef.current) return;
     if (isMusicPlaying) {
       musicAudioRef.current.volume = Math.max(0, Math.min(1, musicVolume));
-      musicAudioRef.current.play().catch(e => console.warn("Audio play failed:", e));
+      const currentAudio = musicAudioRef.current;
+      currentAudio.play().catch(e => handleMusicPlayRejection(currentAudio, e));
     } else {
       musicAudioRef.current.pause();
     }
@@ -3651,7 +3688,7 @@ export default function App() {
     if (showCharPicker) setDockPanel(null);
   }, [showCharPicker]);
 
-  // Quiz-type screens get only the small faded music button.
+  // Quiz-type screens: Atmosphere is hidden and the Music launcher is small and faded (a tap still opens the Music panel).
   const dockQuiet =
     currentScreen === "quiz" ||
     currentScreen === "vocab-quiz" ||
@@ -3706,12 +3743,8 @@ export default function App() {
     showToast(next === "digital" ? "Digital font on!" : "Written font on!");
   };
 
-  // MenuScreen still receives the two old "expand" setters (its Record Player tile
-  // calls both). Both now open the Music panel; Atmosphere opens only from the dock.
-  const requestMusicPanel: React.Dispatch<React.SetStateAction<boolean>> = (value) => {
-    const wantsOpen = typeof value === "function" ? value(dockPanel === "music") : value;
-    setDockPanel((current) => (wantsOpen ? "music" : current === "music" ? null : current));
-  };
+  // The Record Player tile (MenuScreen) opens the dock's Music panel through this.
+  const openDock = (panel: DockPanelId) => setDockPanel(panel);
 
   // Props for the extracted MenuScreen component (Phase 1 of the App.tsx split).
   const menuScreenProps = {
@@ -3727,8 +3760,7 @@ export default function App() {
     setActiveHubTab,
     mascotMood,
     setMascotMood,
-    setIsMusicExpanded: requestMusicPanel,
-    setIsAtmosphereExpanded: requestMusicPanel,
+    openDock,
     sessionSummary,
     totalCount,
     getSessionQueue,
@@ -4158,10 +4190,11 @@ export default function App() {
       <AnimatePresence>
         {toastMessage && (
           <motion.div
-            initial={{ opacity: 0, y: 30, x: "-50%" }}
-            animate={{ opacity: 1, y: 0, x: "-50%" }}
-            exit={{ opacity: 0, y: 15, x: "-50%" }}
-            className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] sm:bottom-6 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100vw-2rem)] sm:max-w-sm leading-snug px-5 py-2.5 rounded-2xl border border-natural-clay/40 bg-natural-card text-natural-clay text-xs font-mono shadow-xl flex items-center gap-2"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 15 }}
+            className="fixed inset-x-0 mx-auto w-fit pointer-events-none bottom-[min(calc(5rem+env(safe-area-inset-bottom,0px)+var(--toast-lift,0px)),calc(100dvh-4rem))] sm:bottom-6 z-50 max-w-[calc(100vw-2rem)] sm:max-w-sm leading-snug px-5 py-2.5 rounded-2xl border border-natural-clay/40 bg-natural-card text-natural-clay text-xs font-mono shadow-xl flex items-center gap-2"
+            style={{ "--toast-lift": `${dockPanelHeight}px` }}
           >
             <Sparkles className="w-3.5 h-3.5 shrink-0 motion-safe:animate-spin text-natural-clay" />
             <span className="font-semibold">{toastMessage}</span>
@@ -4948,6 +4981,7 @@ export default function App() {
         <SoundAtmosphereDock
           openPanel={dockPanel}
           onOpenPanelChange={setDockPanel}
+          onPanelHeightChange={setDockPanelHeight}
           quiet={dockQuiet}
           isMusicPlaying={isMusicPlaying}
           musicVolume={musicVolume}

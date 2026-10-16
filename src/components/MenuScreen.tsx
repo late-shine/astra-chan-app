@@ -167,8 +167,7 @@ interface MenuScreenProps {
   setActiveHubTab: React.Dispatch<React.SetStateAction<"learn" | "practice">>;
   mascotMood: MascotMood;
   setMascotMood: React.Dispatch<React.SetStateAction<MascotMood>>;
-  setIsMusicExpanded: React.Dispatch<React.SetStateAction<boolean>>;
-  setIsAtmosphereExpanded: React.Dispatch<React.SetStateAction<boolean>>;
+  openDock: (panel: "music" | "atmosphere") => void;
 
   // SRS / Review Deck (S2: every entry point starts the budgeted session, never "all due cards")
   sessionSummary: SessionSummary;
@@ -269,8 +268,7 @@ export default function MenuScreen(props: MenuScreenProps) {
     setActiveHubTab,
     mascotMood,
     setMascotMood,
-    setIsMusicExpanded,
-    setIsAtmosphereExpanded,
+    openDock,
     sessionSummary,
     totalCount,
     getSessionQueue,
@@ -445,13 +443,11 @@ export default function MenuScreen(props: MenuScreenProps) {
                         },
                         {
                           title: "Record Player",
-                          desc: "Open music and atmosphere controls.",
+                          desc: "Open sound controls.",
                           icon: Volume2,
                           accent: "quiet",
                           action: () => {
-                                              setIsMusicExpanded(true);
-                                              setIsAtmosphereExpanded(true);
-                                              showToast("Music and atmosphere controls opened.");
+                                              openDock("music");
                                             },
                                           },
                                           {
