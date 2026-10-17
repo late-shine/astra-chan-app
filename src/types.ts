@@ -128,6 +128,18 @@ export interface StudentStats {
   preferences?: SyncedPreferences;
   /** Phase S2: daily Review Deck limits. Optional and additive; omitted until the learner changes them. */
   srsSettings?: SrsSettings;
+  /**
+   * Phase B1: guided-tour progress, a grow-only set merged by union (see src/tips.ts).
+   * Optional and additive; omitted (never `undefined`, `false` or `{}`) until a tip is seen.
+   */
+  tips?: TipsState;
+}
+
+/** Phase B1: which Study Room tips have been seen. Ids: room, spell, bookshelf, desk, dock. */
+export interface TipsState {
+  seen?: Record<string, true>;
+  /** Set by "Skip all" or by the silent stamp for learners who already have progress. */
+  skipped?: true;
 }
 
 // ============================================================================

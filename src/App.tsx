@@ -143,6 +143,7 @@ import ReviewDeckScreen from "./components/ReviewDeckScreen";
 import OnlineMultiplayerScreen from "./components/OnlineMultiplayerScreen";
 import { useSRS } from "./hooks/useSRS";
 import { mergeSrsCards, mergeSrsSettings, normalizeSrsCards, normalizeSrsSettings } from "./srsScheduler";
+import { mergeTips, sanitizeTips } from "./tips";
 import wonderingImg from "./assets/images/astra-wondering.jpeg";
 import excitedImg from "./assets/images/astra-excited.png.jpeg";
 import bgMistySakura from "./assets/images/bg_misty_sakura.jpg";
@@ -773,9 +774,18 @@ export default function App() {
       const mergedSrsSettings = mergeSrsSettings(localStats.srsSettings, cloudStats.srsSettings);
       if (mergedSrsSettings) hydrated.srsSettings = mergedSrsSettings;
       else delete hydrated.srsSettings;
+      // B1: guided-tour progress is a grow-only set, so it merges by union (never cloud-wins);
+      // omitted entirely when neither side has any.
+      const mergedTips = mergeTips(localStats.tips, cloudStats.tips);
+      if (mergedTips) hydrated.tips = mergedTips;
+      else delete hydrated.tips;
     } else {
       const { preferences: _localPreferences, ...localRest } = localStats;
       hydrated = localRest;
+      // B1: the seed keeps this device's tour progress (so it reaches the new cloud copy).
+      const seededTips = mergeTips(localStats.tips, undefined);
+      if (seededTips) hydrated.tips = seededTips;
+      else delete hydrated.tips;
     }
 
     if (resolution.envelope) {
@@ -1242,6 +1252,9 @@ export default function App() {
         // ACC-1: the preferences' durable local copy is its own key; the blob copy is only a mirror.
         const loadedPreferences = readPreferencesEnvelope() ?? sanitizeEnvelope(parsed.preferences);
         delete parsed.preferences;
+        // B1: the blob is spread unsanitized below, so tour progress is checked here (corrupt data is dropped).
+        const loadedTips = sanitizeTips(parsed.tips);
+        delete parsed.tips;
 
         // Dynamic streak verification — recompute from studyDates in local time
         let currentStreak = 0;
@@ -1269,6 +1282,7 @@ export default function App() {
         setStats({
           ...parsed,
           ...(loadedPreferences ? { preferences: loadedPreferences } : {}),
+          ...(loadedTips ? { tips: loadedTips } : {}),
           streakCount: currentStreak,
           vocabularyProgress: parsed.vocabularyProgress || {},
           studyDates: parsed.studyDates || [],
@@ -1355,6 +1369,8 @@ export default function App() {
   const normalizeImportedStats = (input: any): StudentStats | null => {
     const imported = input?.stats ?? input;
     if (!imported || typeof imported !== "object") return null;
+    // B1: a backup's tour progress is unioned with this device's; a pre-tips backup keeps the device's.
+    const importedTips = mergeTips(stats.tips, imported.tips);
     return {
       xp: Number(imported.xp) || 0,
       streakCount: Number(imported.streakCount) || 0,
@@ -1371,6 +1387,7 @@ export default function App() {
       ...(imported.srsSettings && typeof imported.srsSettings === "object"
         ? { srsSettings: { ...normalizeSrsSettings(imported.srsSettings), updatedAt: Date.now() } }
         : stats.srsSettings ? { srsSettings: stats.srsSettings } : {}),
+      ...(importedTips ? { tips: importedTips } : {}),
       studyDates: Array.isArray(imported.studyDates) ? imported.studyDates : [],
       survivalBestScore: Number(imported.survivalBestScore) || 0,
       srsReviewedTotal: Number(imported.srsReviewedTotal) || 0,
