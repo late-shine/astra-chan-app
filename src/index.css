@@ -364,6 +364,16 @@ input, select, textarea, button {
   /* Emphasis helpers */
   .kz-on-accent { color: var(--kz-on-accent); }
   .kz-scrim { background-color: var(--kz-scrim); }
+
+  /* Guided tour (B2): the measured highlight ring. The very large outer shadow is the light dim; the ring box itself
+     stays clear so the target shows through. Tokens only. */
+  .guide-ring {
+    border: 2px solid var(--kz-accent);
+    border-radius: 1rem;
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--kz-accent) 25%, transparent),
+      0 0 0 100vmax color-mix(in srgb, var(--kz-scrim) 55%, transparent);
+  }
 }
 
 

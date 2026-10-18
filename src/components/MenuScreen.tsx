@@ -325,7 +325,7 @@ export default function MenuScreen(props: MenuScreenProps) {
                   <div className="relative z-10 flex flex-col gap-6">
                     <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-5 items-stretch">
                       <div className="flex flex-col justify-between gap-5 min-h-[270px] rounded-2xl glass-card p-5">
-                        <div>
+                        <div data-guide="room">
                           <span className="text-[10px] font-mono font-extrabold uppercase tracking-[0.22em] text-natural-clay">
                             Astra's Study Room
                           </span>
@@ -337,7 +337,7 @@ export default function MenuScreen(props: MenuScreenProps) {
                           </p>
                         </div>
 
-                        <div className="rounded-2xl border border-natural-clay/25 bg-natural-clay/10 p-4">
+                        <div data-guide="spell" className="rounded-2xl border border-natural-clay/25 bg-natural-clay/10 p-4">
                           <div className="flex items-center justify-between gap-3">
                             <div>
                               <p className="text-[10px] font-mono font-bold uppercase tracking-widest text-natural-clay">Today's Spell</p>
@@ -396,6 +396,7 @@ export default function MenuScreen(props: MenuScreenProps) {
                           desc: "Learn kana, kanji, and vocabulary.",
                           icon: BookOpen,
                           accent: "forest",
+                          guide: "bookshelf",
                           action: () => {
                             setShowStudyRoom(false);
                             setActiveHubTab("learn");
@@ -407,6 +408,7 @@ export default function MenuScreen(props: MenuScreenProps) {
                           desc: "Practice quizzes and timed rounds.",
                           icon: PenTool,
                           accent: "clay",
+                          guide: "desk",
                           action: () => {
                             setShowStudyRoom(false);
                             setActiveHubTab("practice");
@@ -488,6 +490,7 @@ export default function MenuScreen(props: MenuScreenProps) {
                             key={roomItem.title}
                             as="button"
                             onClick={roomItem.action}
+                            dataGuide={roomItem.guide}
                             tiltMax={12}
                             scale={1.03}
                             className={`group min-h-28 rounded-2xl glass-card glass-glow p-4 text-left cursor-pointer ${accentHoverBorder} ${accentTextColor}`}

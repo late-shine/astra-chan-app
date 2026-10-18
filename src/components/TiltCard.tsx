@@ -20,6 +20,8 @@ interface TiltCardProps {
   onClick?: () => void;
   /** Extra style overrides */
   style?: React.CSSProperties;
+  /** Guided tour target name (rendered as `data-guide` on the root element). */
+  dataGuide?: string;
 }
 
 /**
@@ -36,6 +38,7 @@ const TiltCard: React.FC<TiltCardProps> = ({
   as = "div",
   onClick,
   style,
+  dataGuide,
 }) => {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
@@ -134,6 +137,7 @@ const TiltCard: React.FC<TiltCardProps> = ({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onClick={onClick}
+      data-guide={dataGuide}
       {...(as === "button" ? { type: "button" as const } : {})}
     >
       {/* Glare overlay */}

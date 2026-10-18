@@ -95,11 +95,12 @@ import {
   signInEmailAccount,
   signOutAccount,
 } from "./firebase";
-import { HiraganaItem, KatakanaItem, KanjiItem, VocabularyItem, StudentStats, SRSCard, SrsSettings } from "./types";
+import { HiraganaItem, KatakanaItem, KanjiItem, VocabularyItem, StudentStats, SRSCard, SrsSettings, TipsState } from "./types";
 import type { ReadingToken } from "./reading/readingData";
 import MascotCompanion from "./components/MascotCompanion";
 import AtmosphereCanvas from "./components/AtmosphereCanvas";
 import SoundAtmosphereDock, { MUSIC_TRACKS, type DockPanelId, type MusicTrackId } from "./components/SoundAtmosphereDock";
+import GuideTour from "./components/GuideTour";
 import { useMouseParallax } from "./hooks/useMouseParallax";
 import ReferenceCharts from "./components/ReferenceCharts";
 import GrammarDojo from "./components/GrammarDojo";
@@ -143,7 +144,7 @@ import ReviewDeckScreen from "./components/ReviewDeckScreen";
 import OnlineMultiplayerScreen from "./components/OnlineMultiplayerScreen";
 import { useSRS } from "./hooks/useSRS";
 import { mergeSrsCards, mergeSrsSettings, normalizeSrsCards, normalizeSrsSettings } from "./srsScheduler";
-import { mergeTips, sanitizeTips } from "./tips";
+import { hasProgress, mergeTips, sanitizeTips, TIP_IDS, type TipId } from "./tips";
 import wonderingImg from "./assets/images/astra-wondering.jpeg";
 import excitedImg from "./assets/images/astra-excited.png.jpeg";
 import bgMistySakura from "./assets/images/bg_misty_sakura.jpg";
@@ -360,6 +361,10 @@ export default function App() {
     srsReviewedTotal: 0,
     readingMisses: [],
   });
+
+  // B2: the latest stats, for a writer that must start from a whole blob when none is stored yet (patchTips).
+  const statsRef = useRef(stats);
+  statsRef.current = stats;
 
   // ── SRS Review Deck (hook + session state) ─────────────────────────────────
   const handleSrsCardsChanged = useCallback((cards: Record<string, SRSCard>) => {
@@ -1359,6 +1364,89 @@ export default function App() {
     }, 700);
     return () => window.clearTimeout(timer);
   }, [cloudStatsHydrated, isAccountUser, myUid, stats]);
+
+  // ── Polish B2: guided tour (Study Room tips) ────────────────────────────────
+  // GuideTour.tsx is presentational. This block owns every stored write. `patchTips` is the one writer of
+  // `stats.tips` (grow-only, merged by union in src/tips.ts): anonymous users keep it in the local blob, signed-in
+  // users sync it with the rest of `stats`.
+  const patchTips = useCallback((patch: TipsState) => {
+    setStats((previous) => {
+      const next = mergeTips(previous.tips, patch);
+      if (JSON.stringify(next ?? null) === JSON.stringify(previous.tips ?? null)) return previous;
+      const { tips: _previousTips, ...rest } = previous;
+      return next ? { ...rest, tips: next } : rest;
+    });
+    try {
+      const raw = localStorage.getItem("hirachan_master_stats_v1");
+      const parsed = raw ? (JSON.parse(raw) as Partial<StudentStats>) : null;
+      // A brand-new browser has no blob yet. Start from the current state (as useSRS does), never from {}:
+      // a blob without `xp` would load back as undefined.
+      const blob = (typeof parsed?.xp === "number" ? parsed : { ...statsRef.current, ...parsed }) as StudentStats;
+      const merged = mergeTips(blob.tips, patch);
+      if (merged) blob.tips = merged;
+      else delete blob.tips;
+      localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(blob));
+    } catch { /* ignore storage errors */ }
+  }, []);
+
+  /** Next on a real run: this one tip has been shown and acknowledged. */
+  const markTipSeen = useCallback((id: TipId) => {
+    patchTips({ seen: { [id]: true } });
+  }, [patchTips]);
+
+  /** Skip all and Escape on a real run: every tip seen, and `skipped`. */
+  const skipAllTips = useCallback(() => {
+    const everything: Record<string, true> = {};
+    for (const id of TIP_IDS) everything[id] = true;
+    patchTips({ seen: everything, skipped: true });
+  }, [patchTips]);
+
+  // D9: someone who already has progress and no tour record never gets the beginner tour (a silent `skipped` stamp).
+  const stampVeteranTips = (merged: StudentStats) => {
+    if (!merged.tips && hasProgress(merged)) patchTips({ skipped: true });
+  };
+
+  // Decided ONCE per app load, after both hydration flags are true (so after mergeTips has run in the cloud hydrate)
+  // and before the card can first paint. Never again on later menu visits: a new user who taps a tile at step 1 and
+  // earns XP must still resume. (An interactive sign-in repeats it once, with the account's merged stats.)
+  const tourDecidedRef = useRef(false);
+  const [tourDecided, setTourDecided] = useState(false);
+  useEffect(() => {
+    if (!statsHydrated || !cloudStatsHydrated || tourDecidedRef.current) return;
+    tourDecidedRef.current = true;
+    stampVeteranTips(stats);
+    setTourDecided(true);
+    // The check is deliberately keyed on the two hydration flags only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statsHydrated, cloudStatsHydrated]);
+
+  // Replay (header profile menu): a session-only run of all five steps. It never writes.
+  const [tourReplay, setTourReplay] = useState(false);
+  const [tourRunId, setTourRunId] = useState(0);
+  const replayGuidedTour = () => {
+    setShowProfilePanel(false);
+    setDockPanel(null);
+    setShowStudyRoom(true);
+    setCurrentScreen("menu");
+    setTourRunId((count) => count + 1);
+    setTourReplay(true);
+  };
+  // A replay ends when the learner leaves the Study Room.
+  useEffect(() => {
+    if (tourReplay && (currentScreen !== "menu" || !showStudyRoom)) setTourReplay(false);
+  }, [tourReplay, currentScreen, showStudyRoom]);
+
+  const tourPending = !stats.tips?.skipped && TIP_IDS.some((id) => !stats.tips?.seen?.[id]);
+  // Study Room only, hydrated, and never over a modal or an open dock panel. Anything else hides it without marking anything.
+  const tourVisible =
+    statsHydrated &&
+    cloudStatsHydrated &&
+    currentScreen === "menu" &&
+    showStudyRoom &&
+    dockPanel === null &&
+    !showCharPicker &&
+    !showProfilePanel &&
+    (tourReplay || (tourDecided && tourPending));
 
   // Sync state with LocalStorage triggers
   const saveStats = (newStats: StudentStats) => {
@@ -3433,9 +3521,11 @@ export default function App() {
         setStats(hydratedStats);
         replaceCards(hydratedStats.srsCards);
         localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(hydratedStats));
+        stampVeteranTips(hydratedStats);
       } else {
         const seededStats = hydrateStatsFromCloud(stats, null);
         setStats(seededStats);
+        stampVeteranTips(seededStats);
         await saveCloudStats(seededStats, user.uid);
       }
       // ACC-1: restore this account's name and avatar (previously only stats were restored).
@@ -3463,9 +3553,11 @@ export default function App() {
         setStats(hydratedStats);
         replaceCards(hydratedStats.srsCards);
         localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(hydratedStats));
+        stampVeteranTips(hydratedStats);
       } else {
         const seededStats = hydrateStatsFromCloud(stats, null);
         setStats(seededStats);
+        stampVeteranTips(seededStats);
         await saveCloudStats(seededStats, user.uid);
       }
       // ACC-1: this used to publish this device's name/avatar over the account's. Reconcile instead.
@@ -4203,6 +4295,21 @@ export default function App() {
         activeBgScene={activeBgScene}
       />
 
+      {/* GUIDED TOUR (Polish B2). Root level, outside <main> and outside the layout wrapper's stacking context, so the
+          ring and card sit above the dock (z-30 inside the wrapper) and below the character picker (z-40), the toast
+          and the duel invites (z-50). The page stays tappable: only the card takes taps. */}
+      <React.Fragment key={tourReplay ? `replay-${tourRunId}` : "live"}>
+        <GuideTour
+          enabled={tourVisible}
+          replay={tourReplay}
+          seen={stats.tips?.seen}
+          isTransitioning={isTransitioning}
+          onMarkSeen={markTipSeen}
+          onSkipAll={skipAllTips}
+          onReplayDone={() => setTourReplay(false)}
+        />
+      </React.Fragment>
+
       {/* Global Toast Notification */}
       <AnimatePresence>
         {toastMessage && (
@@ -4694,6 +4801,14 @@ export default function App() {
                           Upload
                         </button>
                       </div>
+                      <button
+                        type="button"
+                        onClick={replayGuidedTour}
+                        className="mt-2 w-full px-2.5 py-1.5 bg-natural-card border border-natural-border rounded-lg text-[11px] font-bold text-natural-forest hover:border-natural-forest transition cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        Replay guided tour
+                      </button>
                     </div>
 
                     {/* Stats Grid */}

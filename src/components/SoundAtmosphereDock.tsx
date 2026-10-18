@@ -507,7 +507,7 @@ export default function SoundAtmosphereDock(props: SoundAtmosphereDockProps) {
       </AnimatePresence>
 
       {/* Launchers. The Music launcher is one element in every mode, so a screen change never remounts it. */}
-      <div className="pointer-events-auto flex items-center">
+      <div data-guide="dock" className="pointer-events-auto flex items-center">
         <button
           ref={musicButtonRef}
           type="button"
