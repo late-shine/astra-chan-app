@@ -146,7 +146,8 @@ The home screen is Astra-chan's room — each object is a destination:
 - **Star Window** — Online duel with a friend
 - **Mirror** — Profile, stats, and progress archive
 - **Review Box** — SRS review deck with today's session summary (reviews, new cards, estimated time)
-- **Record Player** — Music and atmosphere controls
+- **Record Player** — Music and atmosphere controls available from every screen
+- **Guided Study Room Tour** — a short five-step introduction to the main study areas, shown on a learner's first visit
 - **Reference Charts** — Grammar tables and quick reference
 - **Grammar Dojo** — N5 grammar patterns and practice
 
@@ -256,7 +257,7 @@ The home screen is Astra-chan's room — each object is a destination:
 
 ### 👤 Profile, Voice Control & Bilingual Support
 - **Optional Cloud Account** — create an account with email/password or Google from the visible account shortcut or Profile; the existing anonymous Firebase identity is upgraded without changing the user's friend code when possible
-- **Cloud Progress Sync** — XP, streaks, mastery, vocabulary progress, SRS cards and daily limits, study dates, survival records, and reading notes sync to the user's private Firebase progress record. Display name and avatar stay consistent across devices
+- **Cloud Progress Sync** — XP, streaks, mastery, vocabulary progress, SRS cards and daily limits, study dates, survival records, reading notes, and guided-tour progress sync to the user's private Firebase progress record. Display name and avatar stay consistent across devices
 - **Account Recovery** — email/password users can request a Firebase password-reset link without visiting the Firebase Console
 - **Synced Preferences** — theme, font, language, romaji and kanji-form choices, practice grid, auto-pronounce, voice mode, the chosen Gemini voice, and the atmosphere settings follow the account. The browser's own Japanese voice, music track and volume, ambient sound, and the current background scene stay on each device
 - **Offline Fallback** — local browser storage remains available when the user is not signed in or temporarily offline
@@ -439,6 +440,8 @@ V1 protects authentication, room membership IDs, invite ownership, profiles, and
 ## Roadmap
 
 - [x] Study Room visual redesign (navigation as Astra-chan's room)
+- [x] Floating Music and Atmosphere controls available across screens
+- [x] Guided first-visit Study Room tour
 - [x] Reference Charts (counters, particles, verb groups, adjectives, time)
 - [x] Natural Conversation Phrases in Reference Charts with register filters and usage examples
 - [x] Grammar Dojo with N5 patterns and fill-in-the-blank practice
