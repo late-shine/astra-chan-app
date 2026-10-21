@@ -50,6 +50,8 @@ interface KanjiScrollScreenProps {
   showToast: (message: string) => void;
   handleKanjiNav: (dir: "prev" | "next") => void;
   handleContemplateKanji: () => void;
+  /** C1: this kanji has already paid its one-time Study XP. The Study button then reads "Studied ✓" and earns nothing. */
+  alreadyStudied?: boolean;
   handleEvaluateKanjiDrawing: () => void;
 }
 
@@ -446,6 +448,7 @@ export default function KanjiScrollScreen({
   showToast,
   handleKanjiNav,
   handleContemplateKanji,
+  alreadyStudied = false,
   handleEvaluateKanjiDrawing,
 }: KanjiScrollScreenProps) {
   const [isWordFamilyOpen, setIsWordFamilyOpen] = useState(false);
@@ -802,9 +805,21 @@ export default function KanjiScrollScreen({
               <button
                 type="button"
                 onClick={handleContemplateKanji}
-                className="min-h-11 min-w-0 flex-1 cursor-pointer whitespace-nowrap rounded-xl bg-natural-clay px-2 font-serif text-sm font-extrabold kz-on-accent shadow-sm transition hover:bg-natural-clay/90 sm:px-4 sm:tracking-wide"
+                className={`min-h-11 min-w-0 flex-1 cursor-pointer whitespace-nowrap rounded-xl px-2 font-serif text-sm font-extrabold shadow-sm transition sm:px-4 sm:tracking-wide ${
+                  alreadyStudied
+                    ? "border border-natural-border bg-natural-bg/60 text-natural-forest-light hover:border-natural-forest hover:text-natural-forest"
+                    : "bg-natural-clay kz-on-accent hover:bg-natural-clay/90"
+                }`}
               >
-                Study (+40 XP)
+                {/* C1: stays focusable and tappable so a tap can explain (toast). The name says it is studied and earns no more XP. */}
+                {alreadyStudied ? (
+                  <>
+                    Studied<span aria-hidden="true"> ✓</span>
+                    <span className="sr-only">, earns no more XP</span>
+                  </>
+                ) : (
+                  "Study (+40 XP)"
+                )}
               </button>
 
               <button

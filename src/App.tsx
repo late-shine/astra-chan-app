@@ -1948,7 +1948,12 @@ export default function App() {
     setVocabQuizXp(prev => prev + xp);
     if (isCorrect) { setVocabQuizCorrect(prev => prev + 1); playChime(true); }
     else { setVocabQuizWrong(prev => [...prev, vocabQuizItem!]); playChime(false); }
-    setStats(prev => ({ ...prev, xp: prev.xp + xp }));
+    // C1: persist like the kana quiz and Study paths, so this XP survives an anonymous reload (amount unchanged).
+    setStats(prev => {
+      const updated = { ...prev, xp: prev.xp + xp };
+      try { localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(updated)); } catch { /* ignore storage errors */ }
+      return updated;
+    });
     setTimeout(() => {
       const nextIdx = vocabQuizIndex + 1;
       if (nextIdx >= vocabQuizPool.length) { setVocabQuizPhase("results"); return; }
@@ -2047,7 +2052,12 @@ export default function App() {
     setKanjiQuizXp(prev => prev + xp);
     if (isCorrect) { setKanjiQuizCorrect(prev => prev + 1); playChime(true); }
     else { setKanjiQuizWrong(prev => [...prev, kanjiQuizItem!]); playChime(false); }
-    if (xp > 0) setStats(prev => ({ ...prev, xp: prev.xp + xp }));
+    // C1: persist like the kana quiz and Study paths, so this XP survives an anonymous reload (amount unchanged).
+    if (xp > 0) setStats(prev => {
+      const updated = { ...prev, xp: prev.xp + xp };
+      try { localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(updated)); } catch { /* ignore storage errors */ }
+      return updated;
+    });
     setTimeout(() => {
       const nextIdx = kanjiQuizIndex + 1;
       if (nextIdx >= kanjiQuizPool.length) { setKanjiQuizPhase("results"); return; }
@@ -2421,15 +2431,25 @@ export default function App() {
   const handleContemplateKanji = () => {
   const activeKanji = KANJI_DATA[currentKanjiIndex].kanji;
 
-  if (sessionStudiedKanji.has(activeKanji)) {
-    showToast(`Already studied "${activeKanji}" this session!`);
+  // C1: +40 XP once per kanji, ever. The durable record is characterProgress[kanji].total: > 0 is already the app's
+  // "studied" marker (it builds the Kanji Quiz "Studied" pool). Read from statsRef so the toast and chime match the
+  // outcome. A re-tap changes nothing: no XP, progress, study date, streak or blob write.
+  const alreadyStudied = (statsRef.current.characterProgress?.[activeKanji]?.total || 0) > 0;
+  if (alreadyStudied) {
+    showToast(`You've already studied "${activeKanji}". Practise it in the Kanji Quiz or add it to your Review Deck.`);
     return;
   }
+  // Same-tick double tap only (the first tap's state is still being applied). It is released straight after, so a
+  // kanji whose progress is later replaced by a cloud hydrate can be earned again instead of staying blocked.
+  if (sessionStudiedKanji.has(activeKanji)) return;
   sessionStudiedKanji.add(activeKanji);
+  window.setTimeout(() => sessionStudiedKanji.delete(activeKanji), 0);
 
   // FIX: Update both XP and characterProgress so Kanji Quiz "Studied" pool works
   setStats((prev) => {
     const prevProg = prev.characterProgress[activeKanji] || { correct: 0, total: 0 };
+    // C1: re-check against the state this updater really sees, so a hydrate race or a double invocation never pays twice.
+    if (prevProg.total > 0) return prev;
 
     // Record today's study date and recompute the streak the same way the kana
     // quiz XP path does — without this, kanji study earns XP but silently
@@ -4023,6 +4043,8 @@ export default function App() {
     showToast,
     handleKanjiNav,
     handleContemplateKanji,
+    // C1: lets the Study button read "Studied ✓" for a kanji that has already paid its one-time XP.
+    alreadyStudied: (stats.characterProgress?.[KANJI_DATA[currentKanjiIndex]?.kanji ?? ""]?.total || 0) > 0,
     handleEvaluateKanjiDrawing,
   };
 
