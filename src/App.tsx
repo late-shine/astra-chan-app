@@ -469,6 +469,10 @@ export default function App() {
   const [vocabsCategory, setVocabsCategory] = useState<string>("all");
   const [vocabsSearch, setVocabsSearch] = useState("");
 
+  // Kanji catalog search (Polish C2). Lives here, like vocabsSearch and subLearnTab, so the query
+  // survives a trip into Kanji Scroll and back. Memory only: never stored, never synced.
+  const [kanjiSearch, setKanjiSearch] = useState("");
+
   // Quiz Pronunciation Voice settings
   const [autoPronounce, setAutoPronounce] = useState<boolean>(() => {
     try {
@@ -2616,7 +2620,7 @@ export default function App() {
     "Practice tip: Tracing characters using a dynamic grid aligns your visual logic with proper Japanese aesthetic grids. Think of every symbol sitting inside a round stone!",
     "Kana fact: 'Hiragana' actually means 'smooth' or 'ordinary' kana. It is paired with 'Katakana' which translates to 'fragmented' or 'partial' kana!",
     "Linguistic secret: The character 'ん' (n) is the only native Japanese consonant that doesn't hook directly with a vowel sound. It is a solo dancer in poetry!",
-    "Study tip: N5 covers about 100 Kanji and 300–500 everyday words. A little practice daily adds up fast!",
+    "Study tip: N5 covers about 145 Kanji and 300–500 everyday words. A little practice daily adds up fast!",
     "Cultural whisper: When studying, try sipping green tea (お茶 - o-cha). The dynamic L-Theanine sparks high alpha-waves inside the brain, boosting focus and memory retention!",
     "Drawing tip: Drawing stroke directions always travel from Top-to-Bottom and Left-to-Right. Try it out on the trace board!"
   ];
@@ -3907,6 +3911,8 @@ export default function App() {
     setVocabsSearch,
     vocabsCategory,
     setVocabsCategory,
+    kanjiSearch,
+    setKanjiSearch,
     stats,
     setStats,
     showToast,

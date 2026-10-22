@@ -876,7 +876,7 @@ export const HIRAGANA_DATA: HiraganaItem[] = [
   }
 ];
 
-// EXACTLY 100 ANCIENT & BASIC N5 WORTHY KANJI
+// EXACTLY 145 ANCIENT & BASIC N5 WORTHY KANJI
 export const KANJI_DATA: KanjiItem[] = [
   // Numbers (1-10, 100, 1000, 10000, Yen) [14]
   { kanji: "一", meaning: "One", onyomi: "イチ", onyomiRomaji: "ichi", kunyomi: "ひと-つ", kunyomiRomaji: "hito-tsu", mnemonic: "A single horizontal stroke representing one base unit.", strokeCount: 1, examples: [{ japanese: "一つ (ひとつ)", romaji: "hitotsu", english: "One (general object)" }, { japanese: "一日 (ついたち)", romaji: "tsuitachi", english: "1st day of month" }] },

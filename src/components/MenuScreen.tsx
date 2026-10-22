@@ -27,11 +27,13 @@ import {
   Table2,
   GraduationCap,
   User,
+  X,
 } from "lucide-react";
 
 import { HIRAGANA_DATA, KATAKANA_DATA, KANJI_DATA, VOCABULARY_DATA } from "../data";
 import { HiraganaItem, KatakanaItem, StudentStats, SRSCard } from "../types";
 import { formatSessionLine, formatWaitingLine, type SessionSummary } from "../srsScheduler";
+import { isKanjiQueryActive, searchKanji } from "../kanjiSearch";
 import wonderingImg from "../assets/images/astra-wondering.jpeg";
 import excitedImg from "../assets/images/astra-excited.png.jpeg";
 import companionImg from "../assets/images/synthid-removed-Gemini_Generated_Image_csh1tcsh1tcsh1tc.png";
@@ -191,6 +193,9 @@ interface MenuScreenProps {
   setVocabsSearch: React.Dispatch<React.SetStateAction<string>>;
   vocabsCategory: string;
   setVocabsCategory: React.Dispatch<React.SetStateAction<string>>;
+  // Learn tab: kanji catalog search (C2). The query lives in App so it survives a trip into Kanji Scroll and back.
+  kanjiSearch: string;
+  setKanjiSearch: React.Dispatch<React.SetStateAction<string>>;
   stats: StudentStats;
   setStats: React.Dispatch<React.SetStateAction<StudentStats>>;
   showToast: (message: string) => void;
@@ -254,6 +259,15 @@ function useHandleToggleVocabularyLearned(
   };
 }
 
+// C2: one focus ring for the new search controls (same recipe as the dock).
+const SEARCH_FOCUS_RING = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-natural-forest";
+
+/** The query as shown in a message: trimmed, and cut so a pasted paragraph cannot flood the line. */
+function shortQuery(query: string): string {
+  const q = query.trim();
+  return q.length > 30 ? `${q.slice(0, 30)}…` : q;
+}
+
 export default function MenuScreen(props: MenuScreenProps) {
   const {
     setCurrentScreen,
@@ -286,6 +300,8 @@ export default function MenuScreen(props: MenuScreenProps) {
     setVocabsSearch,
     vocabsCategory,
     setVocabsCategory,
+    kanjiSearch,
+    setKanjiSearch,
     stats,
     setStats,
     showToast,
@@ -307,6 +323,46 @@ export default function MenuScreen(props: MenuScreenProps) {
   } = props;
 
   const handleToggleVocabularyLearned = useHandleToggleVocabularyLearned(stats, setStats, showToast);
+
+  // ── C2: kanji catalog search ──
+  // `kanjiMatches` holds ORIGINAL indexes into KANJI_DATA (never positions in the filtered list), already
+  // ranked. A tile opens its card with that original index, so Prev and Next in Kanji Scroll still walk the full list.
+  const kanjiMatches = React.useMemo(() => searchKanji(KANJI_DATA, kanjiSearch), [kanjiSearch]);
+  const kanjiSearchActive = isKanjiQueryActive(kanjiSearch);
+  const kanjiGridRef = React.useRef<HTMLDivElement | null>(null);
+  // Clear buttons unmount themselves once the text is gone, so each one hands focus back to its field.
+  const kanjiInputRef = React.useRef<HTMLInputElement | null>(null);
+  const wordInputRef = React.useRef<HTMLInputElement | null>(null);
+  const clearKanjiSearch = () => {
+    setKanjiSearch("");
+    kanjiInputRef.current?.focus();
+  };
+  const clearWordSearch = () => {
+    setVocabsSearch("");
+    wordInputRef.current?.focus();
+  };
+  // A new query starts at the best match: the grid scrolls inside its card, and a leftover scroll offset would hide the top results.
+  React.useEffect(() => {
+    if (kanjiGridRef.current) kanjiGridRef.current.scrollTop = 0;
+  }, [kanjiSearch]);
+  const openKanjiCard = (idx: number) => {
+    setCurrentKanjiIndex(idx);
+    setCurrentScreen("kanji-scroll");
+    speakJapanese(KANJI_DATA[idx].kanji);
+  };
+  const isKanjiStudied = (kanji: string) => (stats.characterProgress?.[kanji]?.total || 0) > 0;
+  const studiedKanjiCount = KANJI_DATA.reduce((n, k) => n + (isKanjiStudied(k.kanji) ? 1 : 0), 0);
+
+  // ── Word search: the same filter the list always used, now computed once so the count and the empty line agree with it ──
+  const filteredVocabulary = React.useMemo(() => VOCABULARY_DATA.filter((v) => {
+    const categoryMatches = vocabsCategory === "all" || v.category === vocabsCategory;
+    const matchesQuery = !vocabsSearch ||
+      v.word.toLowerCase().includes(vocabsSearch.toLowerCase()) ||
+      v.hiragana.toLowerCase().includes(vocabsSearch.toLowerCase()) ||
+      v.romaji.toLowerCase().includes(vocabsSearch.toLowerCase()) ||
+      v.english.toLowerCase().includes(vocabsSearch.toLowerCase());
+    return categoryMatches && matchesQuery;
+  }), [vocabsCategory, vocabsSearch]);
 
   // Review Deck text: "Today: 25 reviews · 5 new · about 5 min", with a quiet "+120 waiting" line beneath.
   const sessionLine = formatSessionLine(sessionSummary);
@@ -895,36 +951,121 @@ export default function MenuScreen(props: MenuScreenProps) {
                         <div className="flex items-center justify-between">
                           <h4 className="font-serif font-extrabold text-base text-natural-forest flex items-center gap-2">
                             <BookMarked className="w-4 h-4 text-natural-forest" />
-                            Ancient N5 Kanji Catalog (100 Chars)
+                            Ancient N5 Kanji Catalog ({KANJI_DATA.length} Chars)
                           </h4>
                           <span className="text-[10px] font-mono text-natural-clay bg-natural-clay/10 px-2.5 py-0.5 rounded font-bold uppercase">Grid Trace Desk</span>
                         </div>
                         <p className="text-xs text-natural-forest-light/90 font-medium mt-1">
-                          N5 fluency requires 100 core Kanji covering basic counts, celestial bodies, body positions, and core action verbs. Click any Kanji below to unlock its dedicated tracing guidelines board!
+                          {KANJI_DATA.length} core Kanji covering basic counts, celestial bodies, body positions, and core action verbs. Search by character, meaning or reading, then tap any Kanji to open its dedicated tracing board.
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-10 gap-2.5 mt-2 max-h-[380px] overflow-y-auto pr-1">
-                        {KANJI_DATA.map((item, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => {
-                              setCurrentKanjiIndex(idx);
-                              setCurrentScreen("kanji-scroll");
-                              speakJapanese(item.kanji);
-                            }}
-                            className="p-3 bg-natural-bg/50 border border-natural-border/50 hover:bg-natural-card hover:border-natural-clay rounded-xl text-center group cursor-pointer transition"
-                          >
-                            <span className="block text-2xl font-serif text-natural-forest font-bold mb-1 group-hover:scale-110 transition duration-200">
-                              {item.kanji}
-                            </span>
-                            <span className="text-[9px] font-mono text-natural-forest-light/80 uppercase font-bold truncate block">
-                              {item.meaning}
-                            </span>
-                          </button>
-                        ))}
+                      {/* C2: search. Visible label, 44 px field, Clear while there is text, a polite live count. */}
+                      <div>
+                        <label htmlFor="kanji-catalog-search" className="block text-xs font-bold text-natural-forest mb-1.5">
+                          Search kanji
+                        </label>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                          <div className="relative w-full sm:flex-1">
+                            <Search className="w-4 h-4 text-natural-forest-light/60 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
+                            <input
+                              id="kanji-catalog-search"
+                              ref={kanjiInputRef}
+                              type="search"
+                              value={kanjiSearch}
+                              onChange={(e) => setKanjiSearch(e.target.value)}
+                              onKeyDown={(e) => {
+                                // Enter and Escape belong to the IME while it is composing (keyCode 229 is Safari's late signal).
+                                if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                                if (e.key === "Escape" && kanjiSearch) {
+                                  // Consumed here: the tour and the dock skip a key that is already handled.
+                                  e.preventDefault();
+                                  setKanjiSearch("");
+                                } else if (e.key === "Enter") {
+                                  if (kanjiMatches.length === 1) {
+                                    e.preventDefault();
+                                    openKanjiCard(kanjiMatches[0]);
+                                  } else if (window.matchMedia?.("(pointer: coarse)").matches) {
+                                    // Phone keyboards: the Search key puts the keyboard away so the results are visible.
+                                    e.currentTarget.blur();
+                                  }
+                                }
+                              }}
+                              placeholder="Kanji, meaning or reading"
+                              enterKeyHint="search"
+                              autoComplete="off"
+                              autoCapitalize="off"
+                              autoCorrect="off"
+                              spellCheck={false}
+                              className={`w-full min-h-11 pl-9 ${kanjiSearch ? "pr-11" : "pr-3"} bg-natural-bg font-serif text-base sm:text-sm border border-natural-border focus:border-natural-forest rounded-xl text-natural-charcoal font-medium [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none ${SEARCH_FOCUS_RING}`}
+                            />
+                            {kanjiSearch && (
+                              <button
+                                type="button"
+                                onClick={clearKanjiSearch}
+                                aria-label="Clear kanji search"
+                                className={`absolute right-0 top-0 flex h-11 w-11 items-center justify-center rounded-xl text-natural-forest-light hover:text-natural-forest cursor-pointer transition ${SEARCH_FOCUS_RING}`}
+                              >
+                                <X className="w-4 h-4" aria-hidden="true" />
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between gap-3 sm:justify-end">
+                            <p role="status" aria-live="polite" className="text-xs font-mono font-bold text-natural-forest-light tabular-nums">
+                              {kanjiSearchActive ? `${kanjiMatches.length} of ${KANJI_DATA.length} kanji` : `${KANJI_DATA.length} kanji`}
+                            </p>
+                            {studiedKanjiCount > 0 && (
+                              <span aria-hidden="true" className="flex items-center gap-1.5 text-[11px] font-sans font-semibold text-natural-forest-light">
+                                <span className="h-1.5 w-1.5 rounded-full bg-natural-sage" />
+                                Studied
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
+
+                      {kanjiMatches.length > 0 ? (
+                        <div ref={kanjiGridRef} className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-10 gap-2.5 mt-2 max-h-[380px] overflow-y-auto pr-1">
+                          {kanjiMatches.map((idx) => {
+                            const item = KANJI_DATA[idx];
+                            const studied = isKanjiStudied(item.kanji);
+                            return (
+                              <div key={item.kanji} className="relative">
+                                <button
+                                  type="button"
+                                  onClick={() => openKanjiCard(idx)}
+                                  title={item.meaning}
+                                  className={`h-full w-full px-1.5 py-2.5 bg-natural-bg/50 border border-natural-border/50 hover:bg-natural-card hover:border-natural-clay rounded-xl text-center group cursor-pointer transition ${SEARCH_FOCUS_RING}`}
+                                >
+                                  <span className="block text-2xl font-serif text-natural-forest font-bold mb-1 group-hover:scale-110 transition duration-200">
+                                    {item.kanji}
+                                  </span>
+                                  <span className="block min-h-[2.5em] text-[10px] leading-tight font-sans font-semibold text-natural-forest-light break-words line-clamp-2">
+                                    {item.meaning}
+                                  </span>
+                                  {studied && <span className="sr-only">, studied</span>}
+                                </button>
+                                {studied && (
+                                  <span aria-hidden="true" className="pointer-events-none absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-natural-sage" />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="mt-2 flex flex-col items-center gap-3 rounded-2xl border border-dashed border-natural-border bg-natural-bg/40 px-4 py-8 text-center">
+                          <p className="max-w-xs text-sm font-medium text-natural-forest-light break-words">
+                            No kanji match "{shortQuery(kanjiSearch)}". Try an English meaning (water) or a reading (mizu).
+                          </p>
+                          <button
+                            type="button"
+                            onClick={clearKanjiSearch}
+                            className={`min-h-11 rounded-xl border border-natural-border bg-natural-card px-4 text-xs font-bold text-natural-forest hover:border-natural-forest cursor-pointer transition ${SEARCH_FOCUS_RING}`}
+                          >
+                            Clear search
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -951,10 +1092,22 @@ export default function MenuScreen(props: MenuScreenProps) {
                             type="text"
                             value={vocabsSearch}
                             onChange={(e) => setVocabsSearch(e.target.value)}
+                            ref={wordInputRef}
                             placeholder="Search by english, romaji, kanji..."
-                            className="w-full pl-9 pr-4 py-2 bg-natural-bg font-serif text-sm border border-natural-border focus:border-natural-forest rounded-xl outline-none text-natural-charcoal font-medium"
+                            aria-label="Search words"
+                            className={`w-full min-h-11 pl-9 ${vocabsSearch ? "pr-11" : "pr-4"} py-2 bg-natural-bg font-serif text-sm border border-natural-border focus:border-natural-forest rounded-xl outline-none text-natural-charcoal font-medium`}
                           />
-                          <Search className="w-4 h-4 text-natural-forest-light/60 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <Search className="w-4 h-4 text-natural-forest-light/60 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
+                          {vocabsSearch && (
+                            <button
+                              type="button"
+                              onClick={clearWordSearch}
+                              aria-label="Clear word search"
+                              className={`absolute right-0 top-0 flex h-11 w-11 items-center justify-center rounded-xl text-natural-forest-light hover:text-natural-forest cursor-pointer transition ${SEARCH_FOCUS_RING}`}
+                            >
+                              <X className="w-4 h-4" aria-hidden="true" />
+                            </button>
+                          )}
                         </div>
 
                         <div>
@@ -977,17 +1130,13 @@ export default function MenuScreen(props: MenuScreenProps) {
                         </div>
                       </div>
 
+                      <p role="status" aria-live="polite" className="text-xs font-mono font-bold text-natural-forest-light tabular-nums">
+                        {vocabsSearch || vocabsCategory !== "all" ? `${filteredVocabulary.length} of ${VOCABULARY_DATA.length} words` : `${VOCABULARY_DATA.length} words`}
+                      </p>
+
                       {/* Vocabulary list display */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[360px] overflow-y-auto pr-1 mt-1">
-                        {VOCABULARY_DATA.filter((v) => {
-                          const categoryMatches = vocabsCategory === "all" || v.category === vocabsCategory;
-                          const matchesQuery = !vocabsSearch ||
-                            v.word.toLowerCase().includes(vocabsSearch.toLowerCase()) ||
-                            v.hiragana.toLowerCase().includes(vocabsSearch.toLowerCase()) ||
-                            v.romaji.toLowerCase().includes(vocabsSearch.toLowerCase()) ||
-                            v.english.toLowerCase().includes(vocabsSearch.toLowerCase());
-                          return categoryMatches && matchesQuery;
-                        }).map((voc) => {
+                        {filteredVocabulary.map((voc) => {
                           const isMastered = !!stats.vocabularyProgress[voc.word];
                           return (
                             <div
@@ -1057,6 +1206,25 @@ export default function MenuScreen(props: MenuScreenProps) {
                           );
                         })}
                       </div>
+
+                      {filteredVocabulary.length === 0 && (
+                        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-natural-border bg-natural-bg/40 px-4 py-8 text-center">
+                          <p className="max-w-xs text-sm font-medium text-natural-forest-light break-words">
+                            {vocabsSearch
+                              ? `No words match "${shortQuery(vocabsSearch)}". Try an English meaning or a romaji spelling.`
+                              : "No words in this theme yet. Try another theme."}
+                          </p>
+                          {vocabsSearch && (
+                            <button
+                              type="button"
+                              onClick={clearWordSearch}
+                              className={`min-h-11 rounded-xl border border-natural-border bg-natural-card px-4 text-xs font-bold text-natural-forest hover:border-natural-forest cursor-pointer transition ${SEARCH_FOCUS_RING}`}
+                            >
+                              Clear search
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

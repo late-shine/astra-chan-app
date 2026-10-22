@@ -540,14 +540,16 @@ export default function KanjiScrollScreen({
             <button
               type="button"
               onClick={() => setCurrentScreen("menu")}
-              aria-label="Exit to Dojo"
-              className="-ml-2 flex min-h-10 cursor-pointer items-center gap-1 rounded-xl px-2 text-sm font-bold text-natural-forest-light transition hover:bg-natural-forest/10 hover:text-natural-forest"
+              aria-label="Back to Study Room"
+              className="-ml-2 flex min-h-10 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-xl px-2 text-sm font-bold text-natural-forest-light transition hover:bg-natural-forest/10 hover:text-natural-forest"
             >
-              <ChevronLeft className="w-4 h-4" /> Dojo
+              <ChevronLeft className="w-4 h-4" /> Study Room
             </button>
 
-            <p className="kz-label tabular-nums">
-              Kanji {currentKanjiIndex + 1} / {kanjiData.length}
+            {/* Polite and atomic: Prev and Next change the number, and a screen reader hears "Kanji 5 / 145".
+                On phones the word "Kanji" is visually dropped so "Study Room" and the toggle keep one line each. */}
+            <p className="kz-label tabular-nums whitespace-nowrap" aria-live="polite" aria-atomic="true">
+              <span className="sr-only sm:not-sr-only">Kanji </span>{currentKanjiIndex + 1} / {kanjiData.length}
             </p>
 
             {/* Quick-Flip Memorization Recall Mode Trigger */}
@@ -558,7 +560,7 @@ export default function KanjiScrollScreen({
                 setIsRecallMode(!isRecallMode);
                 showToast(isRecallMode ? "Switched to Learn Mode! 👁️" : "Recall Practice Mode Activated! 🧠 Try testing yourself!");
               }}
-              className={`-mr-2 flex min-h-10 cursor-pointer items-center gap-1.5 rounded-xl px-2.5 text-sm font-bold transition-all ${
+              className={`-mr-2 flex min-h-10 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 text-sm font-bold transition-all ${
                 isRecallMode
                   ? "bg-natural-clay kz-on-accent shadow-sm"
                   : "text-natural-clay hover:bg-natural-clay/10"
