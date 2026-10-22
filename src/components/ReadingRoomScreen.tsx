@@ -359,9 +359,6 @@ export default function ReadingRoomScreen({
 
   return (
     <motion.section
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
       className="w-full space-y-6 pb-8 max-w-6xl mx-auto"
     >
       {/* Top Header Navigation */}

@@ -138,8 +138,6 @@ export default function OnlineMultiplayerScreen({
     Boolean(playerUid && playerUid !== myUid && !friendUidSet.has(playerUid));
 
   return (<motion.div
-              initial={{ opacity: 0, scale: 0.97 }}
-              animate={{ opacity: 1, scale: 1 }}
               className="bg-natural-card border border-natural-border/70 p-6 rounded-3xl flex flex-col items-center shadow-lg backdrop-blur gap-5 min-h-[400px] justify-center"
             >
               {/* ── MENU PHASE ── */}

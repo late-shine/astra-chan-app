@@ -145,6 +145,7 @@ import OnlineMultiplayerScreen from "./components/OnlineMultiplayerScreen";
 import { useSRS } from "./hooks/useSRS";
 import { mergeSrsCards, mergeSrsSettings, normalizeSrsCards, normalizeSrsSettings } from "./srsScheduler";
 import { hasProgress, mergeTips, sanitizeTips, TIP_IDS, type TipId } from "./tips";
+import { SCREEN_SETTLE_MS, SCREEN_VARIANTS, SCREEN_VARIANTS_REDUCED } from "./screenMotion";
 import wonderingImg from "./assets/images/astra-wondering.jpeg";
 import excitedImg from "./assets/images/astra-excited.png.jpeg";
 import bgMistySakura from "./assets/images/bg_misty_sakura.jpg";
@@ -258,19 +259,25 @@ function accountErrorMessage(error: any, fallback: string): string {
 
 // Phase S1: mergeSrsCards (lastReviewed-based cloud merge) now lives in src/srsScheduler.ts.
 
-/* ===== PHASE 3A: DIRECTION-AWARE 3D SCREEN TRANSITIONS ===== */
-// `custom` carries the direction sign: +1 going deeper (menu -> room), -1 coming back.
-const SCREEN_VARIANTS = {
-  enter: (direction: number) => ({ rotateY: 15 * direction, opacity: 0, scale: 0.95 }),
-  center: { rotateY: 0, opacity: 1, scale: 1 },
-  exit: (direction: number) => ({ rotateY: -15 * direction, opacity: 0, scale: 0.95 }),
-};
-
-// Vestibular-safe fallback: no rotation, no scale, just a short fade.
-const SCREEN_VARIANTS_REDUCED = {
-  enter: { opacity: 0 },
-  center: { opacity: 1 },
-  exit: { opacity: 0 },
+/* ===== POLISH C3 / C3b: CALM SCREEN TRANSITIONS ===== */
+// The App router below is the ONLY owner of page motion: screens do not animate their own outer
+// root. The motion itself (variants, timings, rise) lives in ./screenMotion so the menu's
+// Study Room swap uses exactly the same one.
+// Short screen names: the accessible name of the router wrapper that receives focus after a
+// navigation (see handleScreenSettled).
+const SCREEN_TITLES: Record<string, string> = {
+  "menu": "Main menu",
+  "quiz": "Quiz",
+  "kanji-scroll": "Kanji study",
+  "profile": "Profile",
+  "results": "Quiz results",
+  "online-multiplayer": "Online speed duel",
+  "review-deck": "Review Deck",
+  "vocab-quiz": "Vocabulary quiz",
+  "kanji-quiz": "Kanji quiz",
+  "charts": "Reference charts",
+  "grammar-dojo": "Grammar Dojo",
+  "reading-room": "Reading Room",
 };
 
 // Polish A1: the music track, volume and a hand-picked background scene are remembered on
@@ -315,21 +322,19 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState<"menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo" | "reading-room">("menu");
   const [quizMode, setQuizMode] = useState<"choice" | "romaji" | "survival">("choice");
 
-  /* ===== PHASE 3A: SCREEN TRANSITION STATE ===== */
+  /* ===== POLISH C3: SCREEN TRANSITION STATE ===== */
   const prefersReducedMotion = useReducedMotion();
-  // Perspective is armed only while a transition runs — a permanent perspective on
-  // <main> would make it the containing block for the fixed-position Star Chart drawer.
+  // isTransitioning is true from a screen change until the new screen has finished entering.
+  // The guided tour reads it: it hides its ring and does not measure while this is true.
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const prevScreenRef = useRef(currentScreen);
-  const screenDirectionRef = useRef(1);
   const screenMountedRef = useRef(false);
-  // Depth model: "menu" is depth 0, every other screen is depth 1.
-  // Computed during render so the sign is correct on the very frame the swap happens.
-  if (prevScreenRef.current !== currentScreen) {
-    screenDirectionRef.current = currentScreen === "menu" ? -1 : 1;
-    prevScreenRef.current = currentScreen;
-  }
-  const screenDirection = screenDirectionRef.current;
+  // The newest screen, assigned during render (like statsRef). Handlers that belong to an
+  // OUTGOING screen are frozen with their old closure, so they compare against this at event time.
+  const latestScreenRef = useRef(currentScreen);
+  latestScreenRef.current = currentScreen;
+  // True from a real navigation until focus has been considered once for the new screen.
+  const screenFocusPendingRef = useRef(false);
+  const routerNodeRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     // Skip the very first mount: AnimatePresence has initial={false}, so nothing
@@ -339,10 +344,31 @@ export default function App() {
       return;
     }
     setIsTransitioning(true);
-    // Failsafe so perspective can never get stuck on if a completion callback is missed.
-    const failsafe = window.setTimeout(() => setIsTransitioning(false), 1200);
+    screenFocusPendingRef.current = true;
+    // Failsafe so the flag can never stay on if a completion callback is missed
+    // (a full swap is about 0.8 s; the value lives in ./screenMotion).
+    const failsafe = window.setTimeout(() => setIsTransitioning(false), SCREEN_SETTLE_MS);
     return () => window.clearTimeout(failsafe);
   }, [currentScreen]);
+
+  // Called when a screen's enter animation completes. Only the NEWEST screen may clear the flag
+  // or take focus: with rapid taps an older screen can finish late and must stay silent.
+  // Focus moves to the screen wrapper only when it has nowhere better to be (body, or the element
+  // that was just removed). A focused field (the Quiz romaji input), the dock, the guided tour or
+  // an open modal keeps focus.
+  const handleScreenSettled = (settledScreen: string) => {
+    if (settledScreen !== latestScreenRef.current) return;
+    setIsTransitioning(false);
+    if (!screenFocusPendingRef.current) return;
+    screenFocusPendingRef.current = false;
+    const node = routerNodeRef.current;
+    if (!node) return;
+    const active = document.activeElement;
+    const focusIsLost = !active || active === document.body || active === document.documentElement || !document.body.contains(active);
+    if (!focusIsLost) return;
+    if (document.querySelector('[aria-modal="true"]')) return;
+    node.focus({ preventScroll: true });
+  };
 
   // Student Statistics State (with Local Storage Persistence)
   const [stats, setStats] = useState<StudentStats>({
@@ -4338,21 +4364,24 @@ export default function App() {
         />
       </React.Fragment>
 
-      {/* Global Toast Notification */}
-      <AnimatePresence>
-        {toastMessage && (
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 15 }}
-            className="fixed inset-x-0 mx-auto w-fit pointer-events-none bottom-[min(calc(5rem+env(safe-area-inset-bottom,0px)+var(--toast-lift,0px)),calc(100dvh-4rem))] sm:bottom-6 z-50 max-w-[calc(100vw-2rem)] sm:max-w-sm leading-snug px-5 py-2.5 rounded-2xl border border-natural-clay/40 bg-natural-card text-natural-clay text-xs font-mono shadow-xl flex items-center gap-2"
-            style={{ "--toast-lift": `${dockPanelHeight}px` }}
-          >
-            <Sparkles className="w-3.5 h-3.5 shrink-0 motion-safe:animate-spin text-natural-clay" />
-            <span className="font-semibold">{toastMessage}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Global Toast Notification (Polish C3: the container is a persistent polite live region,
+          so a toast that appears inside it is announced; the toast itself is unchanged) */}
+      <div role="status" aria-live="polite" aria-atomic="true">
+        <AnimatePresence>
+          {toastMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 15 }}
+              className="fixed inset-x-0 mx-auto w-fit pointer-events-none bottom-[min(calc(5rem+env(safe-area-inset-bottom,0px)+var(--toast-lift,0px)),calc(100dvh-4rem))] sm:bottom-6 z-50 max-w-[calc(100vw-2rem)] sm:max-w-sm leading-snug px-5 py-2.5 rounded-2xl border border-natural-clay/40 bg-natural-card text-natural-clay text-xs font-mono shadow-xl flex items-center gap-2"
+              style={{ "--toast-lift": `${dockPanelHeight}px` }}
+            >
+              <Sparkles className="w-3.5 h-3.5 shrink-0 motion-safe:animate-spin text-natural-clay" />
+              <span className="font-semibold">{toastMessage}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* ================= CHARACTER PICKER MODAL ================= */}
       <AnimatePresence>
@@ -4640,11 +4669,11 @@ export default function App() {
                   {/* Lit flame with glowing animation or cold state */}
                   {stats.streakCount > 0 ? (
                     <motion.div
-                      animate={{
+                      animate={prefersReducedMotion ? { scale: 1, rotate: 0 } : {
                         scale: [1, 1.2, 0.95, 1.15, 1],
                         rotate: [-3, 3, -1, 2, -3],
                       }}
-                      transition={{
+                      transition={prefersReducedMotion ? { duration: 0 } : {
                         repeat: Infinity,
                         duration: 1.8,
                         ease: "easeInOut",
@@ -5036,28 +5065,35 @@ export default function App() {
         </div>
         )}
 
-        {/* MAIN ROUTER SWITCH CONTAINER */}
-        <main
-          className="flex-grow flex flex-col justify-center"
-          style={isTransitioning && !prefersReducedMotion ? { perspective: "1200px" } : undefined}
-        >
+        {/* MAIN ROUTER SWITCH CONTAINER (Polish C3: the only owner of page motion; no perspective) */}
+        <main className="flex-grow flex flex-col justify-center">
         <AnimatePresence
           mode="wait"
           initial={false}
-          custom={screenDirection}
-          onExitComplete={() => window.scrollTo({ top: 0 })}
+          onExitComplete={() => window.scrollTo({ top: 0, left: 0, behavior: "instant" })}
         >
         <motion.div
           key={currentScreen}
-          className="flex-grow flex flex-col justify-center"
-          custom={screenDirection}
+          ref={routerNodeRef}
+          role="region"
+          aria-label={SCREEN_TITLES[currentScreen] ?? "Screen"}
+          tabIndex={-1}
+          className="flex-grow flex flex-col justify-center outline-none"
           variants={prefersReducedMotion ? SCREEN_VARIANTS_REDUCED : SCREEN_VARIANTS}
           initial="enter"
           animate="center"
           exit="exit"
-          transition={prefersReducedMotion ? { duration: 0.2, ease: "easeInOut" } : { duration: 0.35, ease: "easeInOut" }}
+          onClickCapture={(event) => {
+            // This element is the OUTGOING screen when a newer screen is already current
+            // (its props are frozen while it exits). A tap on it during the short exit is
+            // swallowed so it cannot route somewhere the learner no longer means.
+            if (currentScreen !== latestScreenRef.current) {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          }}
           onAnimationComplete={(definition) => {
-            if (definition === "center") setIsTransitioning(false);
+            if (definition === "center") handleScreenSettled(currentScreen);
           }}
         >
 
@@ -5173,7 +5209,7 @@ export default function App() {
           <p className="text-xs text-natural-forest-light font-serif italic mb-1">
             Keep studying — every character brings you closer to fluency. 🌸
           </p>
-          <span className="text-[9px] text-[#7A8E7C] font-mono tracking-widest uppercase font-bold">
+          <span className="text-[9px] text-natural-sage font-mono tracking-widest uppercase font-bold">
             Progress saved automatically
           </span>
         </footer>

@@ -527,8 +527,6 @@ export default function KanjiScrollScreen({
   return (
     <>
       <motion.div
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
         className="grid grid-cols-1 md:grid-cols-5 gap-6"
       >
         {/* Left Column: Traditional Premium Kanji Card & Radicals */}

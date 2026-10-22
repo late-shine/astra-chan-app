@@ -1011,10 +1011,6 @@ export default function ReferenceCharts({ onBack, speakJapanese }: ReferenceChar
   return (
     <SpeakContext.Provider value={speakJapanese}>
     <motion.div
-      initial={{ opacity: 0, x: 50 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -50 }}
-      transition={{ type: "spring", damping: 25, stiffness: 180 }}
       className="bg-natural-card/35 border-2 border-natural-border/30 rounded-3xl p-5 sm:p-7 shadow-[0_20px_50px_rgba(0,0,0,0.3)] backdrop-blur-xl hover:shadow-[0_20px_50px_rgba(188,163,240,0.15)] w-full flex flex-col gap-5 select-none transition-all duration-500"
     >
       

@@ -59,8 +59,6 @@ export default function ResultsScreen({
 }: ResultsScreenProps) {
   return (
             <motion.div
-              initial={{ opacity: 0, scale: 0.97 }}
-              animate={{ opacity: 1, scale: 1 }}
               className="flex flex-col gap-5"
             >
               {/* Results header card */}

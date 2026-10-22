@@ -4,7 +4,7 @@
  */
 
 import React from "react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import TiltCard from "./TiltCard";
 import {
   Flame,
@@ -34,6 +34,7 @@ import { HIRAGANA_DATA, KATAKANA_DATA, KANJI_DATA, VOCABULARY_DATA } from "../da
 import { HiraganaItem, KatakanaItem, StudentStats, SRSCard } from "../types";
 import { formatSessionLine, formatWaitingLine, type SessionSummary } from "../srsScheduler";
 import { isKanjiQueryActive, searchKanji } from "../kanjiSearch";
+import { SCREEN_VARIANTS, SCREEN_VARIANTS_REDUCED } from "../screenMotion";
 import wonderingImg from "../assets/images/astra-wondering.jpeg";
 import excitedImg from "../assets/images/astra-excited.png.jpeg";
 import companionImg from "../assets/images/synthid-removed-Gemini_Generated_Image_csh1tcsh1tcsh1tc.png";
@@ -368,12 +369,19 @@ export default function MenuScreen(props: MenuScreenProps) {
   const sessionLine = formatSessionLine(sessionSummary);
   const waitingLine = formatWaitingLine(sessionSummary);
   const sessionToDo = sessionSummary.total;
+  const reduceMotion = useReducedMotion();
 
   return (
+            // C3b: the Study Room and the Bookshelf / Writing Desk hub swap with the same soft fade
+            // as the screens (keyed, wait mode). Nothing else about the layout changes.
+            <AnimatePresence mode="wait" initial={false}>
             <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
+              key={showStudyRoom ? "study-room" : "study-hub"}
               className="flex flex-col gap-6"
+              variants={reduceMotion ? SCREEN_VARIANTS_REDUCED : SCREEN_VARIANTS}
+              initial="enter"
+              animate="center"
+              exit="exit"
             >
               {showStudyRoom ? (
                 <div className="relative overflow-hidden rounded-3xl glass-card-elevated p-5 sm:p-7">
@@ -1553,5 +1561,6 @@ export default function MenuScreen(props: MenuScreenProps) {
                 </>
               )}
             </motion.div>
+            </AnimatePresence>
   );
 }

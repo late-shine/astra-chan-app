@@ -424,3 +424,16 @@ input, select, textarea, button {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Polish C3: idle CSS loops stop in one place when the OS asks for reduced motion (pulses,
+   the slow spin and the bounces). Loading spinners (animate-spin) are real progress feedback
+   and keep turning. Loops driven by the Motion library are gated where they are written. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .animate-pulse-slow,
+  .animate-spin-slow,
+  .animate-bounce,
+  .animate-bounce-slow {
+    animation: none;
+  }
+}

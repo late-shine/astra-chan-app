@@ -295,7 +295,7 @@ export default function ReviewDeckScreen({
 
   return (<motion.div
                 key="review-deck-screen"
-                initial={{ opacity: 0, y: 15 }}
+                initial={false}
                 animate={{ opacity: 1, y: 0 }}
                 className="flex flex-col gap-5 max-w-lg mx-auto w-full"
               >
