@@ -9,10 +9,9 @@ import {
   Info, 
   Calendar, 
   BookOpen, 
-  Settings, 
   Sliders, 
   Play, 
-  X,
+  ChevronLeft,
   ArrowRight,
   AlertCircle
 } from "lucide-react";
@@ -764,8 +763,18 @@ const CALENDAR_DAYS = [
 
 // ─── Component Code ────────────────────────────────────────────────────────────
 
-export default function InteractiveWorkbench({ onClose, speakJapanese }: { onClose: () => void; speakJapanese: (phrase: string) => void }) {
-  const [activeMode, setActiveMode] = useState<"counters" | "verbs" | "calendar">("counters");
+// Polish C4: the Sandbox is a page of its own (the Reference Charts drawer is gone). It takes a Back
+// callback instead of a close callback, and `initialMode` picks the first workspace (Reference Charts
+// passes the one that fits the topic the learner was reading). Every selection below lives in this
+// component, so it resets on each visit; nothing is stored or synced.
+export type SandboxMode = "counters" | "verbs" | "calendar";
+
+const FOCUS_RING = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-natural-clay";
+// Inset variant for controls that sit on the panel edge (an outside outline would be clipped there).
+const FOCUS_RING_INSET = "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-natural-clay";
+
+export default function InteractiveWorkbench({ onBack, speakJapanese, initialMode = "counters" }: { onBack: () => void; speakJapanese: (phrase: string) => void; initialMode?: SandboxMode }) {
+  const [activeMode, setActiveMode] = useState<SandboxMode>(initialMode);
 
   // 1. Counter states
   const [selectedNum, setSelectedNum] = useState<number>(3);
@@ -792,75 +801,74 @@ export default function InteractiveWorkbench({ onClose, speakJapanese }: { onClo
   const currentForm = CONJUGATION_FORMS.find((f) => f.id === selectedFormId);
 
   return (
-    <div 
-      className="bg-natural-card/15 border border-white/10 rounded-3xl shadow-2xl backdrop-blur-2xl flex flex-col w-full relative"
-      style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.1), 0 25px 50px rgba(0,0,0,0.35)" }}
-    >
-      
-      {/* WOODEN-STYLE WORKBENCH HEADER */}
-      <div className="bg-white/5 border-b border-white/10 px-5 py-4 flex items-center justify-between shadow-xs">
-        <div className="flex items-center gap-2">
-          <Settings className="w-5 h-5 text-natural-clay animate-spin-slow" />
-          <div>
-            <h3 className="font-serif font-black text-base text-natural-forest leading-none">
-              道場砂盤 <span className="font-sans font-extrabold text-xs text-natural-clay block sm:inline sm:ml-1 uppercase tracking-widest">Mastery Sandbox</span>
-            </h3>
-            <p className="text-[10px] font-mono text-natural-forest-light uppercase mt-0.5 tracking-wider">
-              Interactive phonetic & grammar constructor
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-1.5 rounded-full hover:bg-natural-forest/10 border border-transparent hover:border-natural-border text-natural-charcoal/50 hover:text-natural-charcoal cursor-pointer transition shadow-xs"
-        >
-          <X className="w-4 h-4" />
-        </button>
+    <>
+    {/* PAGE HEADER (Polish C4): labelled Back, the page title, one lead sentence */}
+    <div className="mx-auto mb-4 flex w-full max-w-xl flex-col items-start gap-3">
+      <button
+        type="button"
+        onClick={onBack}
+        className={`inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl border border-natural-border bg-natural-card px-4 text-xs font-mono font-bold text-natural-forest shadow-xs transition hover:border-natural-forest/50 ${FOCUS_RING}`}
+      >
+        <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+        Back to Reference
+      </button>
+      <div>
+        <p lang="ja" className="font-serif text-sm font-black text-natural-clay">道場砂盤</p>
+        <h1 className="font-serif text-2xl font-black leading-tight text-natural-forest">Mastery Sandbox</h1>
+        <p className="mt-1.5 font-sans text-sm leading-relaxed text-natural-charcoal/70">
+          Build counting quantities, practice verb conjugation shifts step by step, or browse the complete 31-day ledger.
+        </p>
       </div>
+    </div>
+
+    {/* WORKBENCH PANEL: a plain token card (no blur, no white tint, no fixed layer), one centred column */}
+    <div className="mx-auto flex w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-natural-border bg-natural-card/40 shadow-sm">
 
       {/* BENCH MODE SELECTOR */}
-      <div className="grid grid-cols-3 bg-white/5 border-b border-white/10 text-xs font-mono font-bold">
+      <div role="group" aria-label="Sandbox workspace" className="grid grid-cols-3 border-b border-natural-border bg-natural-bg/40 text-xs font-mono font-bold">
         <button
           type="button"
           onClick={() => setActiveMode("counters")}
-          className={`py-3 text-center border-r border-white/10 transition cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
+          aria-pressed={activeMode === "counters"}
+          className={`flex min-h-11 cursor-pointer flex-col items-center justify-center gap-1.5 border-r border-natural-border py-3 text-center transition sm:flex-row ${FOCUS_RING_INSET} ${
             activeMode === "counters"
-              ? "bg-white/15 text-natural-forest border-b-2 border-b-natural-forest"
-              : "text-natural-charcoal/60 hover:bg-white/10"
+              ? "border-b-2 border-b-natural-forest bg-natural-card text-natural-forest"
+              : "text-natural-charcoal/60 hover:bg-natural-card/60"
           }`}
         >
-          <span>🔢</span>
+          <span aria-hidden="true">🔢</span>
           <span className="font-serif font-bold">Counters</span>
         </button>
         <button
           type="button"
           onClick={() => setActiveMode("verbs")}
-          className={`py-3 text-center border-r border-white/10 transition cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
+          aria-pressed={activeMode === "verbs"}
+          className={`flex min-h-11 cursor-pointer flex-col items-center justify-center gap-1.5 border-r border-natural-border py-3 text-center transition sm:flex-row ${FOCUS_RING_INSET} ${
             activeMode === "verbs"
-              ? "bg-white/15 text-natural-clay border-b-2 border-b-natural-clay"
-              : "text-natural-charcoal/60 hover:bg-white/10"
+              ? "border-b-2 border-b-natural-clay bg-natural-card text-natural-clay"
+              : "text-natural-charcoal/60 hover:bg-natural-card/60"
           }`}
         >
-          <span>⚡</span>
+          <span aria-hidden="true">⚡</span>
           <span className="font-serif font-bold">Conjugator</span>
         </button>
         <button
           type="button"
           onClick={() => setActiveMode("calendar")}
-          className={`py-3 text-center transition cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
+          aria-pressed={activeMode === "calendar"}
+          className={`flex min-h-11 cursor-pointer flex-col items-center justify-center gap-1.5 py-3 text-center transition sm:flex-row ${FOCUS_RING_INSET} ${
             activeMode === "calendar"
-              ? "bg-white/15 text-natural-terracotta border-b-2 border-b-natural-terracotta"
-              : "text-natural-charcoal/60 hover:bg-white/10"
+              ? "border-b-2 border-b-natural-terracotta bg-natural-card text-natural-terracotta"
+              : "text-natural-charcoal/60 hover:bg-natural-card/60"
           }`}
         >
-          <span>📅</span>
+          <span aria-hidden="true">📅</span>
           <span className="font-serif font-bold">31-Day Ledger</span>
         </button>
       </div>
 
       {/* CORE CONTENT */}
-      <div className="flex-grow p-5 bg-transparent flex flex-col gap-5 min-h-0">
+      <div className="flex-grow p-4 sm:p-5 bg-transparent flex flex-col gap-5 min-h-0">
         
         {/* ─── WORKSPACE: COUNTER SANDBOX ──────────────────────────────────────── */}
         {activeMode === "counters" && (
@@ -877,7 +885,9 @@ export default function InteractiveWorkbench({ onClose, speakJapanese }: { onClo
                     key={c.char}
                     type="button"
                     onClick={() => setSelectedCounter(c.char)}
-                    className={`p-2 rounded-xl text-center border-2 transition cursor-pointer flex flex-col items-center justify-center gap-1 shadow-xs ${
+                    aria-pressed={selectedCounter === c.char}
+                    aria-label={c.name}
+                    className={`min-h-11 p-2 rounded-xl text-center border-2 transition cursor-pointer flex flex-col items-center justify-center gap-1 shadow-xs ${
                       selectedCounter === c.char
                         ? "bg-natural-forest border-natural-forest text-natural-bg font-black scale-102"
                         : "bg-natural-card border-natural-border text-natural-charcoal hover:border-natural-forest/40"
@@ -889,7 +899,7 @@ export default function InteractiveWorkbench({ onClose, speakJapanese }: { onClo
                   </button>
                 ))}
               </div>
-              <p className="text-[10px] text-natural-charcoal/50 italic mt-1.5 font-sans leading-none pl-1">
+              <p className="text-[10px] text-natural-charcoal/50 italic mt-1.5 font-sans leading-snug pl-1">
                 Selected Counter: <strong>{COUNTERS_LIST.find((c) => c.char === selectedCounter)?.name}</strong> · {COUNTERS_LIST.find((c) => c.char === selectedCounter)?.desc}
               </p>
             </div>
@@ -905,51 +915,53 @@ export default function InteractiveWorkbench({ onClose, speakJapanese }: { onClo
                 </span>
               </div>
 
-              {/* Number controls bento */}
-              <div className="flex gap-2 items-center bg-natural-card border border-natural-border rounded-2xl p-2 shadow-inner">
-                <button
-                  type="button"
-                  onClick={() => setSelectedNum((n) => Math.max(1, n - 10))}
-                  className="px-2.5 py-1.5 bg-natural-bg/80 border border-natural-border hover:bg-natural-clay/10 hover:text-natural-clay text-xs font-mono font-bold rounded-lg cursor-pointer transition"
-                  title="Subtract 10"
-                >
-                  -10
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedNum((n) => Math.max(1, n - 1))}
-                  className="px-2.5 py-1.5 bg-natural-bg/80 border border-natural-border hover:bg-natural-clay/10 hover:text-natural-clay text-xs font-mono font-bold rounded-lg cursor-pointer transition"
-                  title="Subtract 1"
-                >
-                  -1
-                </button>
-                
-                {/* Slider bar */}
-                <input
-                  type="range"
-                  min="1"
-                  max="100"
-                  value={selectedNum <= 100 ? selectedNum : 100}
-                  onChange={(e) => setSelectedNum(Number(e.target.value))}
-                  className="flex-grow h-2 bg-natural-border rounded-lg appearance-none cursor-pointer accent-natural-forest mx-2"
-                />
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedNum((n) => Math.min(9999, n + 1))}
-                  className="px-2.5 py-1.5 bg-natural-bg/80 border border-natural-border hover:bg-natural-forest/10 hover:text-natural-forest text-xs font-mono font-bold rounded-lg cursor-pointer transition"
-                  title="Add 1"
-                >
-                  +1
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedNum((n) => Math.min(9999, n + 10))}
-                  className="px-2.5 py-1.5 bg-natural-bg/80 border border-natural-border hover:bg-natural-forest/10 hover:text-natural-forest text-xs font-mono font-bold rounded-lg cursor-pointer transition"
-                  title="Add 10"
-                >
-                  +10
-                </button>
+              {/* Number controls bento: slider row, then four 44 px step buttons */}
+              <div className="flex flex-col gap-2 bg-natural-card border border-natural-border rounded-2xl p-2 shadow-inner">
+                <div className="flex min-h-11 items-center px-2">
+                  <input
+                    type="range"
+                    min="1"
+                    max="100"
+                    value={selectedNum <= 100 ? selectedNum : 100}
+                    onChange={(e) => setSelectedNum(Number(e.target.value))}
+                    aria-label="Quantity"
+                    className="w-full h-2 bg-natural-border rounded-lg appearance-none cursor-pointer accent-natural-forest"
+                  />
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedNum((n) => Math.max(1, n - 10))}
+                    className="min-h-11 bg-natural-bg/80 border border-natural-border hover:bg-natural-clay/10 hover:text-natural-clay text-xs font-mono font-bold rounded-lg cursor-pointer transition"
+                    title="Subtract 10"
+                  >
+                    -10
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedNum((n) => Math.max(1, n - 1))}
+                    className="min-h-11 bg-natural-bg/80 border border-natural-border hover:bg-natural-clay/10 hover:text-natural-clay text-xs font-mono font-bold rounded-lg cursor-pointer transition"
+                    title="Subtract 1"
+                  >
+                    -1
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedNum((n) => Math.min(9999, n + 1))}
+                    className="min-h-11 bg-natural-bg/80 border border-natural-border hover:bg-natural-forest/10 hover:text-natural-forest text-xs font-mono font-bold rounded-lg cursor-pointer transition"
+                    title="Add 1"
+                  >
+                    +1
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedNum((n) => Math.min(9999, n + 10))}
+                    className="min-h-11 bg-natural-bg/80 border border-natural-border hover:bg-natural-forest/10 hover:text-natural-forest text-xs font-mono font-bold rounded-lg cursor-pointer transition"
+                    title="Add 10"
+                  >
+                    +10
+                  </button>
+                </div>
               </div>
 
               {/* Quick Preset Buttons */}
@@ -959,7 +971,8 @@ export default function InteractiveWorkbench({ onClose, speakJapanese }: { onClo
                     key={preset}
                     type="button"
                     onClick={() => setSelectedNum(preset)}
-                    className={`px-3 py-1 rounded-full text-xs font-mono font-bold border cursor-pointer transition ${
+                    aria-pressed={selectedNum === preset}
+                    className={`min-h-11 px-3 rounded-full text-xs font-mono font-bold border cursor-pointer transition ${
                       selectedNum === preset
                         ? "bg-natural-clay text-natural-bg border-natural-clay"
                         : "bg-natural-card border-natural-border text-natural-charcoal/60 hover:border-natural-clay/40"
@@ -992,10 +1005,10 @@ export default function InteractiveWorkbench({ onClose, speakJapanese }: { onClo
               </div>
 
               <div className="flex justify-between items-start z-10 relative">
-                <div>
+                <div className="min-w-0">
                   <span className="font-serif text-[11px] font-extrabold uppercase tracking-widest text-natural-forest-light">Generated Reading</span>
-                  <div className="flex items-center gap-3 mt-1.5">
-                    <span className="font-serif font-black text-4xl text-natural-charcoal tracking-wide leading-none select-all">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
+                    <span className="font-serif font-black text-3xl sm:text-4xl break-all text-natural-charcoal tracking-wide leading-tight select-all">
                       {computedCounterResult.reading}
                     </span>
                     <span className="font-serif text-2xl text-natural-forest-light font-black">
@@ -1032,13 +1045,14 @@ export default function InteractiveWorkbench({ onClose, speakJapanese }: { onClo
               <span className="font-mono text-[9px] uppercase tracking-widest text-natural-forest-light font-extrabold block mb-2">
                 Step 1: Select Verb Dictionary Form
               </span>
-              <div className="flex gap-2 overflow-x-auto pb-1.5 scrollbar-hide">
+              <div className="flex flex-wrap gap-2">
                 {CONJUGATION_VERBS.map((v, idx) => (
                   <button
                     key={v.dict}
                     type="button"
                     onClick={() => setSelectedVerbIdx(idx)}
-                    className={`px-4 py-2 rounded-2xl text-center border-2 whitespace-nowrap cursor-pointer transition shrink-0 flex flex-col gap-0.5 ${
+                    aria-pressed={selectedVerbIdx === idx}
+                    className={`min-h-11 px-4 py-2 rounded-2xl text-center border-2 whitespace-nowrap cursor-pointer transition shrink-0 flex flex-col gap-0.5 ${
                       selectedVerbIdx === idx
                         ? "bg-natural-clay border-natural-clay text-natural-bg font-black scale-102 shadow-xs"
                         : "bg-natural-card border-natural-border text-natural-charcoal hover:border-natural-clay/40"
@@ -1049,7 +1063,7 @@ export default function InteractiveWorkbench({ onClose, speakJapanese }: { onClo
                   </button>
                 ))}
               </div>
-              <p className="text-[10px] text-natural-charcoal/50 italic mt-1.5 font-sans leading-none pl-1">
+              <p className="text-[10px] text-natural-charcoal/50 italic mt-1.5 font-sans leading-snug pl-1">
                 <strong>{currentVerb.meaning}</strong> · {currentVerb.notes}
               </p>
             </div>
@@ -1065,7 +1079,8 @@ export default function InteractiveWorkbench({ onClose, speakJapanese }: { onClo
                     key={f.id}
                     type="button"
                     onClick={() => setSelectedFormId(f.id)}
-                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between h-[65px] shadow-xs ${
+                    aria-pressed={selectedFormId === f.id}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between min-h-16 shadow-xs ${
                       selectedFormId === f.id
                         ? "bg-natural-forest border-natural-forest text-natural-bg"
                         : "bg-natural-card border-natural-border text-natural-charcoal hover:border-natural-forest/40"
@@ -1090,10 +1105,10 @@ export default function InteractiveWorkbench({ onClose, speakJapanese }: { onClo
 
               {/* Head display */}
               <div className="flex justify-between items-start z-10 relative border-b border-natural-border/40 pb-3">
-                <div>
+                <div className="min-w-0">
                   <span className="font-serif text-[11px] font-extrabold uppercase tracking-widest text-natural-forest-light">Resulting Form</span>
-                  <div className="flex items-center gap-3 mt-1.5">
-                    <span className="font-serif font-black text-3xl text-natural-charcoal tracking-wide leading-none select-all">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
+                    <span className="font-serif font-black text-3xl break-all text-natural-charcoal tracking-wide leading-tight select-all">
                       {computedVerbResult.word}
                     </span>
                     <span className="font-serif text-base text-natural-forest-light font-bold">
@@ -1156,7 +1171,7 @@ export default function InteractiveWorkbench({ onClose, speakJapanese }: { onClo
               <span className="font-mono text-[9px] uppercase tracking-widest text-natural-forest-light font-extrabold block mb-2">
                 Select a Day on the Ledger Scroll
               </span>
-              <div className="grid grid-cols-7 gap-1.5 bg-natural-card border border-natural-border rounded-3xl p-3 shadow-inner">
+              <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-7 bg-natural-card border border-natural-border rounded-3xl p-2 sm:p-3 shadow-inner">
                 {CALENDAR_DAYS.map((d, idx) => {
                   const isSelected = selectedDayIdx === idx;
                   const isIrreg = d.type !== "normal";
@@ -1165,6 +1180,8 @@ export default function InteractiveWorkbench({ onClose, speakJapanese }: { onClo
                       key={d.d}
                       type="button"
                       onClick={() => setSelectedDayIdx(idx)}
+                      aria-pressed={isSelected}
+                      aria-label={`Day ${d.d}`}
                       className={`aspect-square p-1 rounded-xl text-center border transition flex flex-col items-center justify-center gap-0.5 cursor-pointer shadow-xs ${
                         isSelected
                           ? "bg-natural-terracotta border-natural-terracotta text-natural-bg scale-105 font-bold shadow-md z-10"
@@ -1202,10 +1219,10 @@ export default function InteractiveWorkbench({ onClose, speakJapanese }: { onClo
               </div>
 
               <div className="flex justify-between items-start z-10 relative">
-                <div>
+                <div className="min-w-0">
                   <span className="font-serif text-[11px] font-extrabold uppercase tracking-widest text-natural-forest-light">Day Ledger Reading</span>
-                  <div className="flex items-center gap-3 mt-1.5">
-                    <span className="font-serif font-black text-3.5xl text-natural-charcoal tracking-wide leading-none select-all">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
+                    <span className="font-serif font-black text-3xl sm:text-4xl break-all text-natural-charcoal tracking-wide leading-tight select-all">
                       {currentDayData.reading}
                     </span>
                     <span className="font-serif text-2xl text-natural-forest-light font-black">
@@ -1238,11 +1255,12 @@ export default function InteractiveWorkbench({ onClose, speakJapanese }: { onClo
       </div>
 
       {/* BENCH BOTTOM TIPS */}
-      <div className="bg-white/5 border-t border-white/10 px-5 py-3.5 text-center text-[10px] font-mono text-natural-forest/60 uppercase tracking-widest font-bold">
+      <div className="bg-natural-bg/40 border-t border-natural-border px-5 py-3.5 text-center text-[10px] font-mono text-natural-forest/60 uppercase tracking-widest font-bold">
         🧰 Click speaker icons for text-to-speech pronunciation checks
       </div>
 
     </div>
+    </>
   );
 }
 

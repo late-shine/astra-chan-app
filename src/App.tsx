@@ -102,7 +102,8 @@ import AtmosphereCanvas from "./components/AtmosphereCanvas";
 import SoundAtmosphereDock, { MUSIC_TRACKS, type DockPanelId, type MusicTrackId } from "./components/SoundAtmosphereDock";
 import GuideTour from "./components/GuideTour";
 import { useMouseParallax } from "./hooks/useMouseParallax";
-import ReferenceCharts from "./components/ReferenceCharts";
+import ReferenceCharts, { type ChartsTabId } from "./components/ReferenceCharts";
+import InteractiveWorkbench, { type SandboxMode } from "./components/InteractiveWorkbench";
 import GrammarDojo from "./components/GrammarDojo";
 import ReadingRoomScreen from "./components/ReadingRoomScreen";
 import { DEFAULT_CLOUD_JAPANESE_VOICE, getCloudJapaneseVoice } from "./voiceCatalog";
@@ -276,6 +277,7 @@ const SCREEN_TITLES: Record<string, string> = {
   "vocab-quiz": "Vocabulary quiz",
   "kanji-quiz": "Kanji quiz",
   "charts": "Reference charts",
+  "sandbox": "Mastery Sandbox",
   "grammar-dojo": "Grammar Dojo",
   "reading-room": "Reading Room",
 };
@@ -319,8 +321,20 @@ export default function App() {
   const bgParallaxX = useTransform(parallaxX, (v) => v * -16);
   const bgParallaxY = useTransform(parallaxY, (v) => v * -10);
   // Screens navigation state
-  const [currentScreen, setCurrentScreen] = useState<"menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "grammar-dojo" | "reading-room">("menu");
+  const [currentScreen, setCurrentScreen] = useState<"menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "sandbox" | "grammar-dojo" | "reading-room">("menu");
   const [quizMode, setQuizMode] = useState<"choice" | "romaji" | "survival">("choice");
+
+  /* ===== POLISH C4: REFERENCE CHARTS TOPIC AND SANDBOX ENTRY MODE (memory only) ===== */
+  // The Charts topic lives here so Back from the Sandbox page returns to the SAME topic. It resets to
+  // Counters whenever the learner is on neither Charts nor the Sandbox (any exit, not only Back to the
+  // menu), so opening Reference Charts from the Study Room behaves as it always did. The exiting screen
+  // keeps its frozen props, so the reset never repaints Charts while it fades out.
+  const [chartsTab, setChartsTab] = useState<ChartsTabId>("counters");
+  // The Sandbox workspace the entry button asked for (read once, when the Sandbox page mounts).
+  const [sandboxEntryMode, setSandboxEntryMode] = useState<SandboxMode>("counters");
+  useEffect(() => {
+    if (currentScreen !== "charts" && currentScreen !== "sandbox") setChartsTab("counters");
+  }, [currentScreen]);
 
   /* ===== POLISH C3: SCREEN TRANSITION STATE ===== */
   const prefersReducedMotion = useReducedMotion();
@@ -4635,7 +4649,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* MAIN LAYOUT WRAPPER */}
-      <div className={`w-full ${(currentScreen === "charts" || currentScreen === "grammar-dojo" || currentScreen === "reading-room") ? "max-w-5xl px-2 sm:px-4" : "max-w-4xl"} mx-auto flex-grow flex flex-col z-10 relative`} style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" }}>
+      <div className={`w-full ${(currentScreen === "charts" || currentScreen === "sandbox" || currentScreen === "grammar-dojo" || currentScreen === "reading-room") ? "max-w-5xl px-2 sm:px-4" : "max-w-4xl"} mx-auto flex-grow flex flex-col z-10 relative`} style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" }}>
 
         {/* APP HEADER */}
         <header className="flex flex-col sm:flex-row items-center justify-between gap-4 py-3 border-b border-natural-border/60 mb-4">
@@ -5123,7 +5137,25 @@ export default function App() {
 
           {/* ================= SCREEN: REFERENCE CHARTS ================= */}
           {currentScreen === "charts" && (
-            <ReferenceCharts onBack={() => setCurrentScreen("menu")} speakJapanese={speakJapanese} />
+            <ReferenceCharts
+              onBack={() => setCurrentScreen("menu")}
+              speakJapanese={speakJapanese}
+              activeTab={chartsTab}
+              onTabChange={setChartsTab}
+              onOpenSandbox={(mode) => {
+                setSandboxEntryMode(mode);
+                setCurrentScreen("sandbox");
+              }}
+            />
+          )}
+
+          {/* ================= SCREEN: MASTERY SANDBOX (Polish C4: a page, not a drawer) ================= */}
+          {currentScreen === "sandbox" && (
+            <InteractiveWorkbench
+              initialMode={sandboxEntryMode}
+              onBack={() => setCurrentScreen("charts")}
+              speakJapanese={speakJapanese}
+            />
           )}
 
           {/* ================= SCREEN: GRAMMAR DOJO ================= */}

@@ -7,10 +7,9 @@ import {
   AlertTriangle, 
   Lightbulb, 
   Zap, 
-  Sparkles, 
-  X
+  Sparkles
 } from "lucide-react";
-import InteractiveWorkbench from "./InteractiveWorkbench";
+import type { SandboxMode } from "./InteractiveWorkbench";
 import NaturalPhrasesTab from "./NaturalPhrasesTab";
 import { notifyPreferenceChanged } from "../preferences";
 
@@ -19,9 +18,16 @@ import { notifyPreferenceChanged } from "../preferences";
 interface ReferenceChartsProps {
   onBack: () => void;
   speakJapanese: (phrase: string) => void;
+  // Polish C4: the topic lives in App (so Back from the Sandbox page returns to the same one).
+  activeTab: TabId;
+  onTabChange: (tab: TabId) => void;
+  // Opens the Sandbox page on the workspace that fits the topic being read.
+  onOpenSandbox: (mode: SandboxMode) => void;
 }
 
 type TabId = "counters" | "numbers" | "time" | "verbs" | "adjectives" | "particles" | "natural-phrases";
+// Exported so App can hold the active topic.
+export type ChartsTabId = TabId;
 
 // ─── Speak Context ────────────────────────────────────────────────────────────
 // SpeakButton is used inside several nested tab components (CountersTab,
@@ -975,9 +981,15 @@ const TABS: { id: TabId; label: string; emoji: string }[] = [
   { id: "natural-phrases", label: "Natural Phrases", emoji: "💬" },
 ];
 
-export default function ReferenceCharts({ onBack, speakJapanese }: ReferenceChartsProps) {
-  const [activeTab, setActiveTab] = useState<TabId>("counters");
-  const [showSandbox, setShowSandbox] = useState<boolean>(false);
+// Which Sandbox workspace fits the topic being read (Polish C4).
+function sandboxModeForTab(tab: TabId): SandboxMode {
+  if (tab === "verbs") return "verbs";
+  if (tab === "time") return "calendar";
+  return "counters"; // Counters, Numbers and every other topic
+}
+
+export default function ReferenceCharts({ onBack, speakJapanese, activeTab, onTabChange, onOpenSandbox }: ReferenceChartsProps) {
+  const openSandbox = () => onOpenSandbox(sandboxModeForTab(activeTab));
 
   // ── Romaji visibility (shared preference with Grammar Dojo) ────────────────
   const [showRomaji, setShowRomaji] = useState<boolean>(() => {
@@ -1043,7 +1055,7 @@ export default function ReferenceCharts({ onBack, speakJapanese }: ReferenceChar
 
             <button
               type="button"
-              onClick={() => setShowSandbox(true)}
+              onClick={openSandbox}
               className="flex items-center gap-1.5 rounded-full bg-natural-clay/10 border-2 border-natural-clay/40 text-natural-clay hover:bg-natural-clay/20 px-3 py-1 text-xs font-mono font-black transition cursor-pointer shadow-xs animate-pulse-slow"
               title="Open Interactive Constructor Sandbox"
             >
@@ -1067,7 +1079,7 @@ export default function ReferenceCharts({ onBack, speakJapanese }: ReferenceChar
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => onTabChange(tab.id)}
               className={`flex items-center gap-1.5 px-4 py-2.5 rounded-2xl text-xs font-mono font-extrabold whitespace-nowrap transition-all duration-300 shrink-0 border-2 cursor-pointer ${
                 activeTab === tab.id
                   ? "bg-natural-forest text-natural-bg border-natural-forest scale-102 shadow-[0_0_20px_rgba(167,136,255,0.65)] ring-2 ring-natural-forest/20 dark:shadow-[0_0_25px_rgba(167,136,255,0.85)]"
@@ -1100,7 +1112,7 @@ export default function ReferenceCharts({ onBack, speakJapanese }: ReferenceChar
           </div>
           <button
             type="button"
-            onClick={() => setShowSandbox(true)}
+            onClick={openSandbox}
             className="px-5 py-2.5 rounded-2xl bg-natural-clay text-natural-bg hover:bg-natural-clay-dark text-xs font-mono font-black tracking-wider shadow-md hover:shadow-lg transition cursor-pointer shrink-0 w-full sm:w-auto text-center"
           >
             Open Sandbox Workbench
@@ -1126,39 +1138,6 @@ export default function ReferenceCharts({ onBack, speakJapanese }: ReferenceChar
           🔊 Hear native pronunciation by clicking the speaker icon · Continuous review breeds mastery
         </span>
       </div>
-
-      {/* Immersive Workbench Right Drawer */}
-      <AnimatePresence>
-        {showSandbox && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowSandbox(false)}
-              className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ type: "spring", stiffness: 180, damping: 28 }}
-              className="fixed top-0 right-0 h-full z-50 w-[420px] max-w-[92vw] overflow-y-auto bg-white/5 backdrop-blur-2xl border-l border-white/10 shadow-[0_0_60px_rgba(0,0,0,0.35)] [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.22)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10"
-            >
-              <button
-                type="button"
-                onClick={() => setShowSandbox(false)}
-                className="fixed top-4 right-4 z-10 h-9 w-9 rounded-full bg-white/10 border border-white/10 text-natural-charcoal hover:bg-white/15 hover:text-natural-forest transition cursor-pointer flex items-center justify-center shadow-sm"
-                title="Close Mastery Sandbox"
-                aria-label="Close Mastery Sandbox"
-              >
-                <X className="h-4 w-4" />
-              </button>
-              <InteractiveWorkbench onClose={() => setShowSandbox(false)} speakJapanese={speakJapanese} />
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
 
     </motion.div>
     </SpeakContext.Provider>
