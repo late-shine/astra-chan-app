@@ -12,7 +12,12 @@ const REGISTER_STYLES: Record<PhraseRegister, string> = {
 };
 
 function SearchBar({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  return <input type="search" value={value} onChange={(event) => onChange(event.target.value)} placeholder="Search Japanese, romaji, or meaning..." className="w-full bg-natural-card border-2 border-natural-border rounded-2xl px-4 py-3 text-sm font-sans text-natural-charcoal placeholder:text-natural-charcoal/40 focus:outline-none focus:border-natural-forest transition shadow-sm" />;
+  return (
+    <div className="relative">
+      <label htmlFor="phrases-search" className="sr-only">Search phrases</label>
+      <input id="phrases-search" type="search" value={value} onChange={(event) => onChange(event.target.value)} placeholder="Search Japanese, romaji, or meaning…" className="w-full bg-natural-card border-2 border-natural-border rounded-2xl px-4 py-3 text-sm font-sans text-natural-charcoal placeholder:text-natural-charcoal/40 focus:outline-none focus:border-natural-forest focus:ring-2 focus:ring-natural-forest/20 transition shadow-sm" />
+    </div>
+  );
 }
 
 export default function NaturalPhrasesTab({ speakJapanese }: NaturalPhrasesTabProps) {

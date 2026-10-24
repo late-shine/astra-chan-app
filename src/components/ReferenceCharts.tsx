@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, createContext, useContext } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { 
   ChevronLeft, 
   Volume2, 
@@ -7,7 +7,8 @@ import {
   AlertTriangle, 
   Lightbulb, 
   Zap, 
-  Sparkles
+  Sparkles,
+  X
 } from "lucide-react";
 import type { SandboxMode } from "./InteractiveWorkbench";
 import NaturalPhrasesTab from "./NaturalPhrasesTab";
@@ -47,22 +48,26 @@ function SpeakButton({ text }: { text: string }) {
       onClick={() => speakJapanese(text)}
       className="p-1.5 rounded-lg bg-natural-bg/90 border border-natural-border hover:bg-natural-forest/10 hover:border-natural-forest text-natural-forest/60 hover:text-natural-forest transition shrink-0 shadow-xs cursor-pointer"
       title={`Hear pronunciation: ${text}`}
+      aria-label={`Hear pronunciation: ${text}`}
     >
       <Volume2 className="w-3.5 h-3.5" />
     </button>
   );
 }
 
-function SearchBar({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function SearchBar({ value, onChange, label }: { value: string; onChange: (v: string) => void; label?: string }) {
+  const id = label ? label.toLowerCase().replace(/\s+/g, "-") + "-search" : "chart-search";
   return (
     <div className="relative mb-5">
-      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-natural-forest/40" />
+      <label htmlFor={id} className="sr-only">{label || "Search"}</label>
+      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-natural-forest/40" aria-hidden="true" />
       <input
-        type="text"
+        id={id}
+        type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Type Japanese, romaji reading, or English meaning to search..."
-        className="w-full bg-natural-card border-2 border-natural-border rounded-2xl pl-10 pr-4 py-3 text-sm font-sans text-natural-charcoal placeholder:text-natural-charcoal/40 focus:outline-none focus:border-natural-forest transition shadow-sm"
+        placeholder="Search by Japanese, romaji, or meaning…"
+        className="w-full bg-natural-card border-2 border-natural-border rounded-2xl pl-10 pr-4 py-3 text-sm font-sans text-natural-charcoal placeholder:text-natural-charcoal/40 focus:outline-none focus:border-natural-forest focus:ring-2 focus:ring-natural-forest/20 transition shadow-sm"
       />
     </div>
   );
@@ -118,63 +123,74 @@ function CountersTab() {
 
   return (
     <div className="flex flex-col gap-5">
-      <SearchBar value={q} onChange={setQ} />
+      <SearchBar value={q} onChange={setQ} label="Search counters" />
+
+      {/* Search feedback */}
+      <div className="flex items-center justify-between px-1 -mt-3">
+        <p className="text-[10px] font-mono text-natural-forest/70 uppercase tracking-widest font-bold" aria-live="polite">
+          {filtered.length} of {COUNTERS.length} counters
+        </p>
+        {q && (
+          <button type="button" onClick={() => setQ("")} className="flex items-center gap-1 text-[10px] font-mono text-natural-clay hover:underline cursor-pointer">
+            <X className="w-3 h-3" aria-hidden="true" /> Clear
+          </button>
+        )}
+      </div>
 
       <CalloutBox type="zap">
         <strong>The Euphonic Sound Change Rule:</strong> When counters starting with h/f/p sounds (e.g. 本 hon, 匹 hiki) combine with numbers <strong>1, 3, 6, 8, or 10</strong>, the sound softens into double-consonant stops (っ) or semi-voiced plosives (p/b).
       </CalloutBox>
 
-      {/* Counters Grid instead of a standard boring table */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {filtered.map((item) => (
-          <div 
-            key={item.counter} 
-            className="bg-natural-card border-2 border-natural-border/70 rounded-[2rem] p-5 flex flex-col gap-3 relative overflow-hidden shadow-xs hover:border-natural-clay/40 transition duration-200"
-          >
-            {/* Hanko stamp watermark */}
-            <div className="absolute top-4 right-4 pointer-events-none opacity-[0.15]">
-              <span className="font-serif font-black text-2xl text-natural-clay border border-natural-clay rounded-full p-1 w-10 h-10 flex items-center justify-center">
-                {item.char}
-              </span>
-            </div>
+      {filtered.length === 0 ? (
+        <div className="bg-natural-card border-2 border-dashed border-natural-border rounded-2xl p-8 text-center text-sm text-natural-charcoal/60">
+          Nothing matches "{q}".{" "}
+          <button type="button" onClick={() => setQ("")} className="text-natural-clay hover:underline cursor-pointer font-medium">Clear search</button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filtered.map((item) => (
+            <div 
+              key={item.counter} 
+              className="bg-natural-card border-2 border-natural-border/70 rounded-2xl p-5 flex flex-col gap-3 shadow-xs hover:border-natural-clay/40 transition duration-200"
+            >
+              <div className="flex gap-3 items-center">
+                <div className="w-12 h-12 rounded-full bg-natural-forest/10 flex items-center justify-center font-serif text-xl font-bold text-natural-forest shrink-0 shadow-inner">
+                  {item.char}
+                </div>
+                <div>
+                  <h4 className="font-serif font-extrabold text-[15px] text-natural-charcoal leading-tight">
+                    {item.counter}
+                  </h4>
+                  <span className="text-[10px] font-mono uppercase text-natural-forest-light tracking-wider font-extrabold block mt-0.5">
+                    Used for: {item.what}
+                  </span>
+                </div>
+                <div className="ml-auto">
+                  <SpeakButton text={item.nums.split("=")[0]} />
+                </div>
+              </div>
 
-            <div className="flex gap-3 items-center">
-              <div className="w-12 h-12 rounded-full bg-natural-forest/10 flex items-center justify-center font-serif text-xl font-bold text-natural-forest shrink-0 shadow-inner">
-                {item.char}
-              </div>
-              <div>
-                <h4 className="font-serif font-extrabold text-[15px] text-natural-charcoal leading-tight">
-                  {item.counter}
-                </h4>
-                <span className="text-[10px] font-mono uppercase text-natural-forest-light tracking-wider font-extrabold block mt-0.5">
-                  Used for: {item.what}
-                </span>
-              </div>
-              <div className="ml-auto">
-                <SpeakButton text={item.nums.split("=")[0]} />
+              <div className="border-t border-natural-border/50 pt-2 flex flex-col gap-1 text-xs">
+                <div>
+                  <span className="font-mono text-[10px] uppercase text-natural-clay block font-bold tracking-widest mb-0.5">Example readings</span>
+                  <p className="font-serif text-[13px] text-natural-charcoal font-bold">{item.nums}</p>
+                </div>
+                <div className="mt-1">
+                  <span className="font-mono text-[10px] uppercase text-natural-forest-light block font-bold tracking-widest mb-0.5">Grammar notes</span>
+                  <p className={`font-sans text-[11px] leading-relaxed ${item.isIrregular ? "text-natural-clay font-semibold" : "text-natural-charcoal/60"}`}>
+                    {item.notes}
+                  </p>
+                </div>
               </div>
             </div>
-
-            <div className="border-t border-natural-border/50 pt-2 flex flex-col gap-1 text-xs">
-              <div>
-                <span className="font-mono text-[9px] uppercase text-natural-clay block font-bold tracking-widest mb-0.5">Example readings</span>
-                <p className="font-serif text-[13px] text-natural-charcoal font-bold">{item.nums}</p>
-              </div>
-              <div className="mt-1">
-                <span className="font-mono text-[9px] uppercase text-natural-forest-light block font-bold tracking-widest mb-0.5">Grammar Notes</span>
-                <p className={`font-sans text-[11px] leading-relaxed ${item.isIrregular ? "text-natural-clay font-semibold" : "text-natural-charcoal/60"}`}>
-                  {item.notes}
-                </p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* General Native Counter Box */}
-      <div className="bg-natural-card border-2 border-natural-border/80 rounded-[2rem] p-5 shadow-xs mt-3">
+      <div className="bg-natural-card border-2 border-natural-border/80 rounded-2xl p-5 shadow-xs mt-3">
         <div className="flex items-center gap-2 border-b border-natural-border/60 pb-2 mb-3">
-          <Sparkles className="w-4 h-4 text-natural-clay" />
+          <Sparkles className="w-4 h-4 text-natural-clay" aria-hidden="true" />
           <h4 className="font-serif font-black text-xs text-natural-forest uppercase tracking-wider">
             Native Japanese Counter つ (1–10)
           </h4>
@@ -233,7 +249,7 @@ function NumbersTab() {
 
   return (
     <div className="flex flex-col gap-5">
-      <SearchBar value={q} onChange={setQ} />
+      <SearchBar value={q} onChange={setQ} label="Search numbers" />
 
       <CalloutBox type="tip">
         <strong>Dual counting stems:</strong> Sino-Japanese (いち, に) is the standard mathematics line. Native Japanese (ひとつ, ふたつ) is only used with its general classifier suffix and caps at 10.
@@ -292,7 +308,7 @@ function NumbersTab() {
                       {i === 0 && <span className="text-natural-charcoal/30 text-xs font-serif font-bold">vs</span>}
                     </React.Fragment>
                   ))}
-                  <span className="ml-auto text-[9px] bg-natural-forest/15 border border-natural-forest/20 text-natural-forest rounded-full px-2 py-0.5 font-mono font-extrabold uppercase tracking-wide">
+                  <span className="ml-auto text-[10px] bg-natural-forest/15 border border-natural-forest/20 text-natural-forest rounded-full px-2 py-0.5 font-mono font-extrabold uppercase tracking-wide">
                     Prefer: {t.use}
                   </span>
                 </div>
@@ -394,9 +410,7 @@ function TimeTab({ showRomaji }: { showRomaji: boolean }) {
   const [q, setQ] = useState("");
   return (
     <div className="flex flex-col gap-5">
-      <SearchBar value={q} onChange={setQ} />
-
-      {/* Days of Week - Circular aesthetic cards */}
+      <SearchBar value={q} onChange={setQ} label="Search time and date" />
       <div>
         <p className="text-[10px] font-mono text-natural-forest uppercase tracking-widest mb-3 font-bold">Days of the Week (曜日のサイクル)</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -417,7 +431,7 @@ function TimeTab({ showRomaji }: { showRomaji: boolean }) {
                     {day.english} · <span className="italic font-bold">{day.element}</span>
                   </p>
                   {showRomaji && (
-                    <span className="font-mono text-[9px] text-natural-forest-light uppercase tracking-wider block mt-0.5">{day.reading}</span>
+                    <span className="font-mono text-[10px] text-natural-forest-light uppercase tracking-wider block mt-0.5">{day.reading}</span>
                   )}
                 </div>
               </div>
@@ -555,7 +569,7 @@ function VerbsTab({ showRomaji }: { showRomaji: boolean }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <SearchBar value={q} onChange={setQ} />
+      <SearchBar value={q} onChange={setQ} label="Search verbs" />
       
       <CalloutBox type="tip">
         <strong>The Verb Sorting Rule:</strong> Group 2 verbs always end with a vowel sound of E or I before the final る (e.g. tab<strong>e</strong>ru, m<strong>i</strong>ru). Group 1 encompasses all other dictionary stems.
@@ -690,7 +704,7 @@ function AdjectivesTab({ showRomaji }: { showRomaji: boolean }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <SearchBar value={q} onChange={setQ} />
+      <SearchBar value={q} onChange={setQ} label="Search adjectives" />
 
       {/* い-adj */}
       <div>
@@ -704,7 +718,7 @@ function AdjectivesTab({ showRomaji }: { showRomaji: boolean }) {
               <div className="flex justify-between items-center border-b border-natural-border/40 pb-2">
                 <div className="flex items-center gap-2.5">
                   <span className="font-serif text-2xl font-black text-natural-forest">{row.dict}</span>
-                  <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 bg-natural-forest/10 border border-natural-forest/20 text-natural-forest rounded-md font-bold">
+                  <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 bg-natural-forest/10 border border-natural-forest/20 text-natural-forest rounded-md font-bold">
                     い-type
                   </span>
                 </div>
@@ -717,19 +731,19 @@ function AdjectivesTab({ showRomaji }: { showRomaji: boolean }) {
               {/* Conjugation breakdown table */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs font-serif mt-1">
                 <div className="p-2 bg-natural-bg/50 border border-natural-border/45 rounded-xl text-center">
-                  <span className="text-[9px] font-mono uppercase text-natural-forest-light tracking-wide block mb-0.5">Negative</span>
+                  <span className="text-[10px] font-mono uppercase text-natural-forest-light tracking-wide block mb-0.5">Negative</span>
                   <strong className="text-natural-charcoal">{row.neg}</strong>
                 </div>
                 <div className="p-2 bg-natural-bg/50 border border-natural-border/45 rounded-xl text-center">
-                  <span className="text-[9px] font-mono uppercase text-natural-forest-light tracking-wide block mb-0.5">Past</span>
+                  <span className="text-[10px] font-mono uppercase text-natural-forest-light tracking-wide block mb-0.5">Past</span>
                   <strong className="text-natural-charcoal">{row.past}</strong>
                 </div>
                 <div className="p-2 bg-natural-bg/50 border border-natural-border/45 rounded-xl text-center">
-                  <span className="text-[9px] font-mono uppercase text-natural-forest-light tracking-wide block mb-0.5">Past Neg</span>
+                  <span className="text-[10px] font-mono uppercase text-natural-forest-light tracking-wide block mb-0.5">Past Neg</span>
                   <strong className="text-natural-charcoal">{row.pastNeg}</strong>
                 </div>
                 <div className="p-2 bg-natural-bg/50 border border-natural-border/45 rounded-xl text-center">
-                  <span className="text-[9px] font-mono uppercase text-natural-forest-light tracking-wide block mb-0.5">Before Noun</span>
+                  <span className="text-[10px] font-mono uppercase text-natural-forest-light tracking-wide block mb-0.5">Before Noun</span>
                   <strong className="text-natural-forest">{row.noun}</strong>
                 </div>
               </div>
@@ -753,7 +767,7 @@ function AdjectivesTab({ showRomaji }: { showRomaji: boolean }) {
               <div className="flex justify-between items-center border-b border-natural-border/40 pb-2">
                 <div className="flex items-center gap-2.5">
                   <span className="font-serif text-2xl font-black text-natural-clay">{row.dict}</span>
-                  <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 bg-natural-clay/10 border border-natural-clay/20 text-natural-clay rounded-md font-bold">
+                  <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 bg-natural-clay/10 border border-natural-clay/20 text-natural-clay rounded-md font-bold">
                     な-type
                   </span>
                 </div>
@@ -766,19 +780,19 @@ function AdjectivesTab({ showRomaji }: { showRomaji: boolean }) {
               {/* Conjugation breakdown table */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs font-serif mt-1">
                 <div className="p-2 bg-natural-bg/50 border border-natural-border/45 rounded-xl text-center">
-                  <span className="text-[9px] font-mono uppercase text-natural-forest-light tracking-wide block mb-0.5">Negative</span>
+                  <span className="text-[10px] font-mono uppercase text-natural-forest-light tracking-wide block mb-0.5">Negative</span>
                   <strong className="text-natural-charcoal">{row.neg}</strong>
                 </div>
                 <div className="p-2 bg-natural-bg/50 border border-natural-border/45 rounded-xl text-center">
-                  <span className="text-[9px] font-mono uppercase text-natural-forest-light tracking-wide block mb-0.5">Past</span>
+                  <span className="text-[10px] font-mono uppercase text-natural-forest-light tracking-wide block mb-0.5">Past</span>
                   <strong className="text-natural-charcoal">{row.past}</strong>
                 </div>
                 <div className="p-2 bg-natural-bg/50 border border-natural-border/45 rounded-xl text-center">
-                  <span className="text-[9px] font-mono uppercase text-natural-forest-light tracking-wide block mb-0.5">Past Neg</span>
+                  <span className="text-[10px] font-mono uppercase text-natural-forest-light tracking-wide block mb-0.5">Past Neg</span>
                   <strong className="text-natural-charcoal">{row.pastNeg}</strong>
                 </div>
                 <div className="p-2 bg-natural-bg/50 border border-natural-border/45 rounded-xl text-center">
-                  <span className="text-[9px] font-mono uppercase text-natural-forest-light tracking-wide block mb-0.5">Before Noun</span>
+                  <span className="text-[10px] font-mono uppercase text-natural-forest-light tracking-wide block mb-0.5">Before Noun</span>
                   <strong className="text-natural-clay">{row.noun}</strong>
                 </div>
               </div>
@@ -911,7 +925,7 @@ function ParticlesTab({ showRomaji }: { showRomaji: boolean }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <SearchBar value={q} onChange={setQ} />
+      <SearchBar value={q} onChange={setQ} label="Search particles" />
       
       <CalloutBox type="tip">
         <strong>は vs が Mastery:</strong> は sets the general background topic ("as for me..."). が isolates the precise actor ("this person is the one who...").
@@ -923,15 +937,8 @@ function ParticlesTab({ showRomaji }: { showRomaji: boolean }) {
         {filtered.map((p) => (
           <div 
             key={p.particle} 
-            className="bg-natural-card border-2 border-natural-border/70 rounded-[2rem] p-5 hover:border-natural-clay/40 transition shadow-xs flex flex-col md:flex-row gap-4 relative overflow-hidden"
+            className="bg-natural-card border-2 border-natural-border/70 rounded-2xl p-5 hover:border-natural-clay/40 transition shadow-xs flex flex-col md:flex-row gap-4"
           >
-            {/* Ink hanko seal under particle */}
-            <div className="absolute top-4 right-4 pointer-events-none opacity-[0.12]">
-              <span className="font-serif font-black text-4xl text-natural-clay border-2 border-double border-natural-clay rounded px-2.5 py-0.5 inline-block rotate-12">
-                印
-              </span>
-            </div>
-
             <div className="flex md:flex-col items-center justify-between md:justify-center shrink-0 border-b md:border-b-0 md:border-r border-natural-border/40 pb-3 md:pb-0 md:pr-4 min-w-[85px]">
               <div className="text-center flex flex-col items-center">
                 <span className="font-serif text-4xl text-natural-forest font-black leading-none">{p.particle}</span>
@@ -971,15 +978,30 @@ function ParticlesTab({ showRomaji }: { showRomaji: boolean }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-const TABS: { id: TabId; label: string; emoji: string }[] = [
-  { id: "counters", label: "Counters", emoji: "🔢" },
-  { id: "numbers", label: "Numbers", emoji: "💯" },
-  { id: "time", label: "Time & Date", emoji: "🕐" },
-  { id: "verbs", label: "Verb Conjugations", emoji: "⚡" },
-  { id: "adjectives", label: "Adjectives", emoji: "🎨" },
-  { id: "particles", label: "Particles", emoji: "🔗" },
-  { id: "natural-phrases", label: "Natural Phrases", emoji: "💬" },
+// ─── Topic navigation ─────────────────────────────────────────────────────────
+// Two groups: "Numbers & time" and "Sentences". Chips from sm up, native select below sm.
+
+const TOPIC_GROUPS: { group: string; tabs: { id: TabId; label: string }[] }[] = [
+  {
+    group: "Numbers & time",
+    tabs: [
+      { id: "counters", label: "Counters" },
+      { id: "numbers", label: "Numbers" },
+      { id: "time", label: "Time & Date" },
+    ],
+  },
+  {
+    group: "Sentences",
+    tabs: [
+      { id: "verbs", label: "Verb Conjugations" },
+      { id: "adjectives", label: "Adjectives" },
+      { id: "particles", label: "Particles" },
+      { id: "natural-phrases", label: "Natural Phrases" },
+    ],
+  },
 ];
+
+const ALL_TABS = TOPIC_GROUPS.flatMap((g) => g.tabs);
 
 // Which Sandbox workspace fits the topic being read (Polish C4).
 function sandboxModeForTab(tab: TabId): SandboxMode {
@@ -990,6 +1012,7 @@ function sandboxModeForTab(tab: TabId): SandboxMode {
 
 export default function ReferenceCharts({ onBack, speakJapanese, activeTab, onTabChange, onOpenSandbox }: ReferenceChartsProps) {
   const openSandbox = () => onOpenSandbox(sandboxModeForTab(activeTab));
+  const prefersReducedMotion = useReducedMotion();
 
   // ── Romaji visibility (shared preference with Grammar Dojo) ────────────────
   const [showRomaji, setShowRomaji] = useState<boolean>(() => {
@@ -1020,35 +1043,38 @@ export default function ReferenceCharts({ onBack, speakJapanese, activeTab, onTa
     }
   };
 
+  const currentLabel = ALL_TABS.find((t) => t.id === activeTab)?.label ?? "Counters";
+
   return (
     <SpeakContext.Provider value={speakJapanese}>
-    <motion.div
-      className="bg-natural-card/35 border-2 border-natural-border/30 rounded-3xl p-5 sm:p-7 shadow-[0_20px_50px_rgba(0,0,0,0.3)] backdrop-blur-xl hover:shadow-[0_20px_50px_rgba(188,163,240,0.15)] w-full flex flex-col gap-5 select-none transition-all duration-500"
+    <div
+      className="bg-natural-card/50 border border-natural-border/40 rounded-2xl p-5 sm:p-7 shadow-sm w-full flex flex-col gap-5 select-none"
     >
       
-      {/* Immersive Header inside the Panel */}
-      <div className="border-b border-natural-border/60 pb-5">
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
+      <div className="border-b border-natural-border/50 pb-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           
           <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
               onClick={onBack}
-              className="flex items-center gap-1.5 text-xs font-mono font-bold text-natural-forest/80 hover:text-natural-forest hover:border-natural-forest/50 px-3 py-1.5 rounded-xl bg-natural-card border border-natural-border shadow-xs transition cursor-pointer"
+              className="flex items-center gap-1.5 text-xs font-mono font-bold text-natural-forest/80 hover:text-natural-forest hover:border-natural-forest/50 px-3 py-2 rounded-xl bg-natural-card border border-natural-border shadow-xs transition cursor-pointer min-h-[44px]"
             >
-              <ChevronLeft className="w-4 h-4" />
-              Exit Room
+              <ChevronLeft className="w-4 h-4" aria-hidden="true" />
+              Study Room
             </button>
             
             <button
               type="button"
               onClick={() => setShowRomaji((v) => !v)}
-              className={`rounded-full border px-3 py-1 text-xs font-mono font-bold transition cursor-pointer shadow-xs ${
+              className={`rounded-full border px-3 py-2 text-xs font-mono font-bold transition cursor-pointer shadow-xs min-h-[44px] ${
                 showRomaji
                   ? "bg-natural-forest/15 border-natural-forest text-natural-forest"
                   : "bg-natural-card border-natural-border text-natural-charcoal/50 hover:border-natural-forest/50"
               }`}
               title={showRomaji ? "Hide romaji readings" : "Show romaji readings"}
+              aria-pressed={showRomaji}
             >
               {showRomaji ? "A Hide Romaji" : "ふ Show Romaji"}
             </button>
@@ -1056,90 +1082,89 @@ export default function ReferenceCharts({ onBack, speakJapanese, activeTab, onTa
             <button
               type="button"
               onClick={openSandbox}
-              className="flex items-center gap-1.5 rounded-full bg-natural-clay/10 border-2 border-natural-clay/40 text-natural-clay hover:bg-natural-clay/20 px-3 py-1 text-xs font-mono font-black transition cursor-pointer shadow-xs animate-pulse-slow"
-              title="Open Interactive Constructor Sandbox"
+              className="flex items-center gap-1.5 rounded-full bg-natural-clay/10 border border-natural-clay/30 text-natural-clay hover:bg-natural-clay/20 px-3 py-2 text-xs font-mono font-bold transition cursor-pointer shadow-xs min-h-[44px]"
+              title="Open the Mastery Sandbox"
             >
-              🛠️ Mastery Sandbox
+              <span aria-hidden="true">🛠️</span> Mastery Sandbox
             </button>
           </div>
 
           <div className="text-left sm:text-right shrink-0">
-            <h1 className="font-serif font-black text-2xl text-natural-forest leading-none flex items-center sm:justify-end gap-1.5">
-              <span>参考図</span>
-              <span className="text-xs bg-natural-clay/10 text-natural-clay border border-natural-clay/20 px-1.5 py-0.5 rounded-md font-mono uppercase tracking-wider font-extrabold">Reference</span>
+            <h1 className="font-serif font-black text-xl text-natural-forest leading-none flex items-center sm:justify-end gap-1.5">
+              Reference
             </h1>
-            <p className="text-[10px] font-mono text-natural-forest/60 uppercase tracking-widest mt-1 font-bold">N5 Tables & Grammar Ledgers</p>
+            <p className="text-xs font-serif text-natural-forest/50 mt-0.5">参考図</p>
           </div>
 
         </div>
 
-        {/* Gorgeous Wooden-Style Tab Bar */}
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => onTabChange(tab.id)}
-              className={`flex items-center gap-1.5 px-4 py-2.5 rounded-2xl text-xs font-mono font-extrabold whitespace-nowrap transition-all duration-300 shrink-0 border-2 cursor-pointer ${
-                activeTab === tab.id
-                  ? "bg-natural-forest text-natural-bg border-natural-forest scale-102 shadow-[0_0_20px_rgba(167,136,255,0.65)] ring-2 ring-natural-forest/20 dark:shadow-[0_0_25px_rgba(167,136,255,0.85)]"
-                  : "bg-natural-card/45 text-natural-charcoal border-natural-border/40 hover:border-natural-forest/40 hover:bg-natural-forest/10 shadow-xs"
-              }`}
-            >
-              <span className="text-sm">{tab.emoji}</span>
-              <span>{tab.label}</span>
-            </button>
-          ))}
+        {/* ── Topic navigation: chips from sm up ──────────────────────────── */}
+        <nav aria-label="Reference topics" className="hidden sm:block">
+          <div className="flex flex-col gap-3">
+            {TOPIC_GROUPS.map((group) => (
+              <div key={group.group}>
+                <span className="text-[10px] font-mono text-natural-forest/50 uppercase tracking-widest font-bold block mb-1.5">{group.group}</span>
+                <div className="flex flex-wrap gap-2">
+                  {group.tabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => onTabChange(tab.id)}
+                      aria-pressed={activeTab === tab.id}
+                      className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition cursor-pointer border min-h-[44px] ${
+                        activeTab === tab.id
+                          ? "bg-natural-forest text-natural-bg border-natural-forest focus:ring-2 focus:ring-natural-forest/30 focus:ring-offset-1"
+                          : "bg-natural-card/60 text-natural-charcoal border-natural-border/50 hover:border-natural-forest/40 hover:bg-natural-forest/10 shadow-xs focus:ring-2 focus:ring-natural-forest/20"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </nav>
+
+        {/* ── Topic navigation: native select below sm ───────────────────── */}
+        <div className="sm:hidden">
+          <label htmlFor="reference-topic-select" className="text-[10px] font-mono text-natural-forest/50 uppercase tracking-widest font-bold block mb-1.5">Topic</label>
+          <select
+            id="reference-topic-select"
+            value={activeTab}
+            onChange={(e) => onTabChange(e.target.value as TabId)}
+            className="w-full bg-natural-card border-2 border-natural-border rounded-xl px-3 py-2.5 text-sm font-mono font-bold text-natural-charcoal min-h-[44px] cursor-pointer focus:border-natural-forest focus:ring-2 focus:ring-natural-forest/20 transition"
+          >
+            {TOPIC_GROUPS.map((group) => (
+              <optgroup key={group.group} label={group.group}>
+                {group.tabs.map((tab) => (
+                  <option key={tab.id} value={tab.id}>{tab.label}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
         </div>
       </div>
 
-      {/* Immersive Scroll Content */}
-      <div className="w-full flex flex-col gap-5">
-        
-        {/* INTERACTIVE WORKBENCH CALLOUT BANNER */}
-        <div className="bg-natural-card/35 border-2 border-natural-border/30 backdrop-blur-md rounded-[2.5rem] p-5 relative overflow-hidden shadow-md flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-natural-clay/5 rounded-full blur-2xl pointer-events-none" />
-          <div className="flex items-start gap-3.5 text-left">
-            <span className="text-2.5xl p-2.5 rounded-2xl bg-natural-clay/10 border border-natural-clay/20 text-natural-clay shrink-0 self-center">🛠️</span>
-            <div>
-              <h4 className="font-serif font-black text-sm text-natural-forest leading-tight">
-                Want to practice these structures in real-time?
-              </h4>
-              <p className="text-xs text-natural-charcoal/70 font-sans mt-1 leading-relaxed">
-                Open the interactive <strong>Mastery Sandbox</strong> to build custom counting quantities, practice verb conjugation shifts step-by-step, or view the complete 31-day ledger!
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={openSandbox}
-            className="px-5 py-2.5 rounded-2xl bg-natural-clay text-natural-bg hover:bg-natural-clay-dark text-xs font-mono font-black tracking-wider shadow-md hover:shadow-lg transition cursor-pointer shrink-0 w-full sm:w-auto text-center"
-          >
-            Open Sandbox Workbench
-          </button>
-        </div>
+      {/* ── Section announcement ─────────────────────────────────────────── */}
+      <p className="sr-only" aria-live="polite" role="status">Showing {currentLabel}</p>
 
+      {/* ── Tab content ──────────────────────────────────────────────────── */}
+      <div className="w-full flex flex-col gap-5">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
-            initial={{ opacity: 0, x: 15 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -15 }}
-            transition={{ duration: 0.18 }}
+            initial={prefersReducedMotion ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: prefersReducedMotion ? 0 : 0.15 }}
           >
             {renderTab()}
           </motion.div>
         </AnimatePresence>
       </div>
 
-      {/* Decorative Traditional Footer */}
-      <div className="py-4 text-center border-t border-natural-border/40">
-        <span className="text-[9px] font-mono text-natural-forest/45 uppercase tracking-widest block font-bold">
-          🔊 Hear native pronunciation by clicking the speaker icon · Continuous review breeds mastery
-        </span>
-      </div>
-
-    </motion.div>
+    </div>
     </SpeakContext.Provider>
   );
 }
