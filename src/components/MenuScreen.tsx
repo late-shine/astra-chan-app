@@ -18,16 +18,16 @@ import {
   Play,
   Search,
   CheckCircle2,
-  HelpCircle,
   Activity,
   BookOpenCheck,
   Globe,
-  Clock,
   Plus,
   Table2,
   GraduationCap,
   User,
   X,
+  Check,
+  ChevronDown,
 } from "lucide-react";
 
 import { HIRAGANA_DATA, KATAKANA_DATA, KANJI_DATA, VOCABULARY_DATA } from "../data";
@@ -269,6 +269,104 @@ function shortQuery(query: string): string {
   return q.length > 30 ? `${q.slice(0, 30)}…` : q;
 }
 
+// ─── C6: Practice hub helpers ─────────────────────────────────────────────
+// Presentation only. Every value below mirrors a label that already existed in the hub; nothing here touches scoring, timers or pools.
+
+// Same visible focus ring as the C2 search controls (a theme token, so it reads in all six themes).
+const PRACTICE_FOCUS_RING = SEARCH_FOCUS_RING;
+// Legends inside the settings card look like the old small headings.
+const PRACTICE_LEGEND = "text-xs font-semibold text-natural-forest-light mb-2";
+
+const QUIZ_SCRIPT_LABELS = {
+  hiragana: "Hiragana",
+  katakana: "Katakana",
+  both: "Hiragana + Katakana",
+} as const;
+
+// Stage codes are the ones `handleToggleStage` in App already uses; `short` is the word used in the summary line.
+const QUIZ_STAGES = [
+  { id: "basic", name: "Core — Gojūon", short: "Core", chars: 46, hint: "Standard vowels & core rows" },
+  { id: "dakuon", name: "Voiced — Dakuon", short: "Voiced", chars: 20, hint: "Voiced letters using diacritic tacks" },
+  { id: "handakuon", name: "Semi-voiced", short: "Semi-voiced", chars: 5, hint: "Half-voiced P-Row bursts" },
+  { id: "yoon", name: "Combos — Yōon", short: "Combos", chars: 33, hint: "Fused combination symbols" },
+] as const;
+
+const QUIZ_TIMERS = [
+  { code: "relax", name: "Relaxed", cap: "No Limit", summary: "No timer" },
+  { code: "medium", name: "Medium", cap: "12s cap", summary: "12 s timer" },
+  { code: "hard", name: "Hard", cap: "6s cap", summary: "6 s timer" },
+  { code: "legend", name: "Legendary", cap: "3s cap", summary: "3 s timer" },
+] as const;
+
+const QUIZ_CHOICE_COUNTS = [
+  { count: 4, name: "4 Options", desc: "Standard" },
+  { count: 6, name: "6 Options", desc: "Harder" },
+] as const;
+
+/** One line from the existing settings state, e.g. "Hiragana · Core only · 12 s timer · 4 choices". It always names the stage set, because the default is Core only. */
+function describeKanaSettings(
+  script: "hiragana" | "katakana" | "both",
+  stages: string[],
+  difficulty: "relax" | "medium" | "hard" | "legend",
+  choices: 4 | 6,
+  autoPronounce: boolean,
+): string {
+  const picked = QUIZ_STAGES.filter((stage) => stages.includes(stage.id));
+  const stageText =
+    picked.length === 0
+      ? "No stage"
+      : picked.length === QUIZ_STAGES.length
+        ? "All stages"
+        : picked.length === 1
+          ? `${picked[0].short} only`
+          : picked.map((stage) => stage.short).join(" + ");
+  const timer = QUIZ_TIMERS.find((t) => t.code === difficulty)?.summary ?? "";
+  const parts: string[] = [QUIZ_SCRIPT_LABELS[script], stageText, timer, `${choices} choices`];
+  if (autoPronounce) parts.push("Auto-pronounce on");
+  return parts.filter(Boolean).join(" · ");
+}
+
+interface PracticeLauncherProps {
+  id: string;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  tag?: { text: string; tone: "start" | "challenge" };
+  onClick: () => void;
+}
+
+/** A launcher card. Every launcher keeps the `id` it had before C6. Hover lift only when motion is allowed. */
+function PracticeLauncher({ id, title, description, icon, tag, onClick }: PracticeLauncherProps) {
+  return (
+    <button
+      type="button"
+      id={id}
+      onClick={onClick}
+      className={`w-full text-left min-h-[44px] px-4 py-3.5 rounded-2xl bg-natural-card border border-natural-border/70 hover:border-natural-forest motion-safe:hover:-translate-y-0.5 duration-300 transition flex items-center justify-between gap-3 shadow-sm cursor-pointer ${PRACTICE_FOCUS_RING}`}
+    >
+      <span className="min-w-0">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-natural-forest font-serif text-base font-bold">{title}</span>
+          {tag && (
+            <span
+              className={`px-2 py-0.5 rounded-full text-[11px] font-bold leading-none ${tag.tone === "start"
+                ? "bg-natural-forest text-natural-bg"
+                : "bg-natural-terracotta/10 text-natural-terracotta border border-natural-terracotta/30"
+                }`}
+            >
+              {tag.text}
+            </span>
+          )}
+        </span>
+        <span className="block text-xs text-natural-charcoal/70 mt-0.5">{description}</span>
+      </span>
+      <span className="shrink-0" aria-hidden="true">
+        {icon}
+      </span>
+    </button>
+  );
+}
+
 export default function MenuScreen(props: MenuScreenProps) {
   const {
     setCurrentScreen,
@@ -370,6 +468,10 @@ export default function MenuScreen(props: MenuScreenProps) {
   const waitingLine = formatWaitingLine(sessionSummary);
   const sessionToDo = sessionSummary.total;
   const reduceMotion = useReducedMotion();
+
+  // ── C6: Practice hub. The disclosure is local UI state (closed on every visit); the settings themselves stay in App. ──
+  const [kanaMoreOpen, setKanaMoreOpen] = React.useState(false);
+  const kanaSummary = describeKanaSettings(quizAlphabet, selectedStages, selectedDifficulty, numChoices, autoPronounce);
 
   return (
             // C3b: the Study Room and the Bookshelf / Writing Desk hub swap with the same soft fade
@@ -1238,35 +1340,125 @@ export default function MenuScreen(props: MenuScreenProps) {
                 </div>
               )}
 
-              {/* ================= TAB CONTENT 2: PRACTICE ARENA (QUIZ) ================= */}
+              {/* ================= TAB CONTENT 2: PRACTICE HUB (QUIZ) =================
+                  C6: launchers first at every width, then ONE settings card that says it is for the kana quiz only.
+                  Script and Stages stay visible; Timer, Answer choices and Voice sit behind "More options" (closed by default),
+                  and the summary line keeps the effective settings (including "Core only") on screen at all times. */}
               {activeHubTab === "practice" && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Left checklist setup and settings panel */}
-                  <div className="md:col-span-2 flex flex-col gap-4 bg-natural-card border border-natural-border/70 p-5 rounded-3xl shadow-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                  {/* Launchers: the first thing a learner sees, on phones and on desktop */}
+                  <div className="flex flex-col gap-6 min-w-0">
+                    <section aria-labelledby="practice-kana-heading" className="flex flex-col gap-3">
+                      <div>
+                        <h3 id="practice-kana-heading" className="font-serif text-lg text-natural-forest font-bold tracking-wide">
+                          Kana quiz
+                        </h3>
+                        <p className="text-xs text-natural-charcoal/70 mt-0.5">Uses the kana quiz settings below.</p>
+                      </div>
+
+                      <PracticeLauncher
+                        id="action-quiz-choice"
+                        title="Multiple Choice"
+                        description="Match the kana to its romaji reading"
+                        tag={{ text: "Start here", tone: "start" }}
+                        icon={<Play className="w-5 h-5 text-natural-forest" />}
+                        onClick={() => openCharPicker("choice")}
+                      />
+                      <PracticeLauncher
+                        id="action-quiz-romaji"
+                        title="Type the Answer"
+                        description="Spell out the romaji on your keyboard"
+                        icon={<PenTool className="w-5 h-5 text-natural-forest" />}
+                        onClick={() => openCharPicker("romaji")}
+                      />
+                      <PracticeLauncher
+                        id="action-survival"
+                        title="Survival Mode"
+                        description="Race the clock — wrong answers cost time!"
+                        tag={{ text: "Challenge", tone: "challenge" }}
+                        icon={<Flame className="w-5 h-5 text-natural-terracotta" />}
+                        onClick={() => openCharPicker("survival")}
+                      />
+                    </section>
+
+                    <section aria-labelledby="practice-also-heading" className="flex flex-col gap-3">
+                      <div>
+                        <h3 id="practice-also-heading" className="font-serif text-lg text-natural-forest font-bold tracking-wide">
+                          Also practice
+                        </h3>
+                        <p className="text-xs text-natural-charcoal/70 mt-0.5">These have their own setup and do not use the kana settings.</p>
+                      </div>
+
+                      <PracticeLauncher
+                        id="action-vocab-quiz"
+                        title="Vocabulary Quiz"
+                        description="Practice N5 words by meaning or reading"
+                        icon={<Award className="w-5 h-5 text-natural-clay" />}
+                        onClick={() => {
+                          setVocabQuizPhase("config");
+                          setCurrentScreen("vocab-quiz");
+                        }}
+                      />
+                      <PracticeLauncher
+                        id="action-kanji-quiz"
+                        title="Kanji Quiz"
+                        description="Test N5 kanji meanings or readings"
+                        icon={<BookMarked className="w-5 h-5 text-natural-forest" />}
+                        onClick={() => {
+                          setKanjiQuizPhase("config");
+                          setCurrentScreen("kanji-quiz");
+                        }}
+                      />
+                      <PracticeLauncher
+                        id="action-online-duel"
+                        title="Speed Duel"
+                        description="Race a friend online — first correct wins!"
+                        icon={<Globe className="w-5 h-5 text-natural-forest" />}
+                        onClick={openOnlineMultiplayer}
+                      />
+                    </section>
+                  </div>
+
+                  {/* Kana quiz settings: after the launchers in the DOM, beside them on desktop */}
+                  <section
+                    aria-labelledby="practice-kana-settings-heading"
+                    className="min-w-0 flex flex-col gap-4 bg-natural-card border border-natural-border/70 p-5 rounded-3xl shadow-sm"
+                  >
                     <div>
-                      <h3 className="font-serif text-lg text-natural-forest font-bold tracking-wide flex items-center gap-2">
-                        <BookMarked className="w-4 h-4 text-natural-forest" />
-                        Quiz Settings
+                      <h3 id="practice-kana-settings-heading" className="font-serif text-lg text-natural-forest font-bold tracking-wide">
+                        Kana quiz settings
                       </h3>
+                      <p className="text-xs text-natural-charcoal/70 mt-0.5">
+                        For Multiple Choice, Type the Answer and Survival only.
+                      </p>
                     </div>
 
-                    {/* Selected Alphabet options */}
-                    <div className="flex flex-col gap-2 bg-natural-bg/50 border border-natural-border p-3.5 rounded-2xl">
-                      <span className="text-xs font-semibold text-natural-forest-light">Script</span>
-                      <div className="grid grid-cols-3 gap-2 mt-1">
+                    {/* Always visible: what the next kana quiz will use (the default stage set is Core only) */}
+                    <p
+                      id="practice-kana-summary"
+                      className="bg-natural-bg/60 border border-natural-border/60 rounded-xl px-3 py-2 text-xs font-mono font-bold text-natural-forest leading-relaxed"
+                    >
+                      <span className="sr-only">Current settings: </span>
+                      {kanaSummary}
+                    </p>
+
+                    <fieldset className="min-w-0">
+                      <legend className={PRACTICE_LEGEND}>Script</legend>
+                      <div className="grid grid-cols-3 gap-2">
                         {[
                           { id: "hiragana" as const, label: "Hiragana" },
                           { id: "katakana" as const, label: "Katakana" },
-                          { id: "both" as const, label: "Both Mixed" }
+                          { id: "both" as const, label: "Both Mixed" },
                         ].map((item) => (
                           <button
                             key={item.id}
                             type="button"
+                            aria-pressed={quizAlphabet === item.id}
                             onClick={() => {
                               playClickTick();
                               setQuizAlphabet(item.id);
                             }}
-                            className={`py-2 text-xs font-serif font-bold rounded-lg border transition text-center cursor-pointer ${quizAlphabet === item.id
+                            className={`min-h-[44px] py-2 px-1 text-xs font-serif font-bold rounded-lg border transition text-center cursor-pointer ${PRACTICE_FOCUS_RING} ${quizAlphabet === item.id
                               ? "bg-natural-forest border-natural-forest text-natural-bg font-semibold shadow-sm"
                               : "bg-natural-card border-natural-border/70 text-natural-charcoal hover:border-natural-forest-light"
                               }`}
@@ -1275,287 +1467,156 @@ export default function MenuScreen(props: MenuScreenProps) {
                           </button>
                         ))}
                       </div>
-                    </div>
+                    </fieldset>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleStage("basic")}
-                        className={`flex items-center justify-between p-3.5 rounded-xl border text-left transition ${selectedStages.includes("basic")
-                          ? "bg-natural-forest/10 border-natural-forest text-natural-forest font-semibold shadow-sm"
-                          : "bg-natural-bg/40 border-natural-border/40 text-natural-charcoal hover:border-natural-forest-light/40"
-                          }`}
-                      >
-                        <div>
-                          <span className="block font-bold text-sm">Core — Gojūon</span>
-                          <span className="text-[10px] text-natural-forest-light/80">Standard vowels & core rows</span>
-                        </div>
-                        <span className="text-[11px] font-bold font-mono px-2 py-0.5 bg-natural-forest/10 rounded text-natural-forest">
-                          46 Chars
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleToggleStage("dakuon")}
-                        className={`flex items-center justify-between p-3.5 rounded-xl border text-left transition ${selectedStages.includes("dakuon")
-                          ? "bg-natural-forest/10 border-natural-forest text-natural-forest font-semibold shadow-sm"
-                          : "bg-natural-bg/40 border-natural-border/40 text-natural-charcoal hover:border-natural-forest-light/40"
-                          }`}
-                      >
-                        <div>
-                          <span className="block font-bold text-sm">Voiced — Dakuon</span>
-                          <span className="text-[10px] text-natural-forest-light/80">Voiced letters using diacritic tacks</span>
-                        </div>
-                        <span className="text-[11px] font-bold font-mono px-2 py-0.5 bg-natural-forest/10 rounded text-natural-forest">
-                          20 Chars
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleToggleStage("handakuon")}
-                        className={`flex items-center justify-between p-3.5 rounded-xl border text-left transition ${selectedStages.includes("handakuon")
-                          ? "bg-natural-forest/10 border-natural-forest text-natural-forest font-semibold shadow-sm"
-                          : "bg-natural-bg/40 border-natural-border/40 text-natural-charcoal hover:border-natural-forest-light/40"
-                          }`}
-                      >
-                        <div>
-                          <span className="block font-bold text-sm">Semi-voiced</span>
-                          <span className="text-[10px] text-natural-forest-light/80">Half-voiced P-Row bursts</span>
-                        </div>
-                        <span className="text-[11px] font-bold font-mono px-2 py-0.5 bg-natural-forest/10 rounded text-natural-forest">
-                          5 Chars
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleToggleStage("yoon")}
-                        className={`flex items-center justify-between p-3.5 rounded-xl border text-left transition ${selectedStages.includes("yoon")
-                          ? "bg-natural-forest/10 border-natural-forest text-natural-forest font-semibold shadow-sm"
-                          : "bg-natural-bg/40 border-natural-border/40 text-natural-charcoal hover:border-natural-forest-light/40"
-                          }`}
-                      >
-                        <div>
-                          <span className="block font-bold text-sm">Combos — Yōon</span>
-                          <span className="text-[10px] text-natural-forest-light/80">Fused combination symbols</span>
-                        </div>
-                        <span className="text-[11px] font-bold font-mono px-2 py-0.5 bg-natural-forest/10 rounded text-natural-forest">
-                          33 Chars
-                        </span>
-                      </button>
-                    </div>
-
-                    {/* Auto pronounce voice configuration assistant tracker (Mutes automatic cheat whispers!) */}
-                    <div className="p-3 bg-natural-bg/50 border border-natural-border rounded-xl mt-1.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-xs font-semibold text-natural-forest-light flex items-center gap-1.5">
-                          🔊 Auto-pronounce on load
-                        </span>
-                        <span className="text-[10px] text-natural-forest-light/70 leading-snug">
-                          Speaks the kana when each question appears.
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap justify-end">
-                        <select
-                          value={selectedJapaneseVoiceURI}
-                          onChange={(e) => handleSelectJapaneseVoice(e.target.value)}
-                          disabled={availableJapaneseVoices.length === 0}
-                          className="bg-natural-card border border-natural-border/80 text-natural-forest text-[11px] font-bold font-serif px-2.5 py-1.5 rounded-xl cursor-pointer focus:outline-none focus:border-natural-forest transition disabled:opacity-50"
-                          title="Japanese pronunciation voice"
-                        >
-                          <option value="">{availableJapaneseVoices.length ? "Default voice" : "Default voice only"}</option>
-                          {availableJapaneseVoices.map((voice) => (
-                            <option key={voice.voiceURI} value={voice.voiceURI}>
-                              {voice.name}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => setAutoPronounce(!autoPronounce)}
-                          className={`p-2 rounded-xl text-xs font-mono font-bold tracking-wider transition cursor-pointer ${autoPronounce
-                            ? "bg-natural-forest text-natural-bg"
-                            : "bg-natural-card border border-natural-border text-natural-forest hover:border-natural-forest animate-pulse"
-                            }`}
-                        >
-                          {autoPronounce ? "ON (Auto-play)" : "OFF (Silent)"}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Challenge Speed config selectors */}
-                    <div className="mt-2 pt-3 border-t border-natural-border/60">
-                      <h4 className="text-xs font-semibold text-natural-forest-light mb-2 flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5" />
-                        Timer per question
-                      </h4>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        {[
-                          { code: "relax" as const, desc: "Relaxed", time: "No Limit" },
-                          { code: "medium" as const, desc: "Medium", time: "12s cap" },
-                          { code: "hard" as const, desc: "Hard", time: "6s cap" },
-                          { code: "legend" as const, desc: "Legendary", time: "3s cap" },
-                        ].map((d) => (
-                          <button
-                            key={d.code}
-                            type="button"
-                            onClick={() => setSelectedDifficulty(d.code)}
-                            className={`p-2.5 rounded-lg border text-center transition duration-200 cursor-pointer ${selectedDifficulty === d.code
-                              ? "bg-natural-clay/10 border-natural-clay text-natural-clay font-bold"
-                              : "bg-natural-bg/40 border-natural-border/60 text-natural-charcoal/80 text-xs hover:border-natural-clay/40"
-                              }`}
-                          >
-                            <span className="block text-xs uppercase tracking-wide font-bold">{d.desc}</span>
-                            <span className="text-[10px] opacity-75 font-mono mt-0.5 block font-bold">{d.time}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Number of Choices selector */}
-                    <div className="mt-2 pt-3 border-t border-natural-border/60">
-                      <h4 className="text-xs font-semibold text-natural-forest-light mb-2 flex items-center gap-1.5">
-                        <HelpCircle className="w-3.5 h-3.5" />
-                        Answer choices
-                      </h4>
+                    <fieldset className="min-w-0">
+                      <legend className={PRACTICE_LEGEND}>Stages (pick one or more)</legend>
                       <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { count: 4 as const, label: "4 Options", desc: "Standard" },
-                          { count: 6 as const, label: "6 Options", desc: "Harder" },
-                        ].map((opt) => (
-                          <button
-                            key={opt.count}
-                            type="button"
-                            onClick={() => {
-                              setNumChoices(opt.count);
-                              showToast(`Choice count set to ${opt.count} options!`);
-                            }}
-                            className={`p-2.5 rounded-lg border text-center transition duration-200 cursor-pointer ${numChoices === opt.count
-                              ? "bg-natural-forest/10 border-natural-forest text-natural-forest font-bold"
-                              : "bg-natural-bg/40 border-natural-border/60 text-natural-charcoal/80 text-xs hover:border-natural-forest/40"
-                              }`}
-                          >
-                            <span className="block text-xs uppercase tracking-wide font-bold">{opt.label}</span>
-                            <span className="text-[10px] opacity-75 font-mono mt-0.5 block font-bold">{opt.desc}</span>
-                          </button>
-                        ))}
+                        {QUIZ_STAGES.map((stage) => {
+                          const on = selectedStages.includes(stage.id);
+                          return (
+                            <button
+                              key={stage.id}
+                              type="button"
+                              aria-pressed={on}
+                              onClick={() => handleToggleStage(stage.id)}
+                              className={`min-h-[44px] flex flex-col gap-1 p-3 rounded-xl border text-left transition cursor-pointer ${PRACTICE_FOCUS_RING} ${on
+                                ? "bg-natural-forest/10 border-natural-forest text-natural-forest shadow-sm"
+                                : "bg-natural-bg/40 border-natural-border/60 text-natural-charcoal hover:border-natural-forest-light/60"
+                                }`}
+                            >
+                              <span className="flex items-start justify-between gap-2">
+                                <span className="font-bold text-sm leading-snug">{stage.name}</span>
+                                {/* The tick is the non-colour cue; aria-pressed carries the state for screen readers */}
+                                <span
+                                  aria-hidden="true"
+                                  className={`shrink-0 w-4 h-4 mt-0.5 rounded border flex items-center justify-center ${on
+                                    ? "bg-natural-forest border-natural-forest text-natural-bg"
+                                    : "bg-natural-card border-natural-border"
+                                    }`}
+                                >
+                                  {on && <Check className="w-3 h-3" />}
+                                </span>
+                              </span>
+                              <span className="text-[11px] font-mono font-bold text-natural-forest-light">{stage.chars} chars</span>
+                              <span className="text-[11px] leading-snug text-natural-forest-light">{stage.hint}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+
+                    {/* More options: a real disclosure. The panel is hidden (not just collapsed), so its controls leave the tab order while closed. */}
+                    <div className="border-t border-natural-border/60 pt-4">
+                      <button
+                        type="button"
+                        aria-expanded={kanaMoreOpen}
+                        aria-controls="practice-kana-more"
+                        onClick={() => setKanaMoreOpen((open) => !open)}
+                        className={`w-full min-h-[44px] flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl border border-natural-border/70 bg-natural-bg/50 hover:border-natural-forest transition cursor-pointer text-left ${PRACTICE_FOCUS_RING}`}
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-sm font-bold text-natural-forest">More options</span>
+                          <span className="block text-[11px] text-natural-forest-light leading-snug">Timer, answer choices and voice</span>
+                        </span>
+                        <ChevronDown
+                          aria-hidden="true"
+                          className={`w-4 h-4 shrink-0 text-natural-forest ${kanaMoreOpen ? "rotate-180" : ""}`}
+                        />
+                      </button>
+
+                      <div id="practice-kana-more" hidden={!kanaMoreOpen}>
+                        <div className="flex flex-col gap-4 pt-4">
+                          <fieldset className="min-w-0">
+                            <legend className={PRACTICE_LEGEND}>Timer per question</legend>
+                            <div className="grid grid-cols-2 gap-2">
+                              {QUIZ_TIMERS.map((d) => (
+                                <button
+                                  key={d.code}
+                                  type="button"
+                                  aria-pressed={selectedDifficulty === d.code}
+                                  onClick={() => setSelectedDifficulty(d.code)}
+                                  className={`min-h-[44px] p-2.5 rounded-lg border text-center transition duration-200 cursor-pointer ${PRACTICE_FOCUS_RING} ${selectedDifficulty === d.code
+                                    ? "bg-natural-clay/10 border-natural-clay text-natural-clay font-bold"
+                                    : "bg-natural-bg/40 border-natural-border/60 text-natural-charcoal/80 text-xs hover:border-natural-clay/40"
+                                    }`}
+                                >
+                                  <span className="block text-xs uppercase tracking-wide font-bold">{d.name}</span>
+                                  <span className="text-[11px] opacity-80 font-mono mt-0.5 block font-bold">{d.cap}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </fieldset>
+
+                          <fieldset className="min-w-0">
+                            <legend className={PRACTICE_LEGEND}>Answer choices</legend>
+                            <div className="grid grid-cols-2 gap-2">
+                              {QUIZ_CHOICE_COUNTS.map((opt) => (
+                                <button
+                                  key={opt.count}
+                                  type="button"
+                                  aria-pressed={numChoices === opt.count}
+                                  onClick={() => setNumChoices(opt.count)}
+                                  className={`min-h-[44px] p-2.5 rounded-lg border text-center transition duration-200 cursor-pointer ${PRACTICE_FOCUS_RING} ${numChoices === opt.count
+                                    ? "bg-natural-forest/10 border-natural-forest text-natural-forest font-bold"
+                                    : "bg-natural-bg/40 border-natural-border/60 text-natural-charcoal/80 text-xs hover:border-natural-forest/40"
+                                    }`}
+                                >
+                                  <span className="block text-xs uppercase tracking-wide font-bold">{opt.name}</span>
+                                  <span className="text-[11px] opacity-80 font-mono mt-0.5 block font-bold">{opt.desc}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </fieldset>
+
+                          <fieldset className="min-w-0">
+                            <legend className={PRACTICE_LEGEND}>Voice</legend>
+                            <div className="flex flex-col gap-3 bg-natural-bg/50 border border-natural-border rounded-xl p-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0 flex flex-col gap-0.5">
+                                  <span className="text-sm font-semibold text-natural-forest"><span aria-hidden="true">🔊 </span>Auto-pronounce on load</span>
+                                  <span className="text-[11px] text-natural-forest-light leading-snug">
+                                    Speaks the kana when each question appears.
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  aria-pressed={autoPronounce}
+                                  aria-label="Auto-pronounce on load"
+                                  onClick={() => setAutoPronounce(!autoPronounce)}
+                                  className={`shrink-0 min-h-[44px] px-3 rounded-xl text-xs font-mono font-bold tracking-wider transition cursor-pointer ${PRACTICE_FOCUS_RING} ${autoPronounce
+                                    ? "bg-natural-forest text-natural-bg"
+                                    : "bg-natural-card border border-natural-border text-natural-forest hover:border-natural-forest"
+                                    }`}
+                                >
+                                  {autoPronounce ? "On (auto-play)" : "Off (silent)"}
+                                </button>
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <label htmlFor="practice-voice-select" className="text-[11px] font-semibold text-natural-forest-light">
+                                  Japanese voice
+                                </label>
+                                <select
+                                  id="practice-voice-select"
+                                  value={selectedJapaneseVoiceURI}
+                                  onChange={(e) => handleSelectJapaneseVoice(e.target.value)}
+                                  disabled={availableJapaneseVoices.length === 0}
+                                  className={`w-full min-h-[44px] bg-natural-card border border-natural-border/80 text-natural-forest text-xs font-bold font-serif px-2.5 py-1.5 rounded-xl cursor-pointer transition disabled:opacity-50 ${PRACTICE_FOCUS_RING}`}
+                                >
+                                  <option value="">{availableJapaneseVoices.length ? "Default voice" : "Default voice only"}</option>
+                                  {availableJapaneseVoices.map((voice) => (
+                                    <option key={voice.voiceURI} value={voice.voiceURI}>
+                                      {voice.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          </fieldset>
+                        </div>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Right side challenges launch panel */}
-                  <div className="flex flex-col gap-3">
-                    <button
-                      type="button"
-                      id="action-quiz-choice"
-                      onClick={() => openCharPicker("choice")}
-                      className="w-full text-left p-4 rounded-2xl bg-natural-card border border-natural-border/70 hover:border-natural-forest hover:-translate-y-0.5 duration-300 transition flex items-center justify-between shadow-sm cursor-pointer"
-                    >
-                      <div>
-                        <span className="block text-natural-forest font-serif text-base font-bold">
-                          Multiple Choice
-                        </span>
-                        <span className="text-xs text-natural-charcoal/60 block mt-0.5">
-                          Match the kana to its romaji reading
-                        </span>
-                      </div>
-                      <Play className="w-5 h-5 text-natural-forest animate-pulse" />
-                    </button>
-
-                    <button
-                      type="button"
-                      id="action-quiz-romaji"
-                      onClick={() => openCharPicker("romaji")}
-                      className="w-full text-left p-4 rounded-2xl bg-natural-card border border-natural-border/70 hover:border-natural-forest hover:-translate-y-0.5 duration-300 transition flex items-center justify-between shadow-sm cursor-pointer"
-                    >
-                      <div>
-                        <span className="block text-natural-forest font-serif text-base font-bold">
-                          Type the Answer
-                        </span>
-                        <span className="text-xs text-natural-charcoal/60 block mt-0.5">
-                          Spell out the romaji on your keyboard
-                        </span>
-                      </div>
-                      <PenTool className="w-5 h-5 text-natural-forest" />
-                    </button>
-
-                    <button
-                      type="button"
-                      id="action-survival"
-                      onClick={() => openCharPicker("survival")}
-                      className="w-full text-left p-4 rounded-2xl bg-natural-terracotta/10 border border-natural-terracotta/35 hover:bg-natural-terracotta/15 hover:border-natural-terracotta hover:-translate-y-0.5 duration-300 transition flex items-center justify-between shadow-sm cursor-pointer"
-                    >
-                      <div>
-                        <span className="block text-natural-terracotta font-serif text-base font-bold">
-                          🕯️ Survival Mode
-                        </span>
-                        <span className="text-xs text-natural-terracotta/70 block mt-0.5">
-                          Race the clock — wrong answers cost time!
-                        </span>
-                      </div>
-                      <Flame className="w-5 h-5 text-natural-terracotta fill-current" />
-                    </button>
-
-                    <button
-                      type="button"
-                      id="action-vocab-quiz"
-                      onClick={() => {
-                        setVocabQuizPhase("config");
-                        setCurrentScreen("vocab-quiz");
-                      }}
-                      className="w-full text-left p-4 rounded-2xl bg-natural-card border border-natural-border/70 hover:border-natural-clay hover:-translate-y-0.5 duration-300 transition flex items-center justify-between shadow-sm cursor-pointer"
-                    >
-                      <div>
-                        <span className="block text-natural-clay font-serif text-base font-bold">
-                          Vocabulary Quiz
-                        </span>
-                        <span className="text-xs text-natural-charcoal/60 block mt-0.5">
-                          Practice N5 words by meaning or reading
-                        </span>
-                      </div>
-                      <Award className="w-5 h-5 text-natural-clay" />
-                    </button>
-
-                    <button
-                      type="button"
-                      id="action-kanji-quiz"
-                      onClick={() => {
-                        setKanjiQuizPhase("config");
-                        setCurrentScreen("kanji-quiz");
-                      }}
-                      className="w-full text-left p-4 rounded-2xl bg-natural-card border border-natural-border/70 hover:border-natural-forest hover:-translate-y-0.5 duration-300 transition flex items-center justify-between shadow-sm cursor-pointer"
-                    >
-                      <div>
-                        <span className="block text-natural-forest font-serif text-base font-bold">
-                          Kanji Quiz
-                        </span>
-                        <span className="text-xs text-natural-charcoal/60 block mt-0.5">
-                          Test N5 kanji meanings or readings
-                        </span>
-                      </div>
-                      <BookMarked className="w-5 h-5 text-natural-forest" />
-                    </button>
-
-                    {/* Online Speed Duel button */}
-                    <button
-                      type="button"
-                      id="action-online-duel"
-                      onClick={openOnlineMultiplayer}
-                      className="w-full text-left p-4 rounded-2xl bg-natural-forest/10 border border-natural-forest/35 hover:bg-natural-forest/15 hover:border-natural-forest hover:-translate-y-0.5 duration-300 transition flex items-center justify-between shadow-sm cursor-pointer"
-                    >
-                      <div>
-                        <span className="block text-natural-forest font-serif text-base font-bold">
-                          🌐 Speed Duel
-                        </span>
-                        <span className="text-xs text-natural-forest/70 block mt-0.5">
-                          Race a friend online — first correct wins!
-                        </span>
-                      </div>
-                      <Globe className="w-5 h-5 text-natural-forest" />
-                    </button>
-                  </div>
+                  </section>
                 </div>
               )}
                 </>

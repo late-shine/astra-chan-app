@@ -1,5 +1,5 @@
 import type React from "react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { ChevronLeft, Info, Play, Volume2 } from "lucide-react";
 import type { StudentStats, VocabularyItem } from "../types";
 
@@ -72,6 +72,26 @@ export default function VocabQuizScreen({
   returnToPracticeHub,
   handleVocabAnswer,
 }: VocabQuizScreenProps) {
+  const reduceMotion = useReducedMotion();
+
+  // C6: an empty pool is explained inline. The Start guard in App stays as it was and still shows its toast.
+  const learnedCount = vocabularyData.filter((v) => !!stats.vocabularyProgress[v.word]).length;
+  const emptyPoolReason =
+    vocabQuizScope === "learned" && learnedCount === 0
+      ? "No words are marked as learned yet. Mark words as mastered in Learn > Words, or choose All."
+      : vocabQuizScope === "custom" && vocabQuizCustomWords.size === 0
+        ? "No words selected yet. Pick at least one word below."
+        : "";
+
+  // C6: what a screen reader hears after an answer: the result, never the clock.
+  const correctAnswer = vocabQuizItem ? (vocabQuizMode === "meaning" ? vocabQuizItem.english : vocabQuizItem.hiragana) : "";
+  const answerAnnouncement =
+    vocabQuizAnswerStatus === "correct"
+      ? "Correct."
+      : vocabQuizAnswerStatus === "incorrect"
+        ? `Incorrect. The answer is ${correctAnswer}.`
+        : "";
+
   return (
             <motion.div
               className="flex flex-col gap-0"
@@ -88,8 +108,8 @@ export default function VocabQuizScreen({
                   </div>
 
                   {/* Pool selector */}
-                  <div className="w-full">
-                    <label className="text-[10px] font-mono font-bold text-natural-forest-light uppercase tracking-wider block mb-1.5">Practice Pool</label>
+                  <div className="w-full" role="group" aria-labelledby="vocab-quiz-pool-label">
+                    <p id="vocab-quiz-pool-label" className="text-[10px] font-mono font-bold text-natural-forest-light uppercase tracking-wider block mb-1.5">Practice Pool</p>
                     <div className="grid grid-cols-2 gap-2">
                       {([
                         { key: "all" as const, label: "All", desc: `${vocabularyData.length} words` },
@@ -97,12 +117,12 @@ export default function VocabQuizScreen({
                         { key: "learned" as const, label: "Learned", desc: `${vocabularyData.filter(v => !!stats.vocabularyProgress[v.word]).length} words` },
                         { key: "custom" as const, label: "Custom", desc: `${vocabQuizCustomWords.size} selected` },
                       ]).map(opt => (
-                        <button key={opt.key} type="button" onClick={() => setVocabQuizScope(opt.key)}
+                        <button key={opt.key} type="button" aria-pressed={vocabQuizScope === opt.key} onClick={() => setVocabQuizScope(opt.key)}
                           className={`p-2.5 rounded-xl border text-center transition cursor-pointer ${vocabQuizScope === opt.key
                             ? "bg-natural-forest/10 border-natural-forest text-natural-forest font-bold"
                             : "bg-natural-bg border-natural-border text-natural-charcoal hover:border-natural-forest/40"}`}>
                           <span className="block text-xs font-bold">{opt.label}</span>
-                          <span className="block text-[9px] font-mono opacity-70 mt-0.5 uppercase">{opt.desc}</span>
+                          <span className="block text-[10px] font-mono opacity-70 mt-0.5 uppercase">{opt.desc}</span>
                         </button>
                       ))}
                     </div>
@@ -111,23 +131,31 @@ export default function VocabQuizScreen({
                         Uses the category currently selected in Learn &gt; Words.
                       </p>
                     )}
+                    {/* Always mounted so a screen reader announces the reason when it appears; visually hidden while empty. */}
+                    <p
+                      id="vocab-quiz-empty-reason"
+                      role="status"
+                      className={emptyPoolReason ? "text-xs text-natural-terracotta font-semibold mt-2 leading-snug" : "sr-only"}
+                    >
+                      {emptyPoolReason}
+                    </p>
                   </div>
 
                   {vocabQuizScope === "custom" && (
                     <div className="w-full">
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-[10px] font-mono font-bold text-natural-forest-light uppercase tracking-wider">Select Words</label>
+                        <span id="vocab-quiz-custom-label" className="text-[10px] font-mono font-bold text-natural-forest-light uppercase tracking-wider">Select Words</span>
                         <button type="button" onClick={() => setVocabQuizCustomWords(new Set())}
-                          className="text-[10px] font-mono text-natural-clay hover:text-natural-terracotta transition cursor-pointer">
+                          className="min-h-[44px] px-2 text-[10px] font-mono text-natural-clay hover:text-natural-terracotta transition cursor-pointer">
                           Clear
                         </button>
                       </div>
-                      <div className="grid grid-cols-1 gap-1.5 max-h-44 overflow-y-auto pr-1">
+                      <div className="grid grid-cols-1 gap-1.5 max-h-44 overflow-y-auto pr-1" role="group" aria-labelledby="vocab-quiz-custom-label">
                         {vocabularyData.map((v) => {
                           const key = getVocabQuizKey(v);
                           const isSelected = vocabQuizCustomWords.has(key);
                           return (
-                            <button key={key} type="button" onClick={() => toggleVocabQuizCustomWord(v)}
+                            <button key={key} type="button" aria-pressed={isSelected} onClick={() => toggleVocabQuizCustomWord(v)}
                               className={`p-2 rounded-xl border text-left transition cursor-pointer ${isSelected
                                 ? "bg-natural-clay/10 border-natural-clay text-natural-clay"
                                 : "bg-natural-bg border-natural-border text-natural-charcoal hover:border-natural-clay/40"}`}>
@@ -141,14 +169,14 @@ export default function VocabQuizScreen({
                   )}
 
                   {/* Mode toggle */}
-                  <div className="w-full">
-                    <label className="text-[10px] font-mono font-bold text-natural-forest-light uppercase tracking-wider block mb-1.5">Quiz Mode</label>
+                  <div className="w-full" role="group" aria-labelledby="vocab-quiz-mode-label">
+                    <p id="vocab-quiz-mode-label" className="text-[10px] font-mono font-bold text-natural-forest-light uppercase tracking-wider block mb-1.5">Quiz Mode</p>
                     <div className="grid grid-cols-2 gap-2">
                       {([
                         { key: "meaning" as const, label: "Meaning", desc: "JP → English" },
                         { key: "reading" as const, label: "Reading", desc: "English → Hiragana" },
                       ]).map(opt => (
-                        <button key={opt.key} type="button" onClick={() => setVocabQuizMode(opt.key)}
+                        <button key={opt.key} type="button" aria-pressed={vocabQuizMode === opt.key} onClick={() => setVocabQuizMode(opt.key)}
                           className={`p-3 rounded-xl border text-center transition cursor-pointer ${vocabQuizMode === opt.key
                             ? "bg-natural-clay/10 border-natural-clay text-natural-clay font-bold"
                             : "bg-natural-bg border-natural-border text-natural-charcoal hover:border-natural-clay/40"}`}>
@@ -160,12 +188,12 @@ export default function VocabQuizScreen({
                   </div>
 
                   {/* Length selector */}
-                  <div className="w-full">
-                    <label className="text-[10px] font-mono font-bold text-natural-forest-light uppercase tracking-wider block mb-1.5">Question Count</label>
+                  <div className="w-full" role="group" aria-labelledby="vocab-quiz-length-label">
+                    <p id="vocab-quiz-length-label" className="text-[10px] font-mono font-bold text-natural-forest-light uppercase tracking-wider block mb-1.5">Question Count</p>
                     <div className="grid grid-cols-3 gap-2">
                       {([10, 20, "all"] as const).map(len => (
-                        <button key={String(len)} type="button" onClick={() => setVocabQuizLength(len)}
-                          className={`py-2.5 rounded-xl border text-xs font-bold font-mono transition cursor-pointer ${vocabQuizLength === len
+                        <button key={String(len)} type="button" aria-pressed={vocabQuizLength === len} onClick={() => setVocabQuizLength(len)}
+                          className={`min-h-[44px] py-2.5 rounded-xl border text-xs font-bold font-mono transition cursor-pointer ${vocabQuizLength === len
                             ? "bg-natural-forest/10 border-natural-forest text-natural-forest"
                             : "bg-natural-bg border-natural-border text-natural-charcoal hover:border-natural-forest/40"}`}>
                           {len === "all" ? "All" : `${len} Q`}
@@ -174,12 +202,12 @@ export default function VocabQuizScreen({
                     </div>
                   </div>
 
-                  <button type="button" onClick={startVocabQuiz}
+                  <button type="button" onClick={startVocabQuiz} aria-describedby={emptyPoolReason ? "vocab-quiz-empty-reason" : undefined}
                     className="w-full py-3 bg-natural-forest text-natural-bg rounded-2xl font-serif font-extrabold text-sm tracking-wider hover:bg-natural-forest/90 transition shadow-sm flex items-center justify-center gap-2 cursor-pointer">
                     <Play className="w-4 h-4" /> Start Quiz
                   </button>
                   <button type="button" onClick={returnToPracticeHub}
-                    className="text-xs text-natural-forest-light hover:text-natural-forest font-mono transition cursor-pointer">
+                    className="min-h-[44px] px-4 text-xs text-natural-forest-light hover:text-natural-forest font-mono transition cursor-pointer">
                     ← Back to Practice
                   </button>
                 </div>
@@ -188,18 +216,22 @@ export default function VocabQuizScreen({
               {/* ── QUIZ PHASE ── */}
               {vocabQuizPhase === "quiz" && vocabQuizItem && (
                 <div className="bg-natural-card border border-natural-border/70 p-6 rounded-3xl flex flex-col items-center shadow-lg backdrop-blur">
+                  {/* Polite live region for the result only: Correct or Incorrect plus the answer. No countdown lives here. */}
+                  <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{answerAnnouncement}</p>
+
                   {/* Header */}
-                  <div className="flex items-center justify-between w-full mb-4 pb-2 border-b border-natural-border">
+                  <div className="flex items-center justify-between gap-2 w-full mb-4 pb-2 border-b border-natural-border">
                     <button type="button" onClick={returnToPracticeHub}
-                      className="px-3 py-1.5 rounded-lg border border-natural-border text-natural-forest-light text-xs hover:border-natural-forest hover:text-natural-forest bg-natural-bg/40 font-semibold transition flex items-center gap-1.5 cursor-pointer">
-                      <ChevronLeft className="w-3.5 h-3.5" /> Escape Session
+                      className="min-h-[44px] px-3 py-1.5 rounded-lg border border-natural-border text-natural-forest-light text-xs hover:border-natural-forest hover:text-natural-forest bg-natural-bg/40 font-semibold transition flex items-center gap-1.5 cursor-pointer">
+                      <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" /> End quiz
                     </button>
                     <span className="text-xs text-natural-forest font-mono tracking-wider font-bold">
                       WORD {vocabQuizIndex + 1} OF {vocabQuizPool.length}
                     </span>
                     <button type="button" onClick={() => speakJapanese(vocabQuizItem.word)}
-                      className="p-1.5 bg-natural-bg hover:bg-natural-forest/10 text-natural-forest border border-natural-border rounded-lg transition shadow-sm cursor-pointer">
-                      <Volume2 className="w-4 h-4" />
+                      aria-label="Hear this word"
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center bg-natural-bg hover:bg-natural-forest/10 text-natural-forest border border-natural-border rounded-lg transition shadow-sm cursor-pointer">
+                      <Volume2 className="w-4 h-4" aria-hidden="true" />
                     </button>
                   </div>
 
@@ -208,7 +240,8 @@ export default function VocabQuizScreen({
                     <motion.div
                       key={vocabQuizItem.word + vocabQuizMode}
                       animate={
-                        vocabQuizAnswerStatus === "correct" ? { scale: [1, 1.07, 1], rotate: [0, 2, -2, 0] }
+                        reduceMotion ? {}
+                          : vocabQuizAnswerStatus === "correct" ? { scale: [1, 1.07, 1], rotate: [0, 2, -2, 0] }
                           : vocabQuizAnswerStatus === "incorrect" ? { x: [-10, 10, -7, 7, 0] }
                           : {}
                       }
@@ -253,7 +286,7 @@ export default function VocabQuizScreen({
                       return (
                         <button key={idx} type="button" onClick={() => handleVocabAnswer(ch)}
                           disabled={vocabQuizAnswerStatus !== null}
-                          className={`p-3.5 rounded-xl border font-serif text-sm font-bold transition cursor-pointer text-center leading-snug ${cls}`}>
+                          className={`min-w-0 break-words p-3 rounded-xl border font-serif text-sm font-bold transition cursor-pointer text-center leading-snug ${cls}`}>
                           {ch}
                         </button>
                       );
@@ -262,11 +295,15 @@ export default function VocabQuizScreen({
 
                   {/* Post-answer example */}
                   {vocabQuizAnswerStatus !== null && (
-                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                    <motion.div initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                       className="w-full max-w-md mt-5 p-3.5 bg-natural-bg rounded-2xl border border-natural-border flex flex-col gap-2">
+                      {/* Plain-text verdict for sighted learners (colour alone is not enough). Screen readers get it from the live region above. */}
+                      <p aria-hidden="true" className={`text-xs font-extrabold ${vocabQuizAnswerStatus === "correct" ? "text-natural-forest" : "text-natural-terracotta"}`}>
+                        {vocabQuizAnswerStatus === "correct" ? "✓ Correct" : "✗ Not quite"}
+                      </p>
                       <div className="flex items-center justify-between">
                         <p className="text-[10px] text-natural-clay font-mono uppercase tracking-widest flex items-center gap-1 font-bold">
-                          <Info className="w-3 h-3" /> Word Details
+                          <Info className="w-3 h-3" aria-hidden="true" /> Word Details
                         </p>
                         <span className="text-[9px] font-mono text-natural-forest-light">
                           {vocabQuizItem.romaji}
@@ -284,7 +321,7 @@ export default function VocabQuizScreen({
 
               {/* ── RESULTS PHASE ── */}
               {vocabQuizPhase === "results" && (
-                <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col gap-5">
+                <motion.div initial={reduceMotion ? false : { opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col gap-5">
                   <div className="bg-natural-card border border-natural-border/70 p-6 rounded-3xl shadow-sm flex flex-col items-center gap-3 text-center relative overflow-hidden">
                     <span className="absolute text-[120px] font-serif text-natural-forest/5 select-none pointer-events-none top-1/2 -translate-y-1/2">語</span>
                     <div className="relative z-10">
@@ -296,20 +333,20 @@ export default function VocabQuizScreen({
                       </h3>
                       <p className="text-xs text-natural-forest-light font-mono mt-1">Vocabulary Quiz Complete</p>
                     </div>
-                    <div className="flex items-center gap-4 mt-1 relative z-10">
-                      <div className="flex flex-col items-center px-5 py-3 bg-natural-bg border border-natural-border rounded-2xl shadow-sm">
-                        <span className="text-3xl font-mono font-extrabold text-natural-forest">{vocabQuizCorrect}<span className="text-natural-forest-light text-xl">/{vocabQuizPool.length}</span></span>
-                        <span className="text-[9px] font-mono uppercase tracking-widest text-natural-forest-light mt-0.5 font-bold">Correct</span>
+                    <div className="flex flex-wrap items-stretch justify-center gap-3 mt-1 relative z-10">
+                      <div className="flex flex-col items-center justify-center min-w-[5.5rem] px-4 sm:px-5 py-3 bg-natural-bg border border-natural-border rounded-2xl shadow-sm">
+                        <span className="text-2xl sm:text-3xl font-mono font-extrabold text-natural-forest">{vocabQuizCorrect}<span className="text-natural-forest-light text-xl">/{vocabQuizPool.length}</span></span>
+                        <span className="text-[10px] font-mono uppercase tracking-widest text-natural-forest-light mt-0.5 font-bold">Correct</span>
                       </div>
-                      <div className="flex flex-col items-center px-5 py-3 bg-natural-bg border border-natural-border rounded-2xl shadow-sm">
-                        <span className="text-3xl font-mono font-extrabold text-natural-clay">+{vocabQuizXp}</span>
-                        <span className="text-[9px] font-mono uppercase tracking-widest text-natural-forest-light mt-0.5 font-bold">XP Earned</span>
+                      <div className="flex flex-col items-center justify-center min-w-[5.5rem] px-4 sm:px-5 py-3 bg-natural-bg border border-natural-border rounded-2xl shadow-sm">
+                        <span className="text-2xl sm:text-3xl font-mono font-extrabold text-natural-clay">+{vocabQuizXp}</span>
+                        <span className="text-[10px] font-mono uppercase tracking-widest text-natural-forest-light mt-0.5 font-bold">XP Earned</span>
                       </div>
-                      <div className="flex flex-col items-center px-5 py-3 bg-natural-bg border border-natural-border rounded-2xl shadow-sm">
-                        <span className="text-3xl font-mono font-extrabold text-natural-forest">
+                      <div className="flex flex-col items-center justify-center min-w-[5.5rem] px-4 sm:px-5 py-3 bg-natural-bg border border-natural-border rounded-2xl shadow-sm">
+                        <span className="text-2xl sm:text-3xl font-mono font-extrabold text-natural-forest">
                           {vocabQuizPool.length > 0 ? Math.round((vocabQuizCorrect / vocabQuizPool.length) * 100) : 0}%
                         </span>
-                        <span className="text-[9px] font-mono uppercase tracking-widest text-natural-forest-light mt-0.5 font-bold">Accuracy</span>
+                        <span className="text-[10px] font-mono uppercase tracking-widest text-natural-forest-light mt-0.5 font-bold">Accuracy</span>
                       </div>
                     </div>
                   </div>
@@ -328,8 +365,9 @@ export default function VocabQuizScreen({
                           <div key={`${v.word}-${i}`} className="flex items-center justify-between p-2.5 bg-natural-terracotta/5 border border-natural-terracotta/20 rounded-xl">
                             <div className="flex items-center gap-2">
                               <button type="button" onClick={() => speakJapanese(v.word)}
-                                className="p-1.5 bg-natural-card border border-natural-border text-natural-forest rounded-lg hover:bg-natural-forest/10 transition cursor-pointer">
-                                <Volume2 className="w-3 h-3" />
+                                aria-label={`Hear ${v.word}`}
+                                className="min-h-[44px] min-w-[44px] flex items-center justify-center bg-natural-card border border-natural-border text-natural-forest rounded-lg hover:bg-natural-forest/10 transition cursor-pointer">
+                                <Volume2 className="w-4 h-4" aria-hidden="true" />
                               </button>
                               <div>
                                 <span className="text-sm font-serif font-bold text-natural-terracotta">{v.word}</span>

@@ -1,6 +1,6 @@
 import type React from "react";
 import { useEffect, useRef } from "react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { ArrowBigRight, ChevronLeft, ChevronRight, Flame, Info, Volume2 } from "lucide-react";
 import type { HiraganaItem, KatakanaItem } from "../types";
 
@@ -56,6 +56,7 @@ export default function QuizScreen({
   advanceQuizIndex,
 }: QuizScreenProps) {
   const romajiInputRef = useRef<HTMLInputElement>(null);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     if (quizMode !== "romaji" || !currentQuestion) return;
@@ -69,10 +70,10 @@ export default function QuizScreen({
   useEffect(() => {
     if (!waitingForNext) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        advanceQuizIndex();
-      }
+      // One Enter, one action: skip key repeat, IME confirmation and any Enter another handler already used.
+      if (e.key !== "Enter" || e.repeat || e.isComposing || e.defaultPrevented) return;
+      e.preventDefault();
+      advanceQuizIndex();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -80,23 +81,35 @@ export default function QuizScreen({
 
   if (!currentQuestion) return null;
 
+  const answerAnnouncement =
+    answerStatus === "correct"
+      ? "Correct."
+      : answerStatus === "incorrect"
+        ? `Incorrect. The answer is ${currentQuestion.romaji}.`
+        : "";
+
   return (
             <motion.div
               className="bg-natural-card border border-natural-border/70 p-6 rounded-3xl flex flex-col items-center shadow-lg backdrop-blur"
             >
+              {/* Polite live region for the result only. The countdown is never inside it, so timer ticks are not read out. */}
+              <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                {answerAnnouncement}
+              </p>
+
               {/* Quiz Session details */}
-              <div className="flex items-center justify-between w-full mb-4 pb-2 border-b border-natural-border">
+              <div className="flex items-center justify-between gap-2 w-full mb-4 pb-2 border-b border-natural-border">
                 <button
                   type="button"
                   onClick={() => setCurrentScreen("menu")}
-                  className="px-3 py-1.5 rounded-lg border border-natural-border text-natural-forest-light text-xs hover:border-natural-forest hover:text-natural-forest bg-natural-bg/40 font-semibold transition flex items-center gap-1.5 cursor-pointer"
+                  className="min-h-[44px] px-3 py-1.5 rounded-lg border border-natural-border text-natural-forest-light text-xs hover:border-natural-forest hover:text-natural-forest bg-natural-bg/40 font-semibold transition flex items-center gap-1.5 cursor-pointer"
                 >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                  Escape Session
+                  <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
+                  End quiz
                 </button>
 
                 {quizMode === "survival" ? (
-                  <div className="text-center">
+                  <div className="text-center min-w-0">
                     <span className="block text-[10px] text-natural-forest-light uppercase font-mono tracking-wider font-bold">
                       CANDLE ROOMS SURVIVED
                     </span>
@@ -118,10 +131,11 @@ export default function QuizScreen({
                   type="button"
                   id="quiz-speak-symbol"
                   onClick={() => speakJapanese(currentQuestion.kana)}
-                  className="p-1.5 bg-natural-bg hover:bg-natural-forest/10 text-natural-forest border border-natural-border rounded-lg transition shadow-sm cursor-pointer"
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center bg-natural-bg hover:bg-natural-forest/10 text-natural-forest border border-natural-border rounded-lg transition shadow-sm cursor-pointer"
                   title="Pronounce Character"
+                  aria-label="Hear this character"
                 >
-                  <Volume2 className="w-4 h-4" />
+                  <Volume2 className="w-4 h-4" aria-hidden="true" />
                 </button>
               </div>
 
@@ -153,11 +167,13 @@ export default function QuizScreen({
                 <motion.div
                   key={currentQuestion.kana}
                   animate={
-                    answerStatus === "correct"
-                      ? { scale: [1, 1.08, 1], rotate: [0, 2, -2, 0] }
-                      : answerStatus === "incorrect"
-                        ? { x: [-12, 12, -8, 8, 0] }
-                        : {}
+                    reduceMotion
+                      ? {}
+                      : answerStatus === "correct"
+                        ? { scale: [1, 1.08, 1], rotate: [0, 2, -2, 0] }
+                        : answerStatus === "incorrect"
+                          ? { x: [-12, 12, -8, 8, 0] }
+                          : {}
                   }
                   transition={{ duration: 0.4 }}
                   className={`w-44 h-44 border-2 rounded-3xl flex items-center justify-center bg-natural-bg/50 transition shadow-sm relative ${answerStatus === "correct"
@@ -184,13 +200,22 @@ export default function QuizScreen({
                       value={typedInput}
                       onChange={(e) => setTypedInput(e.target.value)}
                       placeholder="Type readings..."
+                      aria-label="Type the romaji reading"
                       disabled={answerStatus !== null}
                       id="quiz-typed-input"
                       className="w-full p-3 bg-natural-bg text-center font-mono text-lg rounded-xl border border-natural-border focus:border-natural-forest outline-none text-natural-charcoal uppercase tracking-wider font-bold"
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") handleTypedSubmit();
+                        if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+                        // One Enter, one action. The "Enter = Next" listener on window is attached as soon as this answer is checked,
+                        // so this press is stopped here and can never also advance the quiz.
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleTypedSubmit();
                       }}
                       autoComplete="off"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      spellCheck={false}
                     />
 
                     {answerStatus === "incorrect" && (
@@ -204,10 +229,10 @@ export default function QuizScreen({
                     type="button"
                     onClick={handleTypedSubmit}
                     disabled={answerStatus !== null}
-                    className="w-full p-2.5 bg-natural-forest hover:bg-[#3d4d3e] text-natural-bg rounded-xl font-bold tracking-wide transition shadow-sm text-sm flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full min-h-[44px] p-2.5 bg-natural-forest hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed text-natural-bg rounded-xl font-bold tracking-wide transition shadow-sm text-sm flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    Cast Spelling Spell
-                    <ArrowBigRight className="w-4 h-4 text-natural-bg" />
+                    Check
+                    <ArrowBigRight className="w-4 h-4 text-natural-bg" aria-hidden="true" />
                   </button>
                 </div>
               ) : (
@@ -241,7 +266,7 @@ export default function QuizScreen({
               {/* USAGE EXAMPLE SECTION (Visible once the answer state completes) */}
               {answerStatus !== null && currentQuestion.examples && currentQuestion.examples.length > 0 && (
                 <motion.div
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={reduceMotion ? false : { opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="w-full max-w-md mt-5 p-3.5 bg-natural-bg rounded-2xl border border-natural-border flex flex-col gap-2"
                 >
@@ -266,7 +291,7 @@ export default function QuizScreen({
               {waitingForNext && quizMode !== "survival" && (
                 <motion.button
                   type="button"
-                  initial={{ opacity: 0, y: 8 }}
+                  initial={reduceMotion ? false : { opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.2 }}
                   onClick={advanceQuizIndex}
