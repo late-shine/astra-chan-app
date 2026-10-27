@@ -4,6 +4,8 @@ import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { synthesizeGeminiJapaneseSpeech } from "./src/geminiTts";
 
+const GEMINI_SPEECH_CACHE_RECIPE = "v2-transcript-metadata";
+
 // Ensure environment variables are loaded
 dotenv.config();
 
@@ -42,7 +44,7 @@ async function startServer() {
         rateWindow.count += 1;
       }
 
-      const cacheKey = `${voiceId}|${cleanText}|${parsedRate}`;
+      const cacheKey = `${GEMINI_SPEECH_CACHE_RECIPE}|${voiceId}|${cleanText}|${parsedRate}`;
       const cached = cloudSpeechCache.get(cacheKey);
       if (cached) {
         return res.json({

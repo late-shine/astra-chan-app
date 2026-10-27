@@ -2,6 +2,11 @@ import { getCloudJapaneseVoice } from "./voiceCatalog";
 
 export const DEFAULT_GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts";
 
+const STRUCTURED_SPEECH_METADATA_MODELS = new Set([
+  "gemini-3.8-flash-tts",
+  "gemini-3.8-flash-lite-tts",
+]);
+
 type SynthesizeSpeechInput = {
   text: string;
   voiceId: string;
@@ -43,6 +48,24 @@ function describePace(speakingRate: number): string {
   return "at a natural conversational pace";
 }
 
+function buildSpeechInput(transcript: string, pace: string, supportsSpeechMetadata: boolean) {
+  // Older fallback models can only receive a plain transcript. Never prepend
+  // instructions there: a TTS model may speak them aloud.
+  if (!supportsSpeechMetadata) return transcript;
+
+  return [{
+    type: "user_input",
+    content: [{
+      type: "text",
+      text: transcript,
+      annotations: [{
+        type: "speech_metadata",
+        style: `Japanese pronunciation, ${pace}`,
+      }],
+    }],
+  }];
+}
+
 export async function synthesizeGeminiJapaneseSpeech({
   text,
   voiceId,
@@ -53,6 +76,7 @@ export async function synthesizeGeminiJapaneseSpeech({
   const apiKey = process.env.GEMINI_API_KEY;
   const model = process.env.GEMINI_TTS_MODEL || DEFAULT_GEMINI_TTS_MODEL;
   const safeRate = Math.min(1.5, Math.max(0.5, speakingRate));
+  const supportsSpeechMetadata = STRUCTURED_SPEECH_METADATA_MODELS.has(model);
 
   if (!cleanText || cleanText.length > 240) {
     const error = new Error("Speech text must contain between 1 and 240 characters.");
@@ -78,7 +102,7 @@ export async function synthesizeGeminiJapaneseSpeech({
     },
     body: JSON.stringify({
       model,
-      input: `Say in Japanese ${describePace(safeRate)}. Speak exactly this transcript and do not translate or add words:\n${cleanText}`,
+      input: buildSpeechInput(cleanText, describePace(safeRate), supportsSpeechMetadata),
       response_format: { type: "audio" },
       generation_config: {
         speech_config: [{ voice: voice.geminiVoice }],

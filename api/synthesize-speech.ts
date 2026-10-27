@@ -15,9 +15,28 @@ const TTS_FALLBACK_MODELS = [
   "gemini-3.1-flash-tts-preview",
   "gemini-2.5-flash-preview-tts",
 ] as const;
+const SPEECH_CACHE_RECIPE = "v2-transcript-metadata";
 
 function shouldTryNextTtsModel(status: number): boolean {
   return status === 404 || status === 408 || status === 429 || status >= 500;
+}
+
+function buildSpeechInput(transcript: string, pace: string, supportsSpeechMetadata: boolean) {
+  // Keep directives out of the transcript: otherwise a TTS model can read them
+  // aloud. Legacy fallbacks receive just the text and therefore no style hint.
+  if (!supportsSpeechMetadata) return transcript;
+
+  return [{
+    type: "user_input",
+    content: [{
+      type: "text",
+      text: transcript,
+      annotations: [{
+        type: "speech_metadata",
+        style: `Japanese pronunciation, ${pace}`,
+      }],
+    }],
+  }];
 }
 
 const VOICES: Record<string, { id: string; geminiVoice: string }> = {
@@ -90,7 +109,7 @@ async function synthesize(text: string, voiceId: string, speakingRate: number) {
         headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
         body: JSON.stringify({
           model,
-          input: "Say in Japanese " + pace + ". Speak exactly this transcript and do not translate or add words:\n" + text,
+          input: buildSpeechInput(text, pace, isModernTts),
           response_format: isModernTts
             ? { type: "audio", mime_type: "audio/l16", sample_rate: 24_000 }
             : { type: "audio" },
@@ -171,7 +190,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     rateWindow.count += 1;
   }
 
-  const cacheKey = `${voiceId}|${cleanText}|${parsedRate}`;
+  const cacheKey = `${SPEECH_CACHE_RECIPE}|${voiceId}|${cleanText}|${parsedRate}`;
   const cached = speechCache.get(cacheKey);
   if (cached) {
     return res.json({ audioContent: cached.audioContent, mimeType: "audio/wav", voiceId, cached: true });
