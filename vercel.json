@@ -4,10 +4,10 @@
   "installCommand": "npm install",
   "functions": {
     "api/analyze-kanji.ts": {
-      "maxDuration": 30
+      "maxDuration": 40
     },
     "api/synthesize-speech.ts": {
-      "maxDuration": 30
+      "maxDuration": 40
     }
   },
   "rewrites": [

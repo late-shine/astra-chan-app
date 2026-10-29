@@ -3,27 +3,157 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Vercel Serverless Function — POST /api/analyze-kanji
  *
- * Proxies canvas drawing data to Google Gemini 3.1 Flash Lite (vision model).
+ * Proxies canvas drawing data to Google Gemini vision models, trying a fallback
+ * chain (see DEFAULT_ANALYSIS_MODELS) inside a fixed time budget.
  * Credentials live exclusively in Vercel Environment Variables — never the client.
  *
  * Required env vars (Vercel Dashboard → Project → Settings → Environment Variables):
  *   GEMINI_API_KEY  — Google AI Studio API key
+ *   GEMINI_ANALYSIS_MODELS — optional, comma-separated model ids that replace the
+ *                            default chain (first = preferred)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-const ANALYSIS_MODELS = [
+// Models are tried in this order. A 429 / 404 comes back almost instantly, so
+// putting the high-quality models (small free daily quota) first costs no time:
+// when their quota is gone the request simply falls through to the next one.
+// Override the whole list without a code change by setting GEMINI_ANALYSIS_MODELS
+// in Vercel (comma-separated model ids, first = preferred).
+const DEFAULT_ANALYSIS_MODELS = [
     "gemini-3.8-flash",
-    "gemini-3.7-flash",
     "gemini-3.6-flash",
-    "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
-] as const;
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+];
 
-function shouldTryNextAnalysisModel(status: number): boolean {
-    return status === 404 || status === 408 || status === 429 || status >= 500;
+function getAnalysisModels(): string[] {
+    const configured = (process.env.GEMINI_ANALYSIS_MODELS || "")
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean);
+    return configured.length > 0 ? configured : DEFAULT_ANALYSIS_MODELS;
+}
+
+// Time budget (vercel.json gives this function 40 s).
+const MODEL_TIMEOUT_MS = 11_000;   // one model gets at most this long
+const TOTAL_BUDGET_MS = 34_000;    // stop starting new attempts after this
+const MIN_ATTEMPT_MS = 2_500;      // not worth starting an attempt with less left
+
+// Gemini 3.x Flash and 2.5 models "think" before answering, which costs seconds
+// and eats into maxOutputTokens. Grading a drawing does not need it. Lite models
+// are left on their defaults; if a model rejects the setting we retry without it.
+function thinkingConfigFor(model: string): Record<string, unknown> | undefined {
+    if (/^gemini-3(\.\d+)?-flash$/.test(model)) return { thinkingLevel: "minimal" };
+    if (/^gemini-2\.5-flash(-lite)?$/.test(model)) return { thinkingBudget: 0 };
+    return undefined;
+}
+
+type AnalysisOutcome =
+    | { kind: "ok"; data: any }
+    | { kind: "http"; status: number; message: string }
+    | { kind: "network"; message: string; timedOut: boolean };
+
+type ModelFailure = {
+    model: string;
+    status: number | null;
+    timedOut: boolean;
+    message: string;
+};
+
+async function requestAnalysis(opts: {
+    model: string;
+    apiKey: string;
+    mimeType: string;
+    base64Data: string;
+    promptText: string;
+    thinking?: Record<string, unknown>;
+    timeoutMs: number;
+}): Promise<AnalysisOutcome> {
+    const signal = AbortSignal.timeout(opts.timeoutMs);
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${opts.model}:generateContent`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": opts.apiKey,
+                },
+                signal,
+                body: JSON.stringify({
+                    contents: [
+                        {
+                            parts: [
+                                { inline_data: { mime_type: opts.mimeType, data: opts.base64Data } },
+                                { text: opts.promptText },
+                            ],
+                        },
+                    ],
+                    generationConfig: {
+                        // Thinking tokens (when a model uses them) count against this.
+                        maxOutputTokens: 1024,
+                        responseMimeType: "application/json",
+                        responseSchema: ANALYSIS_RESPONSE_SCHEMA,
+                        ...(opts.thinking ? { thinkingConfig: opts.thinking } : {}),
+                    },
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            const errorData: any = await response.json().catch(() => ({}));
+            return {
+                kind: "http",
+                status: response.status,
+                message: errorData?.error?.message || `Gemini ${opts.model} returned status ${response.status}`,
+            };
+        }
+
+        return { kind: "ok", data: await response.json() };
+    } catch (err: unknown) {
+        const timedOut =
+            signal.aborted ||
+            (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError"));
+        return {
+            kind: "network",
+            timedOut,
+            message: timedOut
+                ? `${opts.model} did not answer within ${Math.round(opts.timeoutMs / 1000)}s`
+                : err instanceof Error
+                    ? err.message
+                    : `${opts.model} request failed`,
+        };
+    }
+}
+
+// Pull the JSON object out of a Gemini reply, or return null if it is unusable.
+function parseAnalysisReply(data: any): Record<string, any> | null {
+    const parts = data?.candidates?.[0]?.content?.parts;
+    if (!Array.isArray(parts)) return null;
+
+    const text = parts
+        .filter((part: any) => typeof part?.text === "string" && !part.thought)
+        .map((part: any) => part.text)
+        .join("")
+        .trim();
+    if (!text) return null;
+
+    const cleanText = text
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```$/, "");
+
+    try {
+        const parsed = JSON.parse(cleanText);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+        if (typeof parsed.advice !== "string" || !parsed.advice.trim()) return null;
+        return parsed;
+    } catch {
+        return null;
+    }
 }
 
 const ANALYSIS_RESPONSE_SCHEMA = {
@@ -113,97 +243,90 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ? imageData.split(";")[0].split(":")[1]
             : "image/png";
 
-        // ─── Try the preferred model, then fall back on transient/model errors ─
-        let resultObj: any;
-        let lastError: Error | null = null;
+        // ─── Walk the model chain inside a hard time budget ───────────────────
+        // Vercel kills the function at maxDuration (40 s, see vercel.json) and then
+        // answers with a plain-text error page the browser cannot parse as JSON.
+        // So every attempt gets its own short timeout, and we stop starting new
+        // attempts early enough to still send a clean JSON reply ourselves.
+        const startedAt = Date.now();
+        const timeLeft = () => TOTAL_BUDGET_MS - (Date.now() - startedAt);
+        const failures: ModelFailure[] = [];
+        let resultObj: any = null;
+        let usedModel = "";
+        let ranOutOfTime = false;
 
-        for (const model of ANALYSIS_MODELS) {
-            let response: Response;
-            try {
-                response = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-                    {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({
-                            contents: [
-                                {
-                                    parts: [
-                                        {
-                                            inline_data: {
-                                                mime_type: mimeType,
-                                                data: base64Data,
-                                            },
-                                        },
-                                        {
-                                            text: promptText,
-                                        },
-                                    ],
-                                },
-                            ],
-                            generationConfig: {
-                                maxOutputTokens: 600,
-      responseMimeType: "application/json",
-      responseSchema: ANALYSIS_RESPONSE_SCHEMA,
-                            },
-                        }),
-                    }
-                );
-            } catch (err: unknown) {
-                lastError = err instanceof Error
-                    ? err
-                    : new Error(`Gemini ${model} request failed.`);
-                console.warn(`[analyze-kanji] ${model} request failed; trying the next model.`, lastError);
-                continue;
-            }
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                lastError = new Error(
-                    errorData.error?.message ||
-                    `Gemini ${model} returned status ${response.status}`
-                );
-
-                if (!shouldTryNextAnalysisModel(response.status)) {
-                    throw lastError;
-                }
-
-                console.warn(
-                    `[analyze-kanji] ${model} returned ${response.status}; trying the next model.`
-                );
-                continue;
-            }
-
-            try {
-                const responseData = await response.json();
-                const replyText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
-                if (!replyText) {
-                    throw new Error("Empty response received from Gemini API.");
-                }
-
-                const cleanText = replyText
-                    .trim()
-                    .replace(/^```(?:json)?\s*/i, "")
-                    .replace(/\s*```$/, "");
-
-                resultObj = JSON.parse(cleanText);
+        for (const model of getAnalysisModels()) {
+            if (timeLeft() < MIN_ATTEMPT_MS) {
+                ranOutOfTime = true;
                 break;
-            } catch (err: unknown) {
-                const parseError = err instanceof Error
-                    ? err
-                    : new Error("Gemini returned invalid analysis JSON.");
-                lastError = new Error("Gemini " + model + " returned invalid analysis JSON.");
-                console.warn(
-                    "[analyze-kanji] " + model + " returned invalid analysis JSON; trying the next model.",
-                    parseError
-                );
             }
+
+            const thinking = thinkingConfigFor(model);
+            let outcome = await requestAnalysis({
+                model,
+                apiKey,
+                mimeType,
+                base64Data,
+                promptText,
+                thinking,
+                timeoutMs: Math.min(MODEL_TIMEOUT_MS, timeLeft()),
+            });
+
+            // A model that rejects the thinking setting gets one retry without it.
+            if (outcome.kind === "http" && outcome.status === 400 && thinking && timeLeft() >= MIN_ATTEMPT_MS) {
+                outcome = await requestAnalysis({
+                    model,
+                    apiKey,
+                    mimeType,
+                    base64Data,
+                    promptText,
+                    thinking: undefined,
+                    timeoutMs: Math.min(MODEL_TIMEOUT_MS, timeLeft()),
+                });
+            }
+
+            if (outcome.kind !== "ok") {
+                failures.push({
+                    model,
+                    status: outcome.kind === "http" ? outcome.status : null,
+                    timedOut: outcome.kind === "network" && outcome.timedOut,
+                    message: outcome.message,
+                });
+                console.warn(`[analyze-kanji] ${model} failed (${outcome.message}); trying the next model.`);
+                continue;
+            }
+
+            const parsed = parseAnalysisReply(outcome.data);
+            if (!parsed) {
+                failures.push({ model, status: null, timedOut: false, message: "returned unusable analysis JSON" });
+                console.warn(`[analyze-kanji] ${model} returned unusable analysis JSON; trying the next model.`);
+                continue;
+            }
+
+            resultObj = parsed;
+            usedModel = model;
+            break;
         }
 
         if (!resultObj) {
-            throw lastError || new Error("All Gemini analysis models failed.");
+            console.error("[analyze-kanji] Every analysis model failed.", failures);
+
+            const allRateLimited = failures.length > 0 && failures.every((f) => f.status === 429);
+            const anyTimedOut = ranOutOfTime || failures.some((f) => f.timedOut);
+
+            if (allRateLimited && !anyTimedOut) {
+                return res.status(429).json({
+                    error: "Astra's free AI checks are used up for now (Google's quota). Try again later, or use the offline self-check tips.",
+                });
+            }
+            if (anyTimedOut) {
+                return res.status(504).json({
+                    error: "Astra's AI checker took too long to answer. Please try again in a moment.",
+                });
+            }
+            return res.status(502).json({
+                error: "Astra's AI checker couldn't be reached right now. Please try again in a moment.",
+            });
         }
         const validDrawing = resultObj.validDrawing === true;
         const rawScore = Number(resultObj.score);
@@ -219,6 +342,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ...resultObj,
             validDrawing,
             score,
+            model: usedModel,
         });
 
     } catch (err: unknown) {

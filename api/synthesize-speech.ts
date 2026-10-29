@@ -17,6 +17,13 @@ const TTS_FALLBACK_MODELS = [
 ] as const;
 const SPEECH_CACHE_RECIPE = "v2-transcript-metadata";
 
+// Time budget (vercel.json gives this function 40 s). A slow model must not eat
+// the whole budget, otherwise Vercel kills the function and the browser receives
+// a plain-text error page instead of JSON.
+const TTS_MODEL_TIMEOUT_MS = 11_000;
+const TTS_TOTAL_BUDGET_MS = 34_000;
+const TTS_MIN_ATTEMPT_MS = 2_500;
+
 function shouldTryNextTtsModel(status: number): boolean {
   return status === 404 || status === 408 || status === 429 || status >= 500;
 }
@@ -97,8 +104,18 @@ async function synthesize(text: string, voiceId: string, speakingRate: number) {
   }
 
   let lastError: Error | null = null;
+  const startedAt = Date.now();
 
   for (const model of models) {
+    const timeLeft = TTS_TOTAL_BUDGET_MS - (Date.now() - startedAt);
+    if (timeLeft < TTS_MIN_ATTEMPT_MS) {
+      const error = new Error("Astra's Gemini voice took too long to answer. Please try again in a moment.");
+      (error as Error & { statusCode?: number }).statusCode = 504;
+      lastError = error;
+      break;
+    }
+    const timeoutMs = Math.min(TTS_MODEL_TIMEOUT_MS, timeLeft);
+    const signal = AbortSignal.timeout(timeoutMs);
     const isModernTts = model === "gemini-3.8-flash-tts"
       || model === "gemini-3.8-flash-lite-tts";
     let response: Response;
@@ -107,6 +124,7 @@ async function synthesize(text: string, voiceId: string, speakingRate: number) {
       response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        signal,
         body: JSON.stringify({
           model,
           input: buildSpeechInput(text, pace, isModernTts),
@@ -118,6 +136,10 @@ async function synthesize(text: string, voiceId: string, speakingRate: number) {
       });
     } catch (err: unknown) {
       lastError = err instanceof Error ? err : new Error("Gemini TTS request failed.");
+      if (signal.aborted) {
+        lastError = new Error("Astra's Gemini voice took too long to answer. Please try again in a moment.");
+        (lastError as Error & { statusCode?: number }).statusCode = 504;
+      }
       console.warn("[synthesize-speech] " + model + " request failed; trying the next model.", lastError);
       continue;
     }
@@ -140,7 +162,17 @@ async function synthesize(text: string, voiceId: string, speakingRate: number) {
       continue;
     }
 
-    const payload = await response.json();
+    let payload: any;
+    try {
+      payload = await response.json();
+    } catch (err: unknown) {
+      lastError = new Error(signal.aborted
+        ? "Astra's Gemini voice took too long to answer. Please try again in a moment."
+        : "Gemini TTS returned an unreadable reply for " + model + ".");
+      if (signal.aborted) (lastError as Error & { statusCode?: number }).statusCode = 504;
+      console.warn("[synthesize-speech] " + model + " reply could not be read; trying the next model.", err);
+      continue;
+    }
     const audioPart = payload.output_audio
       ?? payload.steps?.flatMap((step: { content?: Array<{ type?: string }> }) => step.content || [])
         .find((part: { type?: string }) => part.type === "audio");

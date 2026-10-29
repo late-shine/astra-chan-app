@@ -56,7 +56,7 @@ Some moments worth mentioning:
 - The multiplayer system took the longest. I checked Firebase guidance with more than one model and researched API-key security before trusting the deployment. Nothing important was accepted just because one model sounded confident.
 - The Study Room redesign changed everything. Instead of menus and tabs, the home screen became Astra-chan's room — a Bookshelf, a Writing Desk, a Star Window. Navigation as a place to be, not a list to scroll through.
 - Astra-chan now reacts when you go AFK. She wonders about you after 15 seconds of silence, and lights up when you return. Small thing. Feels alive.
-- The kanji drawing feedback went through two model generations. The original used Cloudflare Workers AI with LLaVA 1.5 7B — a vision model that technically worked, but gave vague or inaccurate structural feedback. I switched it to **Google Gemini**, now using a fallback chain beginning with Gemini 3.8 Flash and stepping through 3.7, 3.6, 3.5 Flash, 3.5 Flash-Lite, and 3.1 Flash-Lite when a model is unavailable or rate-limited. The feedback stays specific enough to explain what looked off, alongside a separate KanjiVG-based stroke demonstration.
+- The kanji drawing feedback went through two model generations. The original used Cloudflare Workers AI with LLaVA 1.5 7B — a vision model that technically worked, but gave vague or inaccurate structural feedback. I switched it to **Google Gemini**, now using a fallback chain beginning with Gemini 3.8 Flash and stepping through 3.6 Flash, 3.5 Flash-Lite, 3.1 Flash-Lite, and the 2.5 Flash models when a model is unavailable, rate-limited, or too slow (each attempt has its own time limit, so the checker answers within about 35 seconds). The feedback stays specific enough to explain what looked off, alongside a separate KanjiVG-based stroke demonstration.
 
 This is still being built. It probably always will be.
 
@@ -403,7 +403,7 @@ For the fixed Astra Gemini voice catalog, add the same server-side `GEMINI_API_K
 
 > Get a free Gemini API key at [aistudio.google.com](https://aistudio.google.com). Gemini limits vary by model, project, and time window; if the voice quota is reached, Astra automatically uses the browser voice instead.
 
-> ⚠️ **AI drawing analysis limit:** The drawing checker tries several Gemini Flash models when one is unavailable or rate-limited. If the available model quotas are exhausted, the checker may stop responding until a model window resets.
+> ⚠️ **AI drawing analysis limit:** The drawing checker tries several Gemini Flash models when one is unavailable, rate-limited, or slow. On Google's free tier the two strongest models allow only about 20 requests per day each, so most checks end up on the Flash-Lite models; if every quota is used up, the checker shows a friendly message until a window resets. The chain can be changed without a code edit via the optional `GEMINI_ANALYSIS_MODELS` environment variable.
 
 ### Useful commands
 

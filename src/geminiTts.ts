@@ -1,3 +1,5 @@
+// NOTE (Oct 2026): no longer used. server.ts now runs api/synthesize-speech.ts, which has the
+// current model fallback chain and time budget. Kept only for reference; safe to delete.
 import { getCloudJapaneseVoice } from "./voiceCatalog";
 
 export const DEFAULT_GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts";

@@ -2550,6 +2550,12 @@ export default function App() {
 
     const targetKanjiObj = KANJI_DATA[currentKanjiIndex];
 
+    // Never wait forever: the server stops trying after ~34 s (maxDuration is 40 s),
+    // so 45 s here only matters if the connection itself hangs.
+    const controller = new AbortController();
+    const abortTimer = window.setTimeout(() => controller.abort(), 45_000);
+    const slowMessage = "Astra's AI checker took too long to answer. Please try again in a moment.";
+
     try {
       const response = await fetch("/api/analyze-kanji", {
         method: "POST",
@@ -2561,9 +2567,22 @@ export default function App() {
           meaning: targetKanjiObj.meaning,
           imageData: dataUrl,
         }),
+        signal: controller.signal,
       });
 
-      const data = await response.json();
+      // If Vercel stops the function it answers with plain text, not JSON, so
+      // read the body as text first instead of calling response.json() blindly.
+      const rawBody = await response.text();
+      let data: any = null;
+      try {
+        data = rawBody ? JSON.parse(rawBody) : null;
+      } catch {
+        data = null;
+      }
+
+      if (!data) {
+        throw new Error(slowMessage);
+      }
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to analyze your strokes.");
@@ -2613,9 +2632,14 @@ export default function App() {
 
     } catch (err: any) {
       console.error(err);
-      setAnalysisError(err.message || "Astra-chan couldn't reach her calligraphy scrolls. Check her secret energy talisman key!");
+      setAnalysisError(
+        err?.name === "AbortError"
+          ? slowMessage
+          : err.message || "Astra-chan couldn't reach her calligraphy scrolls. Check her secret energy talisman key!"
+      );
       setMascotMood("failure");
     } finally {
+      window.clearTimeout(abortTimer);
       setIsAnalyzing(false);
     }
   };
