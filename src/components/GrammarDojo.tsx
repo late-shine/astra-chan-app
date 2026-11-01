@@ -28,11 +28,76 @@ interface GrammarExample {
 }
 
 interface QuizBlank {
-  sentence: string;  // contains ＿＿＿
-  blank: string;     // correct answer
-  choices: string[]; // exactly 4, includes correct
+  sentence: string;       // contains ＿＿＿
+  sentenceRomaji: string; // contains ___
+  blank: string;          // correct answer
+  choices: string[];      // exactly 4, includes correct
   hint: string;
 }
+
+const CHOICE_ROMAJI: Record<string, string> = {
+  "は": "wa",
+  "が": "ga",
+  "を": "wo",
+  "に": "ni",
+  "で": "de",
+  "も": "mo",
+  "と": "to",
+  "の": "no",
+  "から": "kara",
+  "ので": "node",
+  "けど": "kedo",
+  "のに": "noni",
+  "より": "yori",
+  "です": "desu",
+  "ます": "masu",
+  "だ": "da",
+  "でした": "deshita",
+  "でしたか": "deshita ka",
+  "ですか": "desu ka",
+  "でしょう": "deshou",
+  "だろう": "darou",
+  "いでしょう": "i deshou",
+  "いですか": "i desu ka",
+  "かった": "katta",
+  "くない": "kunai",
+  "大好き": "daisuki",
+  "好き": "suki",
+  "嫌い": "kirai",
+  "得意": "tokui",
+  "方": "hou",
+  "もの": "mono",
+  "こと": "koto",
+  "います": "imasu",
+  "いました": "imashita",
+  "いません": "imasen",
+  "ください": "kudasai",
+  "あります": "arimasu",
+  "みます": "mimasu",
+  "ほしい": "hoshii",
+  "降って": "futte",
+  "降りて": "orite",
+  "降らて": "furate",
+  "降いて": "fuite",
+  "たい": "tai",
+  "ない": "nai",
+  "たく": "taku",
+  "て": "te",
+  "た": "ta",
+  "ていない": "te inai",
+  "った": "tta",
+  "きた": "kita",
+  "いた": "ita",
+  "もいい": "mo ii",
+  "てください": "te kudasai",
+  "てあります": "te arimasu",
+  "ていました": "te imashita",
+  "てもいい": "te mo ii",
+  "って": "tte",
+  "いて": "ite",
+  "きて": "kite",
+  "はいけない": "wa ikenai",
+};
 
 interface QuizQuestion extends QuizBlank {
   patternId: string;
@@ -68,9 +133,9 @@ const GRAMMAR_PATTERNS: GrammarPattern[] = [
     ],
     tip: "は is written as 'ha' but pronounced 'wa' as a particle.",
     quizBlanks: [
-      { sentence: "私＿＿＿学生です", blank: "は", choices: ["は", "が", "を", "に"], hint: "Topic marker particle" },
-      { sentence: "これ＿＿＿本です", blank: "は", choices: ["は", "が", "で", "も"], hint: "What marks the topic?" },
-      { sentence: "田中さんは先生＿＿＿", blank: "です", choices: ["です", "ます", "だ", "でした"], hint: "Polite copula ending" },
+      { sentence: "私＿＿＿学生です", sentenceRomaji: "watashi ___ gakusei desu", blank: "は", choices: ["は", "が", "を", "に"], hint: "Topic marker particle" },
+      { sentence: "これ＿＿＿本です", sentenceRomaji: "kore ___ hon desu", blank: "は", choices: ["は", "が", "で", "も"], hint: "What marks the topic?" },
+      { sentence: "田中さんは先生＿＿＿", sentenceRomaji: "Tanaka-san wa sensei ___", blank: "です", choices: ["です", "ます", "だ", "でした"], hint: "Polite copula ending" },
     ],
   },
   {
@@ -87,9 +152,9 @@ const GRAMMAR_PATTERNS: GrammarPattern[] = [
     ],
     tip: "が not は! The thing you like/dislike takes が, not を.",
     quizBlanks: [
-      { sentence: "猫＿＿＿好きです", blank: "が", choices: ["が", "は", "を", "に"], hint: "Particle before 好き/嫌い" },
-      { sentence: "勉強＿＿＿嫌いです", blank: "が", choices: ["が", "は", "を", "で"], hint: "Particle for likes/dislikes" },
-      { sentence: "音楽が＿＿＿です", blank: "大好き", choices: ["大好き", "好き", "嫌い", "得意"], hint: "Love (emphatic like)" },
+      { sentence: "猫＿＿＿好きです", sentenceRomaji: "neko ___ suki desu", blank: "が", choices: ["が", "は", "を", "に"], hint: "Particle before 好き/嫌い" },
+      { sentence: "勉強＿＿＿嫌いです", sentenceRomaji: "benkyou ___ kirai desu", blank: "が", choices: ["が", "は", "を", "で"], hint: "Particle for likes/dislikes" },
+      { sentence: "音楽が＿＿＿です", sentenceRomaji: "ongaku ga ___ desu", blank: "大好き", choices: ["大好き", "好き", "嫌い", "得意"], hint: "Love (emphatic like)" },
     ],
   },
   {
@@ -106,9 +171,9 @@ const GRAMMAR_PATTERNS: GrammarPattern[] = [
     ],
     tip: "Also used for states: 結婚しています = I am married (ongoing state).",
     quizBlanks: [
-      { sentence: "食べて＿＿＿", blank: "います", choices: ["います", "いました", "ください", "あります"], hint: "Progressive helper verb (present)" },
-      { sentence: "本を読んで＿＿＿", blank: "います", choices: ["います", "いました", "いません", "みます"], hint: "Currently doing (present form)" },
-      { sentence: "雨が＿＿＿います", blank: "降って", choices: ["降って", "降りて", "降らて", "降いて"], hint: "て-form of 降る (to fall/rain)" },
+      { sentence: "食べて＿＿＿", sentenceRomaji: "tabete ___", blank: "います", choices: ["います", "いました", "ください", "あります"], hint: "Progressive helper verb (present)" },
+      { sentence: "本を読んで＿＿＿", sentenceRomaji: "hon wo yonde ___", blank: "います", choices: ["います", "いました", "いません", "みます"], hint: "Currently doing (present form)" },
+      { sentence: "雨が＿＿＿います", sentenceRomaji: "ame ga ___ imasu", blank: "降って", choices: ["降って", "降りて", "降らて", "降いて"], hint: "て-form of 降る (to fall/rain)" },
     ],
   },
   {
@@ -125,9 +190,9 @@ const GRAMMAR_PATTERNS: GrammarPattern[] = [
     ],
     tip: "たい conjugates like an い-adjective: たくない (don't want to), たかった (wanted to).",
     quizBlanks: [
-      { sentence: "日本に行き＿＿＿", blank: "たい", choices: ["たい", "ない", "ます", "たく"], hint: "Want to do (attaches to verb stem)" },
-      { sentence: "すしを食べ＿＿＿です", blank: "たい", choices: ["たい", "て", "ない", "ます"], hint: "Want to eat" },
-      { sentence: "日本語＿＿＿勉強したい", blank: "を", choices: ["を", "が", "は", "に"], hint: "Object marker particle" },
+      { sentence: "日本に行き＿＿＿", sentenceRomaji: "Nihon ni iki___", blank: "たい", choices: ["たい", "ない", "ます", "たく"], hint: "Want to do (attaches to verb stem)" },
+      { sentence: "すしを食べ＿＿＿です", sentenceRomaji: "sushi wo tabe___ desu", blank: "たい", choices: ["たい", "て", "ない", "ます"], hint: "Want to eat" },
+      { sentence: "日本語＿＿＿勉強したい", sentenceRomaji: "Nihongo ___ benkyou shitai", blank: "を", choices: ["を", "が", "は", "に"], hint: "Object marker particle" },
     ],
   },
   {
@@ -144,9 +209,9 @@ const GRAMMAR_PATTERNS: GrammarPattern[] = [
     ],
     tip: "Group 1: replace う with あない. Group 2: replace る with ない. する→しない、くる→こない.",
     quizBlanks: [
-      { sentence: "食べ＿＿＿", blank: "ない", choices: ["ない", "たい", "ます", "て"], hint: "Plain negative (Group 2 verb)" },
-      { sentence: "行か＿＿＿", blank: "ない", choices: ["ない", "ます", "て", "た"], hint: "Negative of 行く (Group 1)" },
-      { sentence: "わから＿＿＿", blank: "ない", choices: ["ない", "ます", "ていない", "たい"], hint: "Don't understand" },
+      { sentence: "食べ＿＿＿", sentenceRomaji: "tabe___", blank: "ない", choices: ["ない", "たい", "ます", "て"], hint: "Plain negative (Group 2 verb)" },
+      { sentence: "行か＿＿＿", sentenceRomaji: "ika___", blank: "ない", choices: ["ない", "ます", "て", "た"], hint: "Negative of 行く (Group 1)" },
+      { sentence: "わから＿＿＿", sentenceRomaji: "wakara___", blank: "ない", choices: ["ない", "ます", "ていない", "たい"], hint: "Don't understand" },
     ],
   },
   {
@@ -163,9 +228,9 @@ const GRAMMAR_PATTERNS: GrammarPattern[] = [
     ],
     tip: "Same pattern as て-form but use た/だ instead of て/で.",
     quizBlanks: [
-      { sentence: "食べ＿＿＿", blank: "た", choices: ["た", "て", "ない", "たい"], hint: "Plain past tense ending" },
-      { sentence: "学校に行＿＿＿", blank: "った", choices: ["った", "きた", "かった", "いた"], hint: "Past of 行く (irregular て-form)" },
-      { sentence: "映画を見＿＿＿", blank: "た", choices: ["た", "て", "ない", "ます"], hint: "Plain past (Group 2)" },
+      { sentence: "食べ＿＿＿", sentenceRomaji: "tabe___", blank: "た", choices: ["た", "て", "ない", "たい"], hint: "Plain past tense ending" },
+      { sentence: "学校に行＿＿＿", sentenceRomaji: "gakkou ni i___", blank: "った", choices: ["った", "きた", "かった", "いた"], hint: "Past of 行く (irregular て-form)" },
+      { sentence: "映画を見＿＿＿", sentenceRomaji: "eiga wo mi___", blank: "た", choices: ["た", "て", "ない", "ます"], hint: "Plain past (Group 2)" },
     ],
   },
   {
@@ -182,9 +247,9 @@ const GRAMMAR_PATTERNS: GrammarPattern[] = [
     ],
     tip: "て-form has many uses: connecting actions (〜て〜て), permission (〜てもいい), prohibition (〜てはいけない).",
     quizBlanks: [
-      { sentence: "食べて＿＿＿", blank: "ください", choices: ["ください", "います", "もいい", "みます"], hint: "Please do ~ (polite request)" },
-      { sentence: "ここに書い＿＿＿", blank: "てください", choices: ["てください", "てあります", "ていました", "てもいい"], hint: "Please write here" },
-      { sentence: "待＿＿＿ください", blank: "って", choices: ["って", "て", "いて", "きて"], hint: "て-form of 待つ (to wait)" },
+      { sentence: "食べて＿＿＿", sentenceRomaji: "tabete ___", blank: "ください", choices: ["ください", "います", "もいい", "みます"], hint: "Please do ~ (polite request)" },
+      { sentence: "ここに書い＿＿＿", sentenceRomaji: "koko ni kai___", blank: "てください", choices: ["てください", "てあります", "ていました", "てもいい"], hint: "Please write here" },
+      { sentence: "待＿＿＿ください", sentenceRomaji: "ma___ kudasai", blank: "って", choices: ["って", "て", "いて", "きて"], hint: "て-form of 待つ (to wait)" },
     ],
   },
   {
@@ -201,9 +266,9 @@ const GRAMMAR_PATTERNS: GrammarPattern[] = [
     ],
     tip: "から is more direct/casual. ので is softer and more polite. Both mean 'because'.",
     quizBlanks: [
-      { sentence: "寒い＿＿＿、コートを着ます", blank: "から", choices: ["から", "ので", "けど", "が"], hint: "Because (direct/casual)" },
-      { sentence: "時間がない＿＿＿、急ぎます", blank: "ので", choices: ["ので", "から", "けど", "のに"], hint: "Because (softer, polite)" },
-      { sentence: "雨だ＿＿＿、家にいます", blank: "から", choices: ["から", "ので", "に", "と"], hint: "Casual 'because'" },
+      { sentence: "寒い＿＿＿、コートを着ます", sentenceRomaji: "samui ___, kooto wo kimasu", blank: "から", choices: ["から", "ので", "けど", "が"], hint: "Because (direct/casual)" },
+      { sentence: "時間がない＿＿＿、急ぎます", sentenceRomaji: "jikan ga nai ___, isogimasu", blank: "ので", choices: ["ので", "から", "けど", "のに"], hint: "Because (softer, polite)" },
+      { sentence: "雨だ＿＿＿、家にいます", sentenceRomaji: "ame da ___, ie ni imasu", blank: "から", choices: ["から", "ので", "に", "と"], hint: "Casual 'because'" },
     ],
   },
   {
@@ -220,9 +285,9 @@ const GRAMMAR_PATTERNS: GrammarPattern[] = [
     ],
     tip: "The sentence before と must be in plain form, not ます/です form.",
     quizBlanks: [
-      { sentence: "いい＿＿＿思います", blank: "と", choices: ["と", "が", "は", "を"], hint: "Quotation particle ('that')" },
-      { sentence: "雨が降る＿＿＿思います", blank: "と", choices: ["と", "が", "は", "で"], hint: "I think that..." },
-      { sentence: "彼は来ない＿＿＿思います", blank: "と", choices: ["と", "が", "は", "に"], hint: "Connects thought to 思う" },
+      { sentence: "いい＿＿＿思います", sentenceRomaji: "ii ___ omoimasu", blank: "と", choices: ["と", "が", "は", "を"], hint: "Quotation particle ('that')" },
+      { sentence: "雨が降る＿＿＿思います", sentenceRomaji: "ame ga furu ___ omoimasu", blank: "と", choices: ["と", "が", "は", "で"], hint: "I think that..." },
+      { sentence: "彼は来ない＿＿＿思います", sentenceRomaji: "kare wa konai ___ omoimasu", blank: "と", choices: ["と", "が", "は", "に"], hint: "Connects thought to 思う" },
     ],
   },
   {
@@ -239,9 +304,9 @@ const GRAMMAR_PATTERNS: GrammarPattern[] = [
     ],
     tip: "Rising intonation (でしょう?) turns it into a confirmation question: 'Right?'.",
     quizBlanks: [
-      { sentence: "明日は晴れ＿＿＿", blank: "でしょう", choices: ["でしょう", "です", "だろう", "でした"], hint: "Probably (polite conjecture)" },
-      { sentence: "彼女は学生＿＿＿", blank: "でしょう", choices: ["でしょう", "です", "でしたか", "ですか"], hint: "She is probably..." },
-      { sentence: "難し＿＿＿", blank: "いでしょう", choices: ["いでしょう", "いですか", "かった", "くない"], hint: "Probably difficult (い-adj + でしょう)" },
+      { sentence: "明日は晴れ＿＿＿", sentenceRomaji: "ashita wa hare ___", blank: "でしょう", choices: ["でしょう", "です", "だろう", "でした"], hint: "Probably (polite conjecture)" },
+      { sentence: "彼女は学生＿＿＿", sentenceRomaji: "kanojo wa gakusei ___", blank: "でしょう", choices: ["でしょう", "です", "でしたか", "ですか"], hint: "She is probably..." },
+      { sentence: "難し＿＿＿", sentenceRomaji: "muzukashi___", blank: "いでしょう", choices: ["いでしょう", "いですか", "かった", "くない"], hint: "Probably difficult (い-adj + でしょう)" },
     ],
   },
   {
@@ -258,9 +323,9 @@ const GRAMMAR_PATTERNS: GrammarPattern[] = [
     ],
     tip: "より = 'than'. の方が = 'the one that is more'. Always: [less preferred] より [more preferred] の方が.",
     quizBlanks: [
-      { sentence: "犬＿＿＿猫の方が好きです", blank: "より", choices: ["より", "から", "ので", "けど"], hint: "'Than' in a comparison" },
-      { sentence: "バスより電車の＿＿＿が速い", blank: "方", choices: ["方", "の", "もの", "こと"], hint: "の＿＿＿が = 'the one that is more'" },
-      { sentence: "昨日より今日の方＿＿＿暖かい", blank: "が", choices: ["が", "は", "を", "で"], hint: "Subject marker after の方" },
+      { sentence: "犬＿＿＿猫の方が好きです", sentenceRomaji: "inu ___ neko no hou ga suki desu", blank: "より", choices: ["より", "から", "ので", "けど"], hint: "'Than' in a comparison" },
+      { sentence: "バスより電車の＿＿＿が速い", sentenceRomaji: "basu yori densha no ___ ga hayai", blank: "方", choices: ["方", "の", "もの", "こと"], hint: "の＿＿＿が = 'the one that is more'" },
+      { sentence: "昨日より今日の方＿＿＿暖かい", sentenceRomaji: "kinou yori kyou no hou ___ atatakai", blank: "が", choices: ["が", "は", "を", "で"], hint: "Subject marker after の方" },
     ],
   },
   {
@@ -277,9 +342,9 @@ const GRAMMAR_PATTERNS: GrammarPattern[] = [
     ],
     tip: "Opposite: ～てはいけない = must not do. ～なければならない = must do.",
     quizBlanks: [
-      { sentence: "食べて＿＿＿です", blank: "もいい", choices: ["もいい", "ください", "います", "ほしい"], hint: "May / It's okay to (permission)" },
-      { sentence: "ここに座って＿＿＿ですか", blank: "もいい", choices: ["もいい", "ください", "います", "はいけない"], hint: "May I sit here?" },
-      { sentence: "写真を撮って＿＿＿ですか", blank: "もいい", choices: ["もいい", "ください", "みます", "はいけない"], hint: "May I take a photo?" },
+      { sentence: "食べて＿＿＿です", sentenceRomaji: "tabete ___ desu", blank: "もいい", choices: ["もいい", "ください", "います", "ほしい"], hint: "May / It's okay to (permission)" },
+      { sentence: "ここに座って＿＿＿ですか", sentenceRomaji: "koko ni suwatte ___ desu ka", blank: "もいい", choices: ["もいい", "ください", "います", "はいけない"], hint: "May I sit here?" },
+      { sentence: "写真を撮って＿＿＿ですか", sentenceRomaji: "shashin wo totte ___ desu ka", blank: "もいい", choices: ["もいい", "ください", "みます", "はいけない"], hint: "May I take a photo?" },
     ],
   },
 ];
@@ -332,31 +397,59 @@ function ExampleRow({ example, showRomaji, speakJapanese }: { example: GrammarEx
 
 function BlankSentence({
   sentence,
+  sentenceRomaji,
   answered,
   blank,
+  showRomaji,
 }: {
   sentence: string;
+  sentenceRomaji: string;
   answered: string | null;
   blank: string;
+  showRomaji: boolean;
 }) {
   const parts = sentence.split("＿＿＿");
+  const romajiParts = sentenceRomaji.split("___");
   const isCorrect = answered !== null && answered === blank;
+  const answeredRomaji = answered !== null ? (CHOICE_ROMAJI[answered] ?? answered) : null;
+
   return (
-    <span className="font-serif text-2xl md:text-3xl leading-loose tracking-wide text-natural-charcoal select-text">
-      {parts[0]}
-      <span
-        className={`inline-block min-w-[4rem] px-3.5 mx-1 rounded-2xl border-2 text-center font-bold align-middle transition-all duration-300 ${
-          answered === null
-            ? "border-dashed border-natural-charcoal/30 bg-natural-bg/50 text-transparent h-10 w-16"
-            : isCorrect
-            ? "border-natural-forest bg-natural-forest/15 text-natural-forest scale-105"
-            : "border-natural-terracotta bg-natural-terracotta/15 text-natural-terracotta scale-105"
-        }`}
-      >
-        {answered ?? "　　"}
+    <div className="flex flex-col gap-1.5">
+      <span className="font-serif text-2xl md:text-3xl leading-loose tracking-wide text-natural-charcoal select-text">
+        {parts[0]}
+        <span
+          className={`inline-block min-w-[4rem] px-3.5 mx-1 rounded-2xl border-2 text-center font-bold align-middle transition-all duration-300 ${
+            answered === null
+              ? "border-dashed border-natural-charcoal/30 bg-natural-bg/50 text-transparent h-10 w-16"
+              : isCorrect
+              ? "border-natural-forest bg-natural-forest/15 text-natural-forest scale-105"
+              : "border-natural-terracotta bg-natural-terracotta/15 text-natural-terracotta scale-105"
+          }`}
+        >
+          {answered ?? "　　"}
+        </span>
+        {parts[1]}
       </span>
-      {parts[1]}
-    </span>
+      {showRomaji && (
+        <span className="font-mono text-xs md:text-sm text-natural-charcoal/65 tracking-wide select-text">
+          {romajiParts[0]}
+          {answeredRomaji === null ? (
+            <span className="inline-block min-w-[2.5rem] mx-0.5 border-b border-dashed border-natural-charcoal/35 text-center text-natural-charcoal/40">
+              ___
+            </span>
+          ) : (
+            <span
+              className={`font-bold px-1 rounded ${
+                isCorrect ? "text-natural-forest" : "text-natural-terracotta"
+              }`}
+            >
+              {answeredRomaji}
+            </span>
+          )}
+          {romajiParts[1]}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -373,6 +466,7 @@ export default function GrammarDojo({ onBack, onAwardXP, speakJapanese }: Gramma
   const [quiz, setQuiz] = useState<QuizQuestion[]>([]);
   const [qIdx, setQIdx] = useState(0);
   const [answered, setAnswered] = useState<string | null>(null);
+  const [showHint, setShowHint] = useState(false);
   const [score, setScore] = useState(0);
   const [quizDone, setQuizDone] = useState(false);
   // ref keeps score in sync for XP calc (avoids stale closure on last question)
@@ -402,6 +496,7 @@ export default function GrammarDojo({ onBack, onAwardXP, speakJapanese }: Gramma
     setQuiz(q);
     setQIdx(0);
     setAnswered(null);
+    setShowHint(false);
     setScore(0);
     scoreRef.current = 0;
     setQuizDone(false);
@@ -425,6 +520,7 @@ export default function GrammarDojo({ onBack, onAwardXP, speakJapanese }: Gramma
     } else {
       setQIdx((i) => i + 1);
       setAnswered(null);
+      setShowHint(false);
     }
   };
 
@@ -871,27 +967,48 @@ export default function GrammarDojo({ onBack, onAwardXP, speakJapanese }: Gramma
                         <div className="min-h-[5rem] flex items-center py-2 z-10 relative">
                           <BlankSentence
                             sentence={currentQ.sentence}
+                            sentenceRomaji={currentQ.sentenceRomaji}
                             answered={answered}
                             blank={currentQ.blank}
+                            showRomaji={showRomaji}
                           />
                         </div>
 
-                        {/* Interactive Hint with romaji toggle */}
-                        {showRomaji && (
-                          <div className="flex gap-2 text-xs text-natural-charcoal/60 bg-natural-bg/50 border border-natural-border/40 p-3 rounded-xl z-10 relative">
-                            <Lightbulb className="w-3.5 h-3.5 text-natural-clay/80 shrink-0 mt-0.5" />
-                            <span>
-                              <strong className="font-mono text-[9px] uppercase text-natural-clay block tracking-widest font-extrabold mb-0.5">Dojo Hint:</strong>
-                              {currentQ.hint}
-                            </span>
+                        {/* Separate per-question Hint toggle & callout */}
+                        <div className="flex flex-col gap-2 z-10 relative">
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => setShowHint((v) => !v)}
+                              aria-expanded={showHint}
+                              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-mono font-bold transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-natural-forest ${
+                                showHint
+                                  ? "bg-natural-clay/15 border-natural-clay/50 text-natural-clay"
+                                  : "bg-natural-bg/60 border-natural-border/60 text-natural-charcoal/70 hover:border-natural-clay/40 hover:text-natural-clay"
+                              }`}
+                            >
+                              <Lightbulb className="w-3.5 h-3.5 shrink-0" />
+                              <span>{showHint ? "Hide Hint" : "Show Hint"}</span>
+                            </button>
                           </div>
-                        )}
+
+                          {showHint && (
+                            <div className="flex gap-2 text-xs text-natural-charcoal/75 bg-natural-bg/50 border border-natural-border/40 p-3 rounded-xl">
+                              <Lightbulb className="w-3.5 h-3.5 text-natural-clay/80 shrink-0 mt-0.5" />
+                              <span>
+                                <strong className="font-mono text-[9px] uppercase text-natural-clay block tracking-widest font-extrabold mb-0.5">Dojo Hint:</strong>
+                                {currentQ.hint}
+                              </span>
+                            </div>
+                          )}
+                        </div>
 
                         {/* Tactile Choice Buttons */}
                         <div className="grid grid-cols-2 gap-3 mt-1 z-10 relative">
                           {currentQ.choices.map((choice) => {
                             const isChosen = answered === choice;
                             const isRight = choice === currentQ.blank;
+                            const choiceRomaji = CHOICE_ROMAJI[choice];
                             let cls = "py-3.5 px-4 rounded-2xl border-2 font-serif text-base font-black transition-all shadow-xs cursor-pointer ";
                             
                             if (answered === null) {
@@ -914,7 +1031,20 @@ export default function GrammarDojo({ onBack, onAwardXP, speakJapanese }: Gramma
                                 disabled={answered !== null}
                                 className={cls}
                               >
-                                {choice}
+                                <span className="block leading-tight">{choice}</span>
+                                {showRomaji && choiceRomaji && (
+                                  <span
+                                    className={`block font-mono text-[11px] font-semibold mt-0.5 tracking-wide ${
+                                      answered === null
+                                        ? "text-natural-charcoal/55"
+                                        : isRight || isChosen
+                                        ? "text-natural-bg/85"
+                                        : "text-natural-charcoal/20"
+                                    }`}
+                                  >
+                                    {choiceRomaji}
+                                  </span>
+                                )}
                               </motion.button>
                             );
                           })}

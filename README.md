@@ -41,13 +41,13 @@ The app grew from a single HTML file into a full-stack learning space with multi
 
 ### How I work with AI
 
-I do not treat AI as a vending machine for finished software, or as a tool that disappears once it has produced an answer. I work with several AI collaborators, each useful for different kinds of thinking. Claude has helped with architecture, implementation, and review; Codex has helped with scoped edits, verification, and handoffs; Gemini and Google AI Studio have helped with experiments, data, visual work, and stroke features; other models have been useful for debugging, research, comparison, or design criticism.
+I use AI as a group of collaborators, not as an autopilot. Different models help with architecture, implementation, research, design criticism, and verification, but I make the product decisions and test the result in the running app.
 
-The important part is the loop: I set the direction, describe the experience I want, provide the relevant files, test the result in the running app, take screenshots, question confusing behavior, and decide what survives. AI can write a lot of code quickly. It cannot decide what Astra should feel like for a beginner unless I keep making those decisions.
+The workflow evolved over time. I first used one model to build and verify. Later I separated planning from implementation, and eventually separated building from verification. That made it easier to catch assumptions, compare different approaches, and keep Astra's visual language consistent.
 
-Large changes are divided into named phases. Each phase has a narrow file scope, a handoff, a working copy, and a verification pass. The `App.tsx` split and the Review Deck rebuild below were both done this way, and the phase handoffs are kept in the `handoffs/` folder. One collaborator may build while another checks the result, but neither replaces my own local testing. I keep recovery copies and old phase archives instead of deleting them. That sounds overly careful until an AI session edits the wrong version, a design needs to be compared with yesterday's design, or a promising change needs to be safely backed out. The context files and handoffs are the project's memory between sessions.
+Large changes now move through a small, repeatable loop: define a phase, keep a current context file and codebase map, let one builder implement the phase and write a handoff, have a different verifier inspect the actual diff, then run the commands and browser checks myself. Fresh AI sessions can continue from the handoff without rereading the whole project.
 
-This process is slower than accepting the first generated answer. It is also how a chaotic experiment became an app I can keep improving without losing track of what changed.
+This process is slower than accepting the first generated answer, but it makes the app easier to improve without losing track of what changed.
 
 Some moments worth mentioning:
 
@@ -162,6 +162,7 @@ The home screen is Astra-chan's room — each object is a destination:
 </p>
 
 ### 🎯 Practice & Quiz
+- **Practice Hub** — a focused Kana quiz area with clear launchers, a "Start here" path, separate challenge modes, a persistent settings summary, and advanced options kept behind a disclosure
 - **Multiple quiz modes** — multiple choice, romaji typing, survival timer
 - **Custom character picker** — select exactly which characters to quiz on, with per-row select/deselect
 - **Quiz length selector** — 10 / 20 / 30 / All selected
@@ -451,7 +452,7 @@ V1 protects authentication, room membership IDs, invite ownership, profiles, and
 - [x] Online multiplayer — competitive and parallel modes
 - [x] Optional email/password and Google accounts with Firebase cloud progress sync and password recovery
 - [x] Hybrid Japanese voice system with fixed Gemini TTS voices and browser fallback
-- [x] Vocab and Kanji quiz modes with custom picker
+- [x] Kana Practice Hub, Vocab Quiz, and Kanji Quiz with custom settings and character selection
 - [x] Streak calendar and achievement badges
 - [x] Progress backup and restore
 - [x] Astra-chan mascot states: default, wondering/AFK waiting, excited return, reading, and reading-clicked artwork
