@@ -4029,6 +4029,7 @@ export default function App() {
     vocabQuizXp,
     vocabularyData: VOCABULARY_DATA,
     vocabsCategory,
+    setVocabsCategory,
     stats,
     speakJapanese,
     setVocabQuizPhase,

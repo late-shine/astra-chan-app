@@ -2,6 +2,7 @@ import type React from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { ChevronLeft, Info, Play, Volume2 } from "lucide-react";
 import type { StudentStats, VocabularyItem } from "../types";
+import { VOCAB_CATEGORY_META, countVocabularyByCategory } from "../vocab/vocabCategories";
 
 type VocabQuizMode = "meaning" | "reading";
 type VocabQuizLength = 10 | 20 | "all";
@@ -26,6 +27,7 @@ interface VocabQuizScreenProps {
   vocabQuizXp: number;
   vocabularyData: VocabularyItem[];
   vocabsCategory: string;
+  setVocabsCategory: React.Dispatch<React.SetStateAction<string>>;
   stats: StudentStats;
   speakJapanese: (phrase: string) => void;
   setVocabQuizPhase: React.Dispatch<React.SetStateAction<VocabQuizPhase>>;
@@ -58,6 +60,7 @@ export default function VocabQuizScreen({
   vocabQuizXp,
   vocabularyData,
   vocabsCategory,
+  setVocabsCategory,
   stats,
   speakJapanese,
   setVocabQuizPhase,
@@ -73,6 +76,7 @@ export default function VocabQuizScreen({
   handleVocabAnswer,
 }: VocabQuizScreenProps) {
   const reduceMotion = useReducedMotion();
+  const categoryCounts = countVocabularyByCategory(vocabularyData);
 
   // C6: an empty pool is explained inline. The Start guard in App stays as it was and still shows its toast.
   const learnedCount = vocabularyData.filter((v) => !!stats.vocabularyProgress[v.word]).length;
@@ -127,9 +131,24 @@ export default function VocabQuizScreen({
                       ))}
                     </div>
                     {vocabQuizScope === "category" && (
-                      <p className="text-[10px] text-natural-forest-light font-mono mt-2">
-                        Uses the category currently selected in Learn &gt; Words.
-                      </p>
+                      <div className="mt-2.5 flex flex-col gap-1">
+                        <label htmlFor="vocab-quiz-category-select" className="text-[10px] font-mono font-bold text-natural-forest-light uppercase tracking-wider">
+                          Theme Category
+                        </label>
+                        <select
+                          id="vocab-quiz-category-select"
+                          value={vocabsCategory}
+                          onChange={(e) => setVocabsCategory(e.target.value)}
+                          className="w-full min-h-10 bg-natural-bg font-serif text-xs border border-natural-border focus:border-natural-forest py-2 px-3 rounded-xl outline-none text-natural-charcoal font-bold cursor-pointer"
+                        >
+                          <option value="all">🌾 All themes ({vocabularyData.length})</option>
+                          {VOCAB_CATEGORY_META.map((cat) => (
+                            <option key={cat.id} value={cat.id}>
+                              {cat.emoji} {cat.label} ({categoryCounts[cat.id]})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     )}
                     {/* Always mounted so a screen reader announces the reason when it appears; visually hidden while empty. */}
                     <p

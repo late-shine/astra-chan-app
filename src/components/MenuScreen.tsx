@@ -32,6 +32,7 @@ import {
 
 import { HIRAGANA_DATA, KATAKANA_DATA, KANJI_DATA, VOCABULARY_DATA } from "../data";
 import { HiraganaItem, KatakanaItem, StudentStats, SRSCard } from "../types";
+import { VOCAB_CATEGORY_META, countVocabularyByCategory } from "../vocab/vocabCategories";
 import { formatSessionLine, formatWaitingLine, type SessionSummary } from "../srsScheduler";
 import { isKanjiQueryActive, searchKanji } from "../kanjiSearch";
 import { SCREEN_VARIANTS, SCREEN_VARIANTS_REDUCED } from "../screenMotion";
@@ -451,6 +452,11 @@ export default function MenuScreen(props: MenuScreenProps) {
   };
   const isKanjiStudied = (kanji: string) => (stats.characterProgress?.[kanji]?.total || 0) > 0;
   const studiedKanjiCount = KANJI_DATA.reduce((n, k) => n + (isKanjiStudied(k.kanji) ? 1 : 0), 0);
+
+  const vocabCategoryCounts = React.useMemo(
+    () => countVocabularyByCategory(VOCABULARY_DATA),
+    []
+  );
 
   // ── Word search: the same filter the list always used, now computed once so the count and the empty line agree with it ──
   const filteredVocabulary = React.useMemo(() => VOCABULARY_DATA.filter((v) => {
@@ -1224,18 +1230,15 @@ export default function MenuScreen(props: MenuScreenProps) {
                           <select
                             value={vocabsCategory}
                             onChange={(e) => setVocabsCategory(e.target.value)}
-                            className="w-full bg-natural-bg font-serif text-xs border border-natural-border focus:border-natural-forest py-2 px-3 rounded-xl outline-none text-natural-charcoal font-bold cursor-pointer"
+                            aria-label="Filter vocabulary by category"
+                            className="w-full min-h-11 bg-natural-bg font-serif text-xs border border-natural-border focus:border-natural-forest py-2 px-3 rounded-xl outline-none text-natural-charcoal font-bold cursor-pointer"
                           >
                             <option value="all">🌾 All themes ({VOCABULARY_DATA.length})</option>
-                            <option value="greetings">🌸 Greetings & Rituals</option>
-                            <option value="time">⏱️ Time, Days & Seasons</option>
-                            <option value="places">🏠 Places & Shrines</option>
-                            <option value="food">🍵 Food & Tea Garden</option>
-                            <option value="people">🎎 People, Family & Jobs</option>
-                            <option value="actions">🚶 Actions & Core Verbs</option>
-                            <option value="adjectives">🎨 Colors & Adjectives</option>
-                            <option value="objects">🎒 Objects & Clothing</option>
-                            <option value="school">📚 Studies & School Library</option>
+                            {VOCAB_CATEGORY_META.map((cat) => (
+                              <option key={cat.id} value={cat.id}>
+                                {cat.emoji} {cat.label} ({vocabCategoryCounts[cat.id]})
+                              </option>
+                            ))}
                           </select>
                         </div>
                       </div>
@@ -1274,6 +1277,7 @@ export default function MenuScreen(props: MenuScreenProps) {
                                   onClick={() => speakJapanese(voc.word)}
                                   className="p-1.5 bg-natural-card hover:bg-natural-forest/10 text-natural-forest border border-natural-border rounded-lg transition shadow-sm cursor-pointer"
                                   title="Listen Pronunciation"
+                                  aria-label={`Listen to ${voc.word}`}
                                 >
                                   <Volume2 className="w-3.5 h-3.5" />
                                 </button>
@@ -1287,6 +1291,7 @@ export default function MenuScreen(props: MenuScreenProps) {
                                     : "bg-natural-card border-natural-border text-natural-forest-light hover:border-natural-forest hover:text-natural-forest"
                                     }`}
                                   title={isMastered ? "Unmark Learned" : "Mark as Mastered (+5 XP!)"}
+                                  aria-label={isMastered ? `Unmark ${voc.word} as learned` : `Mark ${voc.word} as learned`}
                                 >
                                   <CheckCircle2 className="w-3.5 h-3.5" />
                                 </button>
@@ -1308,6 +1313,7 @@ export default function MenuScreen(props: MenuScreenProps) {
                                       : "bg-natural-card border-natural-border text-natural-forest-light hover:border-natural-clay hover:text-natural-clay hover:bg-natural-clay/10"
                                   }`}
                                   title={hasCard(voc.word) ? "Already in Review Deck" : "Add to Review Deck"}
+                                  aria-label={hasCard(voc.word) ? `${voc.word} already in Review Deck` : `Add ${voc.word} to Review Deck`}
                                 >
                                   <Plus className="w-3.5 h-3.5" />
                                 </button>

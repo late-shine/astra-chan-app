@@ -54,12 +54,26 @@ export interface KanjiItem {
   kunyomiRecords?: KanjiReadingRecord[];
 }
 
+export type VocabCategory =
+  | "greetings"
+  | "expressions"
+  | "time"
+  | "places"
+  | "food"
+  | "people"
+  | "actions"
+  | "adjectives"
+  | "objects"
+  | "school"
+  | "body"
+  | "weather";
+
 export interface VocabularyItem {
   word: string; // The kanji or Hiragana spelling, e.g., 昨日 or ご飯
   hiragana: string; // The pure Hiragana/furigana spelling, e.g., きのう or ごはん
   romaji: string; // Romaji phonetic interpretation, e.g. kinou
   english: string; // Translated meaning, e.g., Yesterday
-  category: "greetings" | "time" | "places" | "food" | "people" | "actions" | "adjectives" | "objects" | "school" | "body" | "weather";
+  category: VocabCategory;
 }
 
 export interface SRSCard {

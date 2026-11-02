@@ -1,4 +1,7 @@
 import { HiraganaItem, KatakanaItem, KanjiItem, VocabularyItem } from "./types";
+import { VOCAB_PHASE_1_CORE_GLUE } from "./vocab/vocabPhase1CoreGlue";
+import { VOCAB_PHASE_2_TIME_PEOPLE } from "./vocab/vocabPhase2TimePeople";
+import { VOCAB_PHASE_3_WORLD_DAILY } from "./vocab/vocabPhase3WorldDaily";
 
 export const HIRAGANA_DATA: HiraganaItem[] = [
   // Basic - Vowels
@@ -1812,6 +1815,11 @@ export const VOCABULARY_DATA: VocabularyItem[] = [
   { word: "チョコレート", hiragana: "ちょこれーと",   romaji: "chokoreeto",   english: "Chocolate",                        category: "food" },
   { word: "マヨネーズ",   hiragana: "まよねーず",     romaji: "mayoneezu",    english: "Mayonnaise",                       category: "food" },
   { word: "胡椒",         hiragana: "こしょう",       romaji: "koshou",       english: "Black pepper",                     category: "food" },
+
+  // ── N5 Vocabulary Expansion Phases 1–3 (+209 entries -> 900 total) ────────
+  ...VOCAB_PHASE_1_CORE_GLUE,
+  ...VOCAB_PHASE_2_TIME_PEOPLE,
+  ...VOCAB_PHASE_3_WORLD_DAILY,
 ];
 
 export const KATAKANA_DATA: KatakanaItem[] = [
