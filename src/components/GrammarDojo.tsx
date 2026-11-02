@@ -137,7 +137,7 @@ function ExampleRow({
 }) {
   return (
     <div className="p-4 rounded-2xl bg-natural-bg/55 border border-natural-border/60 hover:border-natural-border transition flex flex-col gap-3">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
         <div className="min-w-0 flex-1 flex flex-col gap-1">
           <div className="flex items-baseline gap-2.5">
             <span className="font-mono text-[11px] text-natural-charcoal/45 select-none shrink-0">
@@ -159,7 +159,7 @@ function ExampleRow({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
           <button
             type="button"
             onClick={onToggleExpand}
@@ -191,7 +191,7 @@ function ExampleRow({
       </div>
 
       {isExpanded && (
-        <div className="pl-6 pt-2.5 border-t border-natural-border/45 flex flex-wrap items-stretch gap-2">
+        <div className="pl-0 sm:pl-6 pt-2.5 border-t border-natural-border/45 flex flex-wrap items-stretch gap-2">
           {example.segments.map((seg, segIdx) => {
             const roleMeta = GRAMMAR_ROLE_META[seg.role];
             return (
@@ -410,7 +410,7 @@ export default function GrammarDojo({
           {/* ─── 2. CHAPTER TABS (01–05, SINGLE HORIZONTAL ROW) ────────────── */}
           <nav
             aria-label="N5 Grammar Chapters"
-            className="flex items-center gap-2 overflow-x-auto flex-nowrap pb-1"
+            className="scrollbar-none flex items-center gap-2 overflow-x-auto flex-nowrap pb-1"
           >
             {GRAMMAR_CHAPTERS.map((chapter) => {
               const isCurrent = chapter.id === activeChapter.id;
@@ -458,7 +458,7 @@ export default function GrammarDojo({
           <div
             role="tablist"
             aria-label={`Patterns in Chapter ${activeChapter.number}`}
-            className="flex items-center gap-1.5 overflow-x-auto flex-nowrap pb-1"
+            className="scrollbar-none flex items-center gap-1.5 overflow-x-auto flex-nowrap pb-1"
           >
             {activeChapterPatterns.map((pat) => {
               const isSelected = pat.id === activePattern.id;
@@ -498,11 +498,11 @@ export default function GrammarDojo({
               animate={{ opacity: 1, y: 0 }}
               exit={prefersReducedMotion ? undefined : { opacity: 0, y: -6 }}
               transition={{ duration: 0.16 }}
-              className="bg-natural-card-light border border-natural-border/80 rounded-3xl p-5 sm:p-7 lg:p-8 flex flex-col gap-7 shadow-sm w-full"
+              className="bg-natural-card-light border border-natural-border/80 rounded-3xl p-4 sm:p-7 lg:p-8 flex flex-col gap-5 sm:gap-7 shadow-sm w-full"
             >
               {/* 4. Pattern Title & Meaning, with Mark Studied */}
               <header className="flex flex-col gap-3 border-b border-natural-border/60 pb-6">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                   <div>
                     <p className="text-xs font-sans text-natural-charcoal/55 mb-1.5">
                       Chapter {activeChapter.number} · {activeChapter.title} ·
@@ -591,7 +591,7 @@ export default function GrammarDojo({
 
               {/* 6. Everyday Examples */}
               <section className="flex flex-col gap-3">
-                <div className="flex items-baseline justify-between gap-2">
+                <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 sm:gap-2">
                   <h3 className="font-sans text-sm font-bold text-natural-charcoal">
                     Everyday Examples
                   </h3>
@@ -703,7 +703,7 @@ export default function GrammarDojo({
               </div>
 
               {/* Lesson Footer: Practice Launchers & Prev/Next Pattern */}
-              <footer className="border-t border-natural-border/60 pt-5 flex flex-wrap items-center justify-between gap-3">
+              <footer className="border-t border-natural-border/60 pt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-2.5">
                   <button
                     type="button"
@@ -727,7 +727,7 @@ export default function GrammarDojo({
                   </button>
                 </div>
 
-                <div className="flex items-center gap-2 ml-auto">
+                <div className="flex items-center gap-2 sm:ml-auto">
                   <button
                     type="button"
                     disabled={!prevPattern}

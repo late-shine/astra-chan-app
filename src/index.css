@@ -180,6 +180,16 @@ input, select, textarea, button {
   background: color-mix(in srgb, var(--color-natural-forest) 45%, transparent);
 }
 
+/* Horizontal chapter/pattern rails stay swipe-scrollable without adding a second
+   visual bar underneath the content on narrow screens. */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* ── Glass Card System ─────────────────────────────────────────────────────
    Layered frosted-glass panels with theme-aware tints.
    Uses CSS custom properties so each theme can inject its own glass color.

@@ -62,10 +62,10 @@ function ClozeSentenceDisplay({
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="font-serif text-2xl sm:text-3xl leading-relaxed tracking-wide text-natural-charcoal select-text">
+      <p className="font-serif text-xl sm:text-3xl leading-relaxed tracking-wide text-natural-charcoal select-text">
         {parts[0]}
         <span
-          className={`inline-flex items-center justify-center min-w-[4.25rem] px-3.5 py-0.5 mx-1.5 rounded-xl border-2 text-center font-bold align-middle transition-colors duration-200 ${
+          className={`inline-flex items-center justify-center min-w-[3.5rem] sm:min-w-[4.25rem] px-2.5 sm:px-3.5 py-0.5 mx-1 sm:mx-1.5 rounded-xl border-2 text-center font-bold align-middle transition-colors duration-200 ${
             answeredChoice === null
               ? "border-dashed border-natural-charcoal/35 bg-natural-bg/60 text-transparent min-h-[2.5rem]"
               : isCorrect
@@ -517,7 +517,7 @@ export default function GrammarDojoPractice({
                 animate={{ opacity: 1, y: 0 }}
                 exit={prefersReducedMotion ? undefined : { opacity: 0, y: -10 }}
                 transition={{ duration: 0.18 }}
-                className="bg-natural-card border border-natural-border/80 rounded-3xl p-5 sm:p-7 flex flex-col gap-5 shadow-sm"
+                className="bg-natural-card border border-natural-border/80 rounded-3xl p-4 sm:p-7 flex flex-col gap-4 sm:gap-5 shadow-sm"
               >
                 {/* Prompt & English Meaning */}
                 <div className="flex flex-col gap-1 border-b border-natural-border/50 pb-4">
