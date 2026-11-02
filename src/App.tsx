@@ -1926,7 +1926,9 @@ export default function App() {
 
   const getVocabQuizBasePool = () => {
     if (vocabQuizScope === "category") {
-      return VOCABULARY_DATA.filter(v => v.category === vocabsCategory);
+      return vocabsCategory === "all"
+        ? [...VOCABULARY_DATA]
+        : VOCABULARY_DATA.filter(v => v.category === vocabsCategory);
     }
     if (vocabQuizScope === "learned") {
       return VOCABULARY_DATA.filter(v => !!stats.vocabularyProgress[v.word]);

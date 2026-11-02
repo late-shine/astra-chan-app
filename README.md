@@ -17,7 +17,7 @@
   <a href="#roadmap">Roadmap</a>
 </p>
 
-**At a glance:** N5 Japanese · 145 kanji with stroke demonstrations · 691 vocabulary words · 12 grammar patterns · reading passages · spaced repetition · online duels · 6 themes · English and Japanese interface
+**At a glance:** N5 Japanese · 145 kanji with stroke demonstrations · 900 vocabulary words · 28 grammar patterns across 5 chapters · reading passages · spaced repetition · online duels · 6 themes · English and Japanese interface
 
 ![Astra-chan's Study Room — the atmospheric home screen](docs/study-room.png)
 
@@ -154,7 +154,7 @@ The home screen is Astra-chan's room — each object is a destination:
 ### 📚 Learning
 - **Hiragana & Katakana** — full character grids with pronunciation, flashcard mode, and example words
 - **Kanji** — 145 current N5-level single-character cards with meanings, readings, stroke count, and example sentences. A **Digital / Written / Compare** specimen shows the same kanji in a clean gothic font and a handwriting-style font side by side, and a recall mode hides meanings and readings so you can test yourself
-- **N5 Vocabulary** — 691 words across 11 categories (greetings, food, places, actions, adjectives, body, weather, and more)
+- **N5 Vocabulary** — 900 words across 12 categories: greetings, expressions, time, places, food, people, actions, adjectives, objects, school, body, and weather
 - **Daily Spell** — a suggested next action shown on the home screen each session
 
 <p align="center">
@@ -198,7 +198,7 @@ The home screen is Astra-chan's room — each object is a destination:
 </p>
 
 ### 🥋 Grammar Dojo
-- **12 Core N5 Grammar Patterns** — detailed structural guides with full explanations, syntax breakdowns, and cultural tips
+- **28 Core N5 Grammar Patterns across 5 progressive chapters** — detailed structural guides with full explanations, syntax breakdowns, and cultural tips
 - **Rich Media Support** — interactive audio pronunciation (🔊 TTS) for all grammar formulas and example sentences
 - **Fill-in-the-Blank Quizzes** — dynamic grammar quiz mode to test and solidify your understanding of patterns in context
 - **Search & Filter Controls** — instantly query and filter patterns by category, difficulty (Basic vs. Intermediate), or search terms
