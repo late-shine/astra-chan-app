@@ -109,7 +109,7 @@ function splitSelectors(prelude: string): string[] {
 }
 
 // A studio selector starts with .quiz-*, or is a theme ancestor of .quiz-studio (":is([data-theme=...]) .quiz-studio").
-const SCOPED = /^(\.quiz-|:is\(\[data-theme="[\w-]+"(?:,\s*\[data-theme="[\w-]+"\])*\)\s+\.quiz-studio\b)/;
+const SCOPED = /^(\.quiz-|:is\(\[data-theme="[\w-]+"\](?:,\s*\[data-theme="[\w-]+"\])*\)\s+\.quiz-studio\b)/;
 for (const rule of studioRules) {
   if (rule.atRule && rule.atRule.startsWith("@keyframes")) continue; // from / to / 0% steps
   for (const selector of splitSelectors(rule.prelude)) {
@@ -122,7 +122,7 @@ for (const rule of previewRules) {
     check(`scope: preview "${selector.slice(0, 60)}" is .quiz-preview-*`, /^\.quiz-preview-/.test(selector));
   }
 }
-check("no .quiz-preview-* selector in the studio part", !/\.quiz-preview-/.test(studioPart));
+check("no .quiz-preview-* selector in the studio part", !/\.quiz-preview-/.test(stripComments(studioPart)));
 check("studio rules were found (parser sanity)", studioRules.length > 100, String(studioRules.length));
 
 // ─── 2. colour literals only in token declarations ───────────────────────────
