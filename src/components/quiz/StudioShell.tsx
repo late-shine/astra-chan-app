@@ -174,14 +174,15 @@ export function StudioSheet({ title, onClose, children, footer, size = "setup", 
     if (event.key !== "Tab") return;
     const root = dialogRef.current;
     if (!root) return;
-    const items = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.getClientRects().length > 0);
-    if (items.length === 0) {
+    const items: HTMLElement[] = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE));
+    const visibleItems = items.filter((el) => el.getClientRects().length > 0);
+    if (visibleItems.length === 0) {
       event.preventDefault();
       root.focus();
       return;
     }
-    const first = items[0];
-    const last = items[items.length - 1];
+    const first = visibleItems[0];
+    const last = visibleItems[visibleItems.length - 1];
     const active = document.activeElement as HTMLElement | null;
     if (event.shiftKey && (active === first || active === root)) {
       event.preventDefault();

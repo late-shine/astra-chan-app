@@ -603,8 +603,16 @@ input, select, textarea, button {
   border-top: 1px solid var(--quiz-border);
 }
 .quiz-footer__inner { max-width: 680px; margin-inline: auto; }
-/* With the keyboard open the dock is under the keyboard, so only the safe area is kept (reachability first). */
-.quiz-studio[data-keyboard="open"] .quiz-footer { padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px)); }
+/* With the keyboard open, keep the action above the preview's 42dvh keyboard stand-in. The real-device
+   inset remains a QZ5 check because mobile browsers expose it differently. */
+.quiz-studio[data-keyboard="open"] .quiz-footer {
+  position: fixed;
+  right: 0;
+  bottom: min(42dvh, 21rem);
+  left: 0;
+  z-index: 36;
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+}
 
 /* ── Type roles ──────────────────────────────────────────────────────────── */
 .quiz-title { font-size: 1.75rem; line-height: 2.125rem; font-weight: 700; letter-spacing: -0.01em; }
