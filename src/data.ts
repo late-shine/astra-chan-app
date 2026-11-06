@@ -1613,7 +1613,7 @@ export const VOCABULARY_DATA: VocabularyItem[] = [
   { word: "不思議", hiragana: "ふしぎ", romaji: "fushigi", english: "Mysterious / Strange", category: "adjectives" },
   { word: "真面目", hiragana: "まじめ", romaji: "majime", english: "Serious / Earnest", category: "adjectives" },
   { word: "幸せ", hiragana: "しあわせ", romaji: "shiawase", english: "Happy / Fortunate", category: "adjectives" },
-  { word: "安全", hiragana: "あんぜん", romaji: "anzen", english: "Safe", category: "adjectives" },
+  { word: "安全", hiragana: "あんぜん", romaji: "anzen", english: "Safety", category: "adjectives" },
   { word: "危ない", hiragana: "あぶない", romaji: "abunai", english: "Dangerous", category: "adjectives" },
   { word: "苦い", hiragana: "にがい", romaji: "nigai", english: "Bitter", category: "adjectives" },
   { word: "酸っぱい", hiragana: "すっぱい", romaji: "suppai", english: "Sour", category: "adjectives" },
