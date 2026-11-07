@@ -249,6 +249,13 @@ const skippedRecord: AnswerRecord = { ...record(original), questionId: original.
     kind: original.questions[0].kind }, outcome: 'unattempted', xp: 0, seq: 1 };
 const skipped = freeze({ ...original, index: 0, current: original.questions[0], records: [skippedRecord], acknowledgedSeq: 1 });
 check('summary contract excludes explicit unattempted records too', summarize(skipped).firstPass.attempted === 0 && summarize(skipped).firstPass.accuracy === null && summarize(skipped).unattempted === 3);
+const sparseQuestion = original.questions[1];
+const sparseRecord: AnswerRecord = { ...record(original), seq: 1, questionId: sparseQuestion.id,
+  skillKey: sparseQuestion.skillKey, target: { subject: sparseQuestion.subject, itemId: sparseQuestion.itemId,
+    kind: sparseQuestion.kind }, outcome: 'wrong', xp: 0 };
+const sparse = freeze({ ...original, phase: 'results' as const, index: 1, current: sparseQuestion,
+  records: [sparseRecord], acknowledgedSeq: 1, pending: null, commitTargetSeq: 0, finishReason: 'partial' as const });
+check('sparse miss resolves by locked skill, not answer-array position', summarize(sparse).misses[0]?.face === sparseQuestion.face);
 
 section('Survival budget, feedback, cycling, score and end guards');
 let survival = begin('survival', { origin: 'survival', previousSurvivalBest: 4 }, 2);

@@ -246,7 +246,6 @@ function useHandleToggleVocabularyLearned(
         xp: prev.xp + xpGain,
         vocabularyProgress: newProgress,
       };
-      localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(updated));
       return updated;
     });
 

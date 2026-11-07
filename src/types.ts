@@ -119,7 +119,23 @@ export interface ReadingMissRecord {
   count: number;
 }
 
+export interface QuizSkillProgress {
+  a: number;
+  c: number;
+  t: number;
+  m?: number;
+  ra?: number;
+  rc?: number;
+}
+
+export interface QuizReceipt {
+  through: number;
+  at: number;
+}
+
 export interface StudentStats {
+  quizSkills?: Record<string, QuizSkillProgress>;
+  quizReceipts?: Record<string, QuizReceipt>;
   xp: number;
   streakCount: number;
   lastActiveDate: string | null; // ISO Date String

@@ -25,13 +25,14 @@
 //   • Music track, volume and a hand-picked background scene: remembered on this
 //     device only (localStorage keys astra_music_track, astra_music_volume and
 //     astra_bg_scene, written by App.tsx), never synced and never auto-playing.
-//   • Ambient sound and quiz choice count: not persisted at all.
+//   • Ambient sound and legacy launcher settings. Studio quiz defaults are scalar keys below.
 //
 // This file has no React and no Firebase imports, so scripts/acc-sim.ts can run
 // it under plain Node. localStorage access is guarded and optional.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { DEFAULT_CLOUD_JAPANESE_VOICE, getCloudJapaneseVoice } from "./voiceCatalog";
+import { DEFAULT_QUIZ_PREFERENCES, QUIZ_STORAGE_KEYS, parseQuizPreferenceString, validateQuizPreference, type QuizPreferences } from "./quiz/preferences";
 
 /** The six themes. `App.tsx` imports this list so the two can never drift. */
 export const THEME_IDS = ["light", "dark", "dark-cosmic", "dark-emerald", "dark-maple", "dark-cyber"] as const;
@@ -49,7 +50,7 @@ export type BgOpacity = typeof BG_OPACITIES[number];
 export const KANJI_FORMS = ["auto", "digital", "written", "compare"] as const;
 export type KanjiFormPreference = typeof KANJI_FORMS[number];
 
-export interface UserPreferences {
+export interface UserPreferences extends QuizPreferences {
   theme: ThemeId;
   fontStyle: "digital" | "written";
   language: "en" | "ja";
@@ -92,6 +93,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   bgBlur: 7,
   bgOpacity: "medium",
   autoCycleBg: true,
+  ...DEFAULT_QUIZ_PREFERENCES,
 };
 
 /** Fixed key order: makes serializePreferences() a stable comparison key. */
@@ -121,6 +123,7 @@ export const PREFERENCE_STORAGE_KEYS: Record<keyof UserPreferences, string> = {
   bgBlur: "hira_theme_bg_blur_v2",
   bgOpacity: "hira_theme_bg_opacity",
   autoCycleBg: "astra_auto_cycle_bg",
+  ...QUIZ_STORAGE_KEYS,
 };
 
 /** New key: the local copy of the synced envelope (values + updatedAt). */
@@ -156,7 +159,7 @@ function validateValue<K extends keyof UserPreferences>(key: K, value: unknown):
     case "bgOpacity": result = oneOf(BG_OPACITIES, value); break;
     case "bgBlur":
       result = typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 20 ? value : undefined; break;
-    default: result = undefined;
+    default: result = validateQuizPreference(key as keyof QuizPreferences, value);
   }
   return result as UserPreferences[K] | undefined;
 }
@@ -272,7 +275,8 @@ function parseStored<K extends keyof UserPreferences>(key: K, raw: string | null
     case "autoPronounce": candidate = raw === "true"; break;
     case "autoCycleBg": candidate = raw === "false" ? false : true; break;
     case "bgBlur": candidate = parseFloat(raw); break;
-    default: candidate = raw;
+    default: candidate = Object.hasOwn(QUIZ_STORAGE_KEYS, key)
+      ? parseQuizPreferenceString(key as keyof QuizPreferences, raw) : raw;
   }
   const valid = validateValue(key, candidate);
   return (valid === undefined ? fallback : valid) as UserPreferences[K];

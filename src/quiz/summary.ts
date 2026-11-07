@@ -34,7 +34,12 @@ export function summarize(session: ActiveSession, repairs: readonly ActiveSessio
   const misses = new Map<string, SummaryMiss>();
   for (const [index, record] of answers.entries()) {
     if (record.origin === 'repair' || !['wrong', 'timeout'].includes(record.outcome)) continue;
-    const question = session.questions[index % session.questions.length];
+    // Answer records are sparse when a session finishes early, so their array position is
+    // not the question position. Resolve by the locked skill identity instead; this also
+    // works for Survival, where the immutable bank can repeat a target under new occurrences.
+    const question = session.questions.find(candidate => candidate.skillKey === record.skillKey)
+      ?? session.questions.find(candidate => candidate.id === record.questionId);
+    if (!question) continue;
     if (!misses.has(record.skillKey)) misses.set(record.skillKey, { questionId: record.questionId, itemId: record.target.itemId,
       skillKey: record.skillKey, subject: record.target.subject, kind: record.target.kind, face: question.face,
       ...(question.deck ? { deck: { ...question.deck } } : {}) });

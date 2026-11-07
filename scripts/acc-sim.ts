@@ -123,6 +123,39 @@ check("bgBlur rejects NaN/Infinity",
 check("completePreferences fills gaps from defaults",
   completePreferences({ theme: "dark" }).language === "en" && completePreferences({ theme: "dark" }).theme === "dark");
 
+check("quiz defaults preserve the existing envelope and scalar defaults",
+  completePreferences({ theme: "dark" }).quizLength === 10 && DEFAULT_PREFERENCES.quizAutoNext &&
+  DEFAULT_PREFERENCES.quizKanaStagesMask === 1 && DEFAULT_PREFERENCES.quizSubject === "kana");
+check("invalid quiz values are omitted and category IDs are validated",
+  JSON.stringify(sanitizePreferenceValues({ quizLength: "20", quizAutoNext: 0, quizKanaStagesMask: 0,
+    quizVocabPool: "theme:weather", quizChoiceCount: 7, quizChallengeTier: "hard" })) === '{"quizVocabPool":"theme:weather"}' &&
+  !("quizVocabPool" in sanitizePreferenceValues({ quizVocabPool: "theme:unknown" })));
+{
+  const data = installFakeStorage({ astra_quiz_length: "20", astra_quiz_auto_next: "false", astra_quiz_kana_stages: "15",
+    astra_quiz_choices: "6", astra_quiz_voca_pool: "theme:food" });
+  const prefs = readLocalPreferences();
+  check("quiz number and boolean strings read in their native types",
+    prefs.quizLength === 20 && prefs.quizAutoNext === false && prefs.quizKanaStagesMask === 15 &&
+    prefs.quizChoiceCount === 6 && prefs.quizVocabPool === "recommended");
+  data.set("astra_quiz_kana_stages", "0");
+  data.set("astra_quiz_length", "10.5");
+  data.set("astra_quiz_auto_next", "no");
+  const fallback = readLocalPreferences();
+  check("invalid local quiz mask, length and boolean use defaults",
+    fallback.quizKanaStagesMask === 1 && fallback.quizLength === 10 && fallback.quizAutoNext);
+  writeLocalPreferences({ quizLength: 30, quizAutoNext: false, quizVocabPool: "theme:food" });
+  check("quiz defaults are written as scalars",
+    data.get("astra_quiz_length") === "30" && data.get("astra_quiz_auto_next") === "false" &&
+    data.get("astra_quiz_vocab_pool") === "theme:food");
+  const resolved = resolvePreferences({
+    local: null, cloud: { values: { quizLength: 20, quizAutoNext: false }, updatedAt: T0 },
+    snapshot: fallback, now: T0 + 1000,
+  });
+  check("adopting quiz preferences keeps the incoming stamp",
+    resolved.envelope?.updatedAt === T0 && resolved.apply?.quizAutoNext === false &&
+    resolved.envelope.values.quizLength === 20 && resolved.envelope.values.quizKanaStagesMask === 1);
+}
+
 check("envelope: rejects missing updatedAt", sanitizeEnvelope({ values: { theme: "dark" } }) === null);
 check("envelope: rejects non-finite / non-positive updatedAt",
   sanitizeEnvelope({ values: { theme: "dark" }, updatedAt: NaN }) === null &&

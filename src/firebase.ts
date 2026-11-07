@@ -159,7 +159,7 @@ export async function loadCloudStats(uid = currentUid()): Promise<StudentStats |
 }
 
 export async function saveCloudStats(stats: StudentStats, uid = currentUid()): Promise<void> {
-    if (!uid || isAnonymousUser()) return;
+    if (!uid || currentUid() !== uid || isAnonymousUser()) throw new Error("Cloud progress owner changed.");
     // Realtime Database set() throws if any value is `undefined`. An optional
     // field left as undefined on the stats object (preferences, SRS card
     // fields...) would fail the whole sync, so strip them with a JSON round

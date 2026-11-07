@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { onAuthStateChanged, type User as FirebaseUser } from "firebase/auth";
 import { motion, AnimatePresence, useTransform, useReducedMotion } from "motion/react";
 import {
   Flame,
@@ -85,10 +86,12 @@ import {
   type MatchHistoryRecord,
 } from "./multiplayerOnline";
 import {
+  auth,
   createOrLinkEmailAccount,
   createOrLinkGoogleAccount,
   currentUid,
   ensureSignedIn,
+  isAnonymousUser,
   loadCloudStats,
   saveCloudStats,
   sendPasswordReset,
@@ -112,6 +115,7 @@ import {
   PREFERENCE_CHANGED_EVENT,
   completePreferences,
   readComponentPreferences,
+  readLocalPreferences,
   readPreferencesEnvelope,
   resolvePreferences,
   sanitizeEnvelope,
@@ -122,6 +126,11 @@ import {
   type SyncedPreferences,
   type UserPreferences,
 } from "./preferences";
+import { pickQuizPreferences } from "./quiz/preferences";
+import { createCloudSaveQueue, quizBrowserStorage, readHydrationJournal, type StatsBinding } from "./quiz/browserStorage";
+import { canUseDeviceStats, hydrateQuizProgress, readQuizProgress, sanitizeQuizProgress, withQuizMaps } from "./quiz/progress";
+import { useQuizProgressBridge, type QuizProgressBridge } from "./quiz/useQuizProgressBridge";
+import { quizClock, quizDeviceId, useQuizSession } from "./quiz/useQuizSession";
 import {
   AVATAR_RECOMPRESS_ABOVE_CHARS,
   DEFAULT_PROFILE_NAME,
@@ -385,7 +394,7 @@ export default function App() {
   };
 
   // Student Statistics State (with Local Storage Persistence)
-  const [stats, setStats] = useState<StudentStats>({
+  const defaultStats: StudentStats = {
     xp: 0,
     streakCount: 0,
     lastActiveDate: null,
@@ -400,7 +409,8 @@ export default function App() {
     survivalBestScore: 0,
     srsReviewedTotal: 0,
     readingMisses: [],
-  });
+  };
+  const [stats, setStats] = useState<StudentStats>(defaultStats);
 
   // B2: the latest stats, for a writer that must start from a whole blob when none is stored yet (patchTips).
   const statsRef = useRef(stats);
@@ -429,45 +439,21 @@ export default function App() {
   const [srsQueueIndex, setSrsQueueIndex] = useState(0);
   const [srsRevealed, setSrsRevealed]   = useState(false);
 
-  /**
-   * S2: change the daily Review Deck limits. Stamped now so this device's choice wins the cloud merge.
-   * Persisted by read-modify-write (like awardSRSXP) so it never overwrites newer card data.
-   */
+  // S2: the shared post-render writer persists daily limits with the latest stats.
   const updateSrsSettings = useCallback((next: { dailyReviewCap: number; dailyNewCap: number }) => {
     const settings: SrsSettings = { ...normalizeSrsSettings(next), updatedAt: Date.now() };
     setStats((previous) => ({ ...previous, srsSettings: settings }));
-    try {
-      const raw = localStorage.getItem("hirachan_master_stats_v1");
-      const blob = raw ? (JSON.parse(raw) as StudentStats) : ({} as StudentStats);
-      blob.srsSettings = settings;
-      localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(blob));
-    } catch { /* ignore storage errors */ }
   }, []);
 
   /** Awards XP for an SRS review while preserving the synchronized card map. */
   const awardSRSXP = useCallback((xp: number) => {
+    const today = quizClock().localDate;
     setStats((prev) => ({
       ...prev,
       xp: prev.xp + xp,
       srsReviewedTotal: (prev.srsReviewedTotal || 0) + 1,
-      studyDates: (() => {
-        const _d = new Date();
-        const todayStr = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, "0")}-${String(_d.getDate()).padStart(2, "0")}`;
-        const existing = prev.studyDates || [];
-        return existing.includes(todayStr) ? existing : [...existing, todayStr];
-      })(),
+      studyDates: prev.studyDates?.includes(today) ? prev.studyDates : [...(prev.studyDates || []), today],
     }));
-    try {
-      const raw = localStorage.getItem("hirachan_master_stats_v1");
-      const s = raw ? (JSON.parse(raw) as StudentStats) : {} as StudentStats;
-      s.xp = (s.xp || 0) + xp;
-      s.srsReviewedTotal = (s.srsReviewedTotal || 0) + 1;
-      const _d2 = new Date();
-      const todayStr = `${_d2.getFullYear()}-${String(_d2.getMonth() + 1).padStart(2, "0")}-${String(_d2.getDate()).padStart(2, "0")}`;
-      s.studyDates = s.studyDates || [];
-      if (!s.studyDates.includes(todayStr)) s.studyDates = [...s.studyDates, todayStr];
-      localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(s));
-    } catch { /* ignore storage errors */ }
   }, []);
 
   // Selection configurations
@@ -742,6 +728,7 @@ export default function App() {
     });
   };
   const [componentPrefs, setComponentPrefs] = useState<ComponentPreferences>(readComponentPreferences);
+  const [quizPreferences, setQuizPreferences] = useState(() => pickQuizPreferences(readLocalPreferences()));
   useEffect(() => {
     window.addEventListener(PREFERENCE_CHANGED_EVENT, refreshComponentPrefs);
     return () => window.removeEventListener(PREFERENCE_CHANGED_EVENT, refreshComponentPrefs);
@@ -761,6 +748,7 @@ export default function App() {
     bgOpacity,
     autoCycleBg,
     ...componentPrefs,
+    ...quizPreferences,
   });
   const preferenceKey = serializePreferences(preferenceSnapshot);
   const preferenceSnapshotRef = useRef<UserPreferences>(preferenceSnapshot);
@@ -772,9 +760,11 @@ export default function App() {
   // A genuine user change: stamp it, keep a durable local copy, and mirror it into
   // stats so the existing debounced cloud sync carries it.
   useEffect(() => {
-    if (preferenceKey === lastSyncedPreferenceKeyRef.current) return;
+    if (preferenceKey === lastSyncedPreferenceKeyRef.current ||
+      preferenceKey !== serializePreferences(preferenceSnapshotRef.current)) return;
     lastSyncedPreferenceKeyRef.current = preferenceKey;
     const envelope: SyncedPreferences = { values: { ...preferenceSnapshotRef.current }, updatedAt: Date.now() };
+    writeLocalPreferences(pickQuizPreferences(preferenceSnapshotRef.current));
     writePreferencesEnvelope(envelope);
     setStats((previous) => ({ ...previous, preferences: envelope }));
   }, [preferenceKey]);
@@ -782,6 +772,7 @@ export default function App() {
   /** Adopt synced values on this device (state + the existing localStorage keys). */
   const applyPreferenceValues = (values: Partial<UserPreferences>) => {
     writeLocalPreferences(values);
+    setQuizPreferences(pickQuizPreferences(completePreferences(values, preferenceSnapshotRef.current)));
     if (values.theme !== undefined) setTheme(values.theme);
     if (values.fontStyle !== undefined) setFontStyle(values.fontStyle);
     if (values.language !== undefined) setLanguage(values.language);
@@ -798,8 +789,9 @@ export default function App() {
 
   /**
    * The ONE place cloud stats meet local stats (sign-in and page-load hydrate).
-   * SRS cards are merged by mergeSrsCards; preferences by resolvePreferences;
-   * everything else is cloud-wins, exactly as before. Pass null when the account
+   * QZ4 reconciles quiz progress before this call. This function merges SRS,
+   * tips and preferences and keeps the other fields from that cloud baseline.
+   * Pass null when the account
    * has no cloud stats yet: the result is the local stats, with this device's
    * customised preferences stamped so they reach the new cloud copy.
    */
@@ -844,7 +836,9 @@ export default function App() {
     if (resolution.apply && resolution.envelope) {
       // Mark the incoming values as already-synced BEFORE the setters fire, so
       // applying them is not mistaken for a user change and re-stamped.
-      lastSyncedPreferenceKeyRef.current = serializePreferences(completePreferences(resolution.envelope.values));
+      const incoming = completePreferences(resolution.envelope.values);
+      preferenceSnapshotRef.current = incoming;
+      lastSyncedPreferenceKeyRef.current = serializePreferences(incoming);
       applyPreferenceValues(resolution.apply);
     }
     return hydrated;
@@ -1278,6 +1272,189 @@ export default function App() {
   const [accountError, setAccountError] = useState<string | null>(null);
   const [statsHydrated, setStatsHydrated] = useState(false);
   const [cloudStatsHydrated, setCloudStatsHydrated] = useState(false);
+  const [progressOwner, setProgressOwner] = useState<string | null>(null);
+  const [statsBinding, setStatsBinding] = useState<StatsBinding>();
+  const [progressChanging, setProgressChanging] = useState(false);
+  const [cloudSyncReady, setCloudSyncReady] = useState(false);
+  const [localProgressReadable, setLocalProgressReadable] = useState(true);
+  const localReadableRef = useRef(true);
+  const bindingRef = useRef<StatsBinding | 'transition' | null>(null);
+  const offlineOwnerRef = useRef<string | null>(null);
+  const progressIdentity = useRef<{ uid: string | null; owner: string | null; account: boolean }>({ uid: null, owner: null, account: false });
+  const progressBusy = useRef(false);
+  const progressEpoch = useRef(0);
+  const deferredAuth = useRef<FirebaseUser | null | undefined>(undefined);
+  const initialAuth = useRef<Promise<FirebaseUser> | null>(null);
+  const syncEnabledRef = useRef(false);
+  syncEnabledRef.current = cloudSyncReady;
+  const adoptBinding = (binding: StatsBinding) => {
+    bindingRef.current = binding;
+    setStatsBinding(binding);
+  };
+  const isCurrentQuizOwner = (owner: string) => !progressBusy.current && localReadableRef.current &&
+    progressIdentity.current.owner === owner && (currentUid() ?? offlineOwnerRef.current) === owner &&
+    bindingRef.current !== 'transition' && bindingRef.current?.owner === owner;
+  const quizBridge: QuizProgressBridge = useQuizProgressBridge({
+    stats, setStats, binding: statsBinding, storage: quizBrowserStorage,
+    writeEnabled: statsHydrated && cloudStatsHydrated && !progressChanging && localProgressReadable,
+    canWrite: () => {
+      const binding = bindingRef.current;
+      if (progressBusy.current || binding === 'transition' || !localReadableRef.current) return false;
+      if (!binding) return true;
+      const lease = quizSession.canReplace(binding.owner);
+      return lease.ok === true || lease.reason !== 'conflict';
+    },
+    isCurrentOwner: isCurrentQuizOwner,
+  });
+  const quizSession = useQuizSession({
+    owner: progressOwner, ready: statsHydrated && cloudStatsHydrated && !progressChanging && localProgressReadable &&
+      !!progressOwner && statsBinding?.owner === progressOwner,
+    cloud: isAccountUser, storage: quizBrowserStorage, bridge: quizBridge, isCurrentOwner: isCurrentQuizOwner,
+  });
+  const cloudSaves = useRef<ReturnType<typeof createCloudSaveQueue> | null>(null);
+  if (!cloudSaves.current) {
+    cloudSaves.current = createCloudSaveQueue(async request => {
+      if (!isCurrentQuizOwner(request.binding.owner) || !progressIdentity.current.account || !syncEnabledRef.current) {
+        throw new Error("Cloud progress owner changed.");
+      }
+      await saveCloudStats(request.stats, request.binding.owner);
+    }, request => {
+      if (!isCurrentQuizOwner(request.binding.owner)) return;
+      const result = quizBrowserStorage.acknowledgeOutbox(request.binding.owner, request.stats);
+      if (result.ok === false) throw new Error(result.message);
+      if (request.binding.backupUpload) {
+        const acknowledged = quizBrowserStorage.acknowledgeBackupUpload(request.binding);
+        if (acknowledged.ok === true && acknowledged.value) adoptBinding({ owner: request.binding.owner });
+        else if (acknowledged.ok === false) throw new Error(acknowledged.message);
+      }
+    }, error => setAccountError(error instanceof Error ? error.message : "Cloud progress sync failed"));
+  }
+  const cloudQueue = cloudSaves.current;
+  function progressTimeout<T>(work: Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const timer = window.setTimeout(() => reject(new Error("Cloud progress is unavailable. Device progress is still available.")), 8000);
+      work.then(value => { window.clearTimeout(timer); resolve(value); },
+        error => { window.clearTimeout(timer); reject(error); });
+    });
+  }
+  function beginProgressChange() {
+    quizSession.suspend(true);
+    progressBusy.current = true;
+    setProgressChanging(true);
+    quizBridge.cancel();
+    cloudQueue.cancel();
+    return ++progressEpoch.current;
+  }
+  function finishProgressChange(epoch: number) {
+    if (progressEpoch.current !== epoch) return;
+    progressBusy.current = false;
+    setProgressChanging(false);
+    setCloudStatsHydrated(true);
+    const waiting = deferredAuth.current;
+    deferredAuth.current = undefined;
+    if (waiting !== undefined && (waiting?.uid ?? null) === currentUid()) queueMicrotask(() => syncObservedIdentity(waiting));
+  }
+  function usableLocalStats(owner: string, local: StudentStats) {
+    return canUseDeviceStats(local, bindingRef.current, owner);
+  }
+  function claimLocalProgress(owner: string, local: StudentStats) {
+    if (!localReadableRef.current || !usableLocalStats(owner, local)) return;
+    const bound = bindingRef.current;
+    if (!bound || bound.owner !== owner) adoptBinding({ owner });
+    const now = quizClock();
+    const snapshot = quizBrowserStorage.readSnapshot(owner, now);
+    const outbox = quizBrowserStorage.readOutbox(owner);
+    if (outbox.ok === false || (snapshot.ok === false && snapshot.reason !== 'invalid')) return;
+    const pinned = new Set<string>(outbox.value.map(entry => entry.record.sessionId));
+    if (snapshot.ok === true && snapshot.value) pinned.add(snapshot.value.config.sessionId);
+    const cleaned = sanitizeQuizProgress(local, now.epochMs, pinned);
+    if (cleaned.prunedReceipts || cleaned.prunedSkills) {
+      setStats(previous => withQuizMaps(previous, sanitizeQuizProgress(previous, now.epochMs, pinned).maps));
+      if (cleaned.prunedSkills) showToast(`Kept the newest quiz skills. ${cleaned.prunedSkills} older rows were removed.`);
+    }
+  }
+  async function activateProgressIdentity(user: FirebaseUser | null, epoch: number, loaded?: { stats: StudentStats | null }) {
+    const uid = user?.uid ?? null;
+    if (epoch !== progressEpoch.current || currentUid() !== uid) return false;
+    const owner = uid ?? offlineOwnerRef.current;
+    const oldOwner = progressIdentity.current.owner;
+    let local = statsRef.current;
+    if (oldOwner && oldOwner !== owner) {
+      if (quizSession.canReplace(oldOwner).ok === true) {
+        const removed = quizBrowserStorage.removeSnapshot(oldOwner);
+        if (removed.ok === false) setAccountError(removed.message);
+      }
+      quizSession.detach(oldOwner);
+      if (quizBridge.hasVolatile()) {
+        const durable = quizBrowserStorage.readStats();
+        if (durable.ok === true && durable.value) {
+          local = withQuizMaps(durable.value, readQuizProgress(durable.value).maps);
+          setStats(local);
+          quizBridge.cancel(true);
+        }
+      }
+    }
+    const account = !!user && !user.isAnonymous;
+    progressIdentity.current = { uid, owner, account };
+    setMyUid(uid);
+    setAccountEmail(user?.email ?? null);
+    setIsAccountUser(account);
+    setProgressOwner(owner);
+    setCloudSyncReady(false);
+    if (!owner) return false;
+    if (!account) {
+      claimLocalProgress(owner, local);
+      return true;
+    }
+    try {
+      await progressTimeout(cloudQueue.drained());
+      const binding = bindingRef.current;
+      const backupUpload = binding && binding !== 'transition' && binding.owner === owner ? binding.backupUpload : undefined;
+      const cloud = backupUpload ? null : loaded ? loaded.stats : await progressTimeout(loadCloudStats(owner));
+      if (epoch !== progressEpoch.current || currentUid() !== owner) return false;
+      if (!cloud && bindingRef.current === 'transition') {
+        throw new Error("Device progress ownership could not be confirmed. The existing save was retained.");
+      }
+      if (quizBridge.hasVolatile() && oldOwner === owner) throw new Error("Save pending practice before refreshing cloud progress.");
+      const now = quizClock();
+      const lease = quizSession.canReplace(owner);
+      if (lease.ok === false) throw new Error(lease.message);
+      local = statsRef.current;
+      const ownerLocal = usableLocalStats(owner, local) ? local : defaultStats;
+      const journal = readHydrationJournal(quizBrowserStorage, owner, cloud ?? ownerLocal, now);
+      if (journal.ok === false) throw new Error(journal.message);
+      const reconciled = hydrateQuizProgress(ownerLocal, cloud, journal.value.entries, now.epochMs, journal.value.activeSessions);
+      const hydrated = cloud ? hydrateStatsFromCloud(ownerLocal, reconciled.stats) : hydrateStatsFromCloud(reconciled.stats, null);
+      const nextBinding = { owner, ...(backupUpload ? { backupUpload } : {}) };
+      // replaceCards also patches the shared blob. Give it the correct owner's complete base first.
+      const saved = quizBrowserStorage.writeStats(hydrated, nextBinding, local);
+      if (saved.ok === false) throw new Error(saved.message);
+      quizBridge.cancel(true);
+      quizBridge.observeDeviceStats(hydrated);
+      adoptBinding(nextBinding);
+      localReadableRef.current = true;
+      setLocalProgressReadable(true);
+      setStats(hydrated);
+      replaceCards(hydrated.srsCards ?? {});
+      if (reconciled.prunedSkills) showToast(`Kept the newest quiz skills. ${reconciled.prunedSkills} older rows were removed.`);
+      setCloudSyncReady(true);
+      return true;
+    } catch (error) {
+      if (epoch === progressEpoch.current && currentUid() === uid) {
+        claimLocalProgress(owner, statsRef.current);
+        setAccountError(error instanceof Error ? error.message : "Cloud progress sync failed.");
+      }
+      return false;
+    }
+  }
+  function syncObservedIdentity(user: FirebaseUser | null) {
+    const uid = user?.uid ?? null;
+    if (uid !== currentUid()) return;
+    if (progressBusy.current) { deferredAuth.current = user; return; }
+    if (progressIdentity.current.uid === uid && progressIdentity.current.account === (!!user && !user.isAnonymous)) return;
+    const epoch = beginProgressChange();
+    void activateProgressIdentity(user, epoch).finally(() => finishProgressChange(epoch));
+  }
   const progressUploadInputRef = useRef<HTMLInputElement>(null);
   const profileAvatarInputRef = useRef<HTMLInputElement>(null);
   const unsubscribeFriendsRef = useRef<(() => void) | null>(null);
@@ -1293,10 +1470,23 @@ export default function App() {
 
   // 1. Initial State Load & Study Streak evaluation
   useEffect(() => {
-    const saved = localStorage.getItem("hirachan_master_stats_v1");
-    if (saved) {
+    const owner = quizBrowserStorage.localOwner(offlineOwnerRef.current?.slice(6) ?? quizDeviceId());
+    offlineOwnerRef.current = owner.ok === true ? owner.value : offlineOwnerRef.current ?? `local:${quizDeviceId()}`;
+    const binding = quizBrowserStorage.readBinding();
+    bindingRef.current = binding.ok === true ? binding.value : 'transition';
+    if (binding.ok === true && binding.value && binding.value !== 'transition') adoptBinding(binding.value);
+    const saved = quizBrowserStorage.readStats();
+    if (saved.ok === true) quizBridge.observeDeviceStats(saved.value);
+    if (saved.ok === false) {
+      localReadableRef.current = false;
+      setLocalProgressReadable(false);
+      setAccountError(saved.message);
+    }
+    if (saved.ok === true && saved.value) {
       try {
-        const parsed = JSON.parse(saved) as StudentStats;
+        const clean = readQuizProgress(saved.value);
+        const parsed = withQuizMaps(saved.value, clean.maps);
+        if (clean.prunedSkills) showToast(`Kept the newest quiz skills. ${clean.prunedSkills} older rows were removed.`);
         parsed.srsCards = parsed.srsCards ?? {};
         // ACC-1: the preferences' durable local copy is its own key; the blob copy is only a mirror.
         const loadedPreferences = readPreferencesEnvelope() ?? sanitizeEnvelope(parsed.preferences);
@@ -1346,13 +1536,12 @@ export default function App() {
       } catch (err) {
         console.error("Failed to parse saved credentials", err);
       }
-      setStatsHydrated(true);
     }
-    if (!saved) {
+    if (saved.ok === false || !saved.value) {
       const loadedPreferences = readPreferencesEnvelope();
       if (loadedPreferences) setStats((previous) => ({ ...previous, preferences: loadedPreferences }));
-      setStatsHydrated(true);
     }
+    setStatsHydrated(true);
   }, []);
 
   // Sign in anonymously first so existing multiplayer features keep working.
@@ -1361,53 +1550,66 @@ export default function App() {
   useEffect(() => {
     if (!statsHydrated) return;
     let cancelled = false;
-    setCloudStatsHydrated(false);
-    ensureSignedIn()
-      .then(async (user) => {
+    let unsubscribe: (() => void) | undefined;
+    const epoch = beginProgressChange();
+    initialAuth.current ??= ensureSignedIn();
+    void progressTimeout<FirebaseUser>(initialAuth.current)
+      .then(user => { if (!cancelled) return activateProgressIdentity(user, epoch); })
+      .catch(async error => {
         if (cancelled) return;
-        setMyUid(user.uid);
-        setAccountEmail(user.email);
-        setIsAccountUser(!user.isAnonymous);
-        if (!user.isAnonymous) {
-          const cloudStats = await loadCloudStats(user.uid);
-          if (cancelled) return;
-          if (cloudStats) {
-            const hydratedStats = hydrateStatsFromCloud(stats, cloudStats);
-            setStats(hydratedStats);
-            replaceCards(hydratedStats.srsCards);
-            localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(hydratedStats));
-          } else {
-            const seededStats = hydrateStatsFromCloud(stats, null);
-            setStats(seededStats);
-            await saveCloudStats(seededStats, user.uid);
-          }
-        }
-        if (!cancelled) setCloudStatsHydrated(true);
-      })
-      .catch((err: any) => {
-        if (!cancelled) {
-          setAccountError(err.message || "Firebase sign-in failed");
-          setCloudStatsHydrated(true);
-        }
+        setAccountError(error instanceof Error ? error.message : "Firebase sign-in failed.");
+        await activateProgressIdentity(auth.currentUser, epoch);
+      }).finally(() => {
+        if (cancelled) return;
+        finishProgressChange(epoch);
+        unsubscribe = onAuthStateChanged(auth, syncObservedIdentity);
       });
     return () => {
       cancelled = true;
+      unsubscribe?.();
+      cloudQueue.cancel();
+      progressEpoch.current++;
     };
     // The initial local stats must be loaded before cloud hydration begins.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statsHydrated]);
 
-  // Keep account progress synchronized without writing on every keystroke or
-  // rapid quiz state update.
   useEffect(() => {
-    if (!isAccountUser || !myUid || !cloudStatsHydrated) return;
-    const timer = window.setTimeout(() => {
-      saveCloudStats(stats, myUid).catch((err: any) => {
-        setAccountError(err.message || "Cloud progress sync failed");
-      });
-    }, 700);
-    return () => window.clearTimeout(timer);
-  }, [cloudStatsHydrated, isAccountUser, myUid, stats]);
+    const pruned = quizBridge.skillPrune;
+    if (pruned) showToast(`Kept the newest quiz skills. ${pruned.count} older rows were removed.`);
+  }, [quizBridge.skillPrune]);
+
+  // Upload only after the latest whole local blob is durable.
+  useEffect(() => {
+    if (!cloudSyncReady || !cloudStatsHydrated || !isAccountUser || !statsBinding ||
+      !isCurrentQuizOwner(statsBinding.owner) || !quizBridge.isDurable(stats)) return;
+    cloudQueue.enqueue({ binding: statsBinding, stats });
+  }, [cloudSyncReady, cloudStatsHydrated, isAccountUser, progressChanging, statsBinding, stats, quizBridge.storageError]);
+
+  useEffect(() => {
+    if (!cloudStatsHydrated || !isAccountUser || cloudSyncReady || !progressOwner) return;
+    let cancelled = false;
+    let loading = false;
+    const retry = async () => {
+      const user = auth.currentUser;
+      if (loading || cancelled || progressBusy.current || !navigator.onLine || quizBridge.hasVolatile() ||
+        !user || user.uid !== progressOwner || user.isAnonymous) return;
+      loading = true;
+      const seen = progressEpoch.current;
+      try {
+        const remote = await progressTimeout(loadCloudStats(user.uid));
+        if (cancelled || progressBusy.current || seen !== progressEpoch.current || currentUid() !== user.uid || quizBridge.hasVolatile()) return;
+        const epoch = beginProgressChange();
+        try { await activateProgressIdentity(user, epoch, { stats: remote }); }
+        finally { finishProgressChange(epoch); }
+      } catch { /* Keep device progress and try again when the connection recovers. */ }
+      finally { loading = false; }
+    };
+    const online = () => { void retry(); };
+    const timer = window.setInterval(online, 15_000);
+    window.addEventListener("online", online);
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener("online", online); };
+  }, [cloudStatsHydrated, isAccountUser, cloudSyncReady, progressOwner]);
 
   // ── Polish B2: guided tour (Study Room tips) ────────────────────────────────
   // GuideTour.tsx is presentational. This block owns every stored write. `patchTips` is the one writer of
@@ -1420,17 +1622,6 @@ export default function App() {
       const { tips: _previousTips, ...rest } = previous;
       return next ? { ...rest, tips: next } : rest;
     });
-    try {
-      const raw = localStorage.getItem("hirachan_master_stats_v1");
-      const parsed = raw ? (JSON.parse(raw) as Partial<StudentStats>) : null;
-      // A brand-new browser has no blob yet. Start from the current state (as useSRS does), never from {}:
-      // a blob without `xp` would load back as undefined.
-      const blob = (typeof parsed?.xp === "number" ? parsed : { ...statsRef.current, ...parsed }) as StudentStats;
-      const merged = mergeTips(blob.tips, patch);
-      if (merged) blob.tips = merged;
-      else delete blob.tips;
-      localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(blob));
-    } catch { /* ignore storage errors */ }
   }, []);
 
   /** Next on a real run: this one tip has been shown and acknowledged. */
@@ -1492,18 +1683,16 @@ export default function App() {
     !showProfilePanel &&
     (tourReplay || (tourDecided && tourPending));
 
-  // Sync state with LocalStorage triggers
-  const saveStats = (newStats: StudentStats) => {
-    setStats(newStats);
-    localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(newStats));
-  };
-
   const normalizeImportedStats = (input: any): StudentStats | null => {
     const imported = input?.stats ?? input;
-    if (!imported || typeof imported !== "object") return null;
+    if (!imported || typeof imported !== "object" || Array.isArray(imported)) return null;
     // B1: a backup's tour progress is unioned with this device's; a pre-tips backup keeps the device's.
-    const importedTips = mergeTips(stats.tips, imported.tips);
+    const importedTips = mergeTips(statsRef.current.tips, imported.tips);
+    const now = Date.now();
+    const quizProgress = sanitizeQuizProgress(imported, now);
+    if (quizProgress.prunedSkills) showToast(`Kept the newest quiz skills. ${quizProgress.prunedSkills} older rows were removed.`);
     return {
+      ...quizProgress.maps,
       xp: Number(imported.xp) || 0,
       streakCount: Number(imported.streakCount) || 0,
       lastActiveDate: typeof imported.lastActiveDate === "string" ? imported.lastActiveDate : null,
@@ -1514,11 +1703,11 @@ export default function App() {
       vocabularyProgress: imported.vocabularyProgress && typeof imported.vocabularyProgress === "object" ? imported.vocabularyProgress : {},
       favoriteCategory: typeof imported.favoriteCategory === "string" ? imported.favoriteCategory : "basic",
       // S1: tolerate cards with missing or invalid fields (normalize, never throw); valid cards keep level and nextReview.
-      srsCards: normalizeSrsCards(imported.srsCards, Date.now()),
+      srsCards: normalizeSrsCards(imported.srsCards, now),
       // S2: a backup's daily limits come back with it; a backup without them leaves this device's as they are.
       ...(imported.srsSettings && typeof imported.srsSettings === "object"
-        ? { srsSettings: { ...normalizeSrsSettings(imported.srsSettings), updatedAt: Date.now() } }
-        : stats.srsSettings ? { srsSettings: stats.srsSettings } : {}),
+        ? { srsSettings: { ...normalizeSrsSettings(imported.srsSettings), updatedAt: now } }
+        : statsRef.current.srsSettings ? { srsSettings: statsRef.current.srsSettings } : {}),
       ...(importedTips ? { tips: importedTips } : {}),
       studyDates: Array.isArray(imported.studyDates) ? imported.studyDates : [],
       survivalBestScore: Number(imported.survivalBestScore) || 0,
@@ -1537,9 +1726,6 @@ export default function App() {
         ? current.map((item) => item.dictKey === token.dictKey ? { ...item, lastSeen: now, count: item.count + 1 } : item)
         : [...current, { dictKey: token.dictKey, surface: token.surface, reading: token.reading!, meaning: token.meaning!, firstSeen: now, lastSeen: now, count: 1 }];
       const updated = { ...previous, readingMisses: nextMisses };
-      try {
-        localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(updated));
-      } catch { /* keep the in-memory note if storage is unavailable */ }
       return updated;
     });
   };
@@ -1569,13 +1755,31 @@ export default function App() {
     event.target.value = "";
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) { showToast("File too large. Please use a valid Astra backup."); return; }
+    const owner = progressIdentity.current.owner;
+    const observedEpoch = progressEpoch.current;
+    if (!owner || progressBusy.current) { showToast("Wait for device progress to load before restoring a backup."); return; }
+    let replacementEpoch: number | undefined;
     try {
       const parsed = JSON.parse(await file.text());
+      if (progressBusy.current || observedEpoch !== progressEpoch.current || owner !== (currentUid() ?? offlineOwnerRef.current)) {
+        showToast("Account changed while reading the backup. Select the file again.");
+        return;
+      }
       const importedStats = normalizeImportedStats(parsed);
       if (!importedStats) {
         showToast("That progress file could not be read.");
         return;
       }
+      const available = quizSession.canReplace(owner);
+      if (available.ok === false) { showToast(available.message); return; }
+      replacementEpoch = beginProgressChange();
+      await progressTimeout(cloudQueue.drained());
+      if (replacementEpoch !== progressEpoch.current || owner !== (currentUid() ?? offlineOwnerRef.current)) {
+        showToast("Account changed before the backup could be restored.");
+        return;
+      }
+      const stillAvailable = quizSession.canReplace(owner);
+      if (stillAvailable.ok === false) { showToast(stillAvailable.message); return; }
       // ACC-1: a backup's settings are restored with its progress, stamped now so they
       // win over the cloud copy. A backup without settings keeps this device's current ones.
       const backupPreferences = sanitizeEnvelope((parsed?.stats ?? parsed)?.preferences);
@@ -1584,13 +1788,31 @@ export default function App() {
           values: completePreferences(backupPreferences.values, preferenceSnapshotRef.current),
           updatedAt: Date.now(),
         };
-        writeLocalPreferences(restoredPreferences.values);
-        writePreferencesEnvelope(restoredPreferences);
         importedStats.preferences = restoredPreferences;
-      } else if (stats.preferences) {
-        importedStats.preferences = stats.preferences;
+      } else if (statsRef.current.preferences) {
+        importedStats.preferences = statsRef.current.preferences;
       }
-      saveStats(importedStats);
+      const account = progressIdentity.current.account;
+      const binding: StatsBinding = { owner, ...(account ? { backupUpload: quizDeviceId() } : {}) };
+      const saved = quizBrowserStorage.replaceFromBackup(importedStats, binding);
+      if (saved.ok === false) { showToast(saved.message); return; }
+      quizSession.detach(owner, true);
+      quizBridge.cancel(true);
+      quizBridge.observeDeviceStats(importedStats);
+      adoptBinding(binding);
+      localReadableRef.current = true;
+      setLocalProgressReadable(true);
+      setStats(importedStats);
+      replaceCards(importedStats.srsCards);
+      if (backupPreferences && importedStats.preferences) {
+        const restored = importedStats.preferences;
+        const incoming = completePreferences(restored.values, preferenceSnapshotRef.current);
+        preferenceSnapshotRef.current = incoming;
+        lastSyncedPreferenceKeyRef.current = serializePreferences(incoming);
+        writePreferencesEnvelope(restored);
+        applyPreferenceValues(restored.values);
+      }
+      setCloudSyncReady(account);
       if (typeof parsed?.profileName === "string" && parsed.profileName.trim()) {
         localStorage.setItem("astra_profile_name", parsed.profileName.trim().slice(0, 24));
         // ACC-1: without this, the saved cloud profile would win after the reload and the restored name would be lost.
@@ -1598,8 +1820,11 @@ export default function App() {
       }
       showToast("Progress restored. Reloading...");
       setTimeout(() => window.location.reload(), 700);
-    } catch {
-      showToast("Upload failed. Please choose a valid Astra progress JSON file.");
+    } catch (error) {
+      showToast(replacementEpoch !== undefined && error instanceof Error
+        ? error.message : "Upload failed. Please choose a valid Astra progress JSON file.");
+    } finally {
+      if (replacementEpoch !== undefined) finishProgressChange(replacementEpoch);
     }
   };
 
@@ -1997,7 +2222,6 @@ export default function App() {
     // C1: persist like the kana quiz and Study paths, so this XP survives an anonymous reload (amount unchanged).
     setStats(prev => {
       const updated = { ...prev, xp: prev.xp + xp };
-      try { localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(updated)); } catch { /* ignore storage errors */ }
       return updated;
     });
     setTimeout(() => {
@@ -2101,7 +2325,6 @@ export default function App() {
     // C1: persist like the kana quiz and Study paths, so this XP survives an anonymous reload (amount unchanged).
     if (xp > 0) setStats(prev => {
       const updated = { ...prev, xp: prev.xp + xp };
-      try { localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(updated)); } catch { /* ignore storage errors */ }
       return updated;
     });
     setTimeout(() => {
@@ -2220,7 +2443,9 @@ export default function App() {
   // Controls study streak daily tick updates
   // FIX: All reads use functional prev to prevent stale-closure XP loss
   const awardXPAndIncrementAttempt = (wasCorrect: boolean, xpEarned: number) => {
-    const todayStr = new Date().toLocaleDateString("en-CA"); // "YYYY-MM-DD" in local time
+    const day = new Date();
+    day.setHours(0, 0, 0, 0);
+    const todayStr = day.toLocaleDateString("en-CA");
     const characterName = currentQuestion?.kana || "unknown";
 
     setStats((prev) => {
@@ -2231,8 +2456,7 @@ export default function App() {
       const studySet = new Set(updatedStudyDates);
 
       let currentStreak = 0;
-      const cursor = new Date();
-      cursor.setHours(0, 0, 0, 0);
+      const cursor = new Date(day);
       while (studySet.has(cursor.toLocaleDateString("en-CA"))) {
         currentStreak++;
         cursor.setDate(cursor.getDate() - 1);
@@ -2258,7 +2482,6 @@ export default function App() {
         studyDates: updatedStudyDates,
       };
 
-      localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(updated));
       return updated;
     });
   };
@@ -2321,7 +2544,6 @@ export default function App() {
     setStats((prev) => {
       if (survivalScore > (prev.survivalBestScore || 0)) {
         const updated = { ...prev, survivalBestScore: survivalScore };
-        localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(updated));
         return updated;
       }
       return prev;
@@ -2492,6 +2714,8 @@ export default function App() {
   window.setTimeout(() => sessionStudiedKanji.delete(activeKanji), 0);
 
   // FIX: Update both XP and characterProgress so Kanji Quiz "Studied" pool works
+  const studyDay = new Date();
+  studyDay.setHours(0, 0, 0, 0);
   setStats((prev) => {
     const prevProg = prev.characterProgress[activeKanji] || { correct: 0, total: 0 };
     // C1: re-check against the state this updater really sees, so a hydrate race or a double invocation never pays twice.
@@ -2500,15 +2724,14 @@ export default function App() {
     // Record today's study date and recompute the streak the same way the kana
     // quiz XP path does — without this, kanji study earns XP but silently
     // doesn't count toward the streak until the next full page reload.
-    const todayStr = new Date().toLocaleDateString("en-CA");
+    const todayStr = studyDay.toLocaleDateString("en-CA");
     const existingDates = prev.studyDates || [];
     const updatedStudyDates = existingDates.includes(todayStr)
       ? existingDates
       : [...existingDates, todayStr];
     const studySet = new Set(updatedStudyDates);
     let currentStreak = 0;
-    const cursor = new Date();
-    cursor.setHours(0, 0, 0, 0);
+    const cursor = new Date(studyDay);
     while (studySet.has(cursor.toLocaleDateString("en-CA"))) {
       currentStreak++;
       cursor.setDate(cursor.getDate() - 1);
@@ -2528,7 +2751,6 @@ export default function App() {
         },
       },
     };
-    localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(updated));
     return updated;
   });
   playChime(true);
@@ -2628,7 +2850,6 @@ export default function App() {
       // FIX: Use functional update to prevent stale-closure XP loss
       setStats((prev) => {
         const updated = { ...prev, xp: prev.xp + earnedXp };
-        localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(updated));
         return updated;
       });
 
@@ -2666,7 +2887,6 @@ export default function App() {
         xp: prev.xp + xpGain,
         vocabularyProgress: newProgress,
       };
-      localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(updated));
       return updated;
     });
 
@@ -3576,90 +3796,37 @@ export default function App() {
     }
   };
 
-  const handleCreateAccount = async (email: string, password: string) => {
+  const connectProgressAccount = async (connect: () => Promise<FirebaseUser>, success: string, failure: string) => {
+    if (progressBusy.current) return;
+    const epoch = beginProgressChange();
     setAccountBusy(true);
     setAccountError(null);
     try {
-      const user = await createOrLinkEmailAccount(email, password);
-      setMyUid(user.uid);
-      setAccountEmail(user.email);
-      setIsAccountUser(true);
-      await syncOwnProfileSafe(user.uid);
-      const seededStats = hydrateStatsFromCloud(stats, null);
-      setStats(seededStats);
-      await saveCloudStats(seededStats, user.uid);
-      setCloudStatsHydrated(true);
-      showToast("Astra account created. Progress sync is now active.");
+      const user = await connect();
+      const loaded = await activateProgressIdentity(user, epoch);
+      finishProgressChange(epoch);
+      if (currentUid() === user.uid) {
+        await syncOwnProfileSafe(user.uid);
+        showToast(loaded ? success : "Signed in. Cloud progress is pending.");
+      }
     } catch (err: any) {
-      setAccountError(accountErrorMessage(err, "Account creation failed"));
+      setAccountError(accountErrorMessage(err, failure));
     } finally {
+      finishProgressChange(epoch);
       setAccountBusy(false);
     }
   };
 
-  const handleSignInAccount = async (email: string, password: string) => {
-    setAccountBusy(true);
-    setAccountError(null);
-    try {
-      const user = await signInEmailAccount(email, password);
-      const cloudStats = await loadCloudStats(user.uid);
-      setMyUid(user.uid);
-      setAccountEmail(user.email);
-      setIsAccountUser(true);
-      if (cloudStats) {
-        const hydratedStats = hydrateStatsFromCloud(stats, cloudStats);
-        setStats(hydratedStats);
-        replaceCards(hydratedStats.srsCards);
-        localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(hydratedStats));
-        stampVeteranTips(hydratedStats);
-      } else {
-        const seededStats = hydrateStatsFromCloud(stats, null);
-        setStats(seededStats);
-        stampVeteranTips(seededStats);
-        await saveCloudStats(seededStats, user.uid);
-      }
-      // ACC-1: restore this account's name and avatar (previously only stats were restored).
-      await syncOwnProfileSafe(user.uid);
-      setCloudStatsHydrated(true);
-      showToast("Signed in. Cloud progress loaded.");
-    } catch (err: any) {
-      setAccountError(accountErrorMessage(err, "Sign-in failed"));
-    } finally {
-      setAccountBusy(false);
-    }
-  };
+  const handleCreateAccount = (email: string, password: string) =>
+    connectProgressAccount(() => createOrLinkEmailAccount(email, password),
+      "Astra account created. Progress sync is now active.", "Account creation failed");
 
-  const handleGoogleAccount = async () => {
-    setAccountBusy(true);
-    setAccountError(null);
-    try {
-      const user = await createOrLinkGoogleAccount();
-      const cloudStats = await loadCloudStats(user.uid);
-      setMyUid(user.uid);
-      setAccountEmail(user.email);
-      setIsAccountUser(true);
-      if (cloudStats) {
-        const hydratedStats = hydrateStatsFromCloud(stats, cloudStats);
-        setStats(hydratedStats);
-        replaceCards(hydratedStats.srsCards);
-        localStorage.setItem("hirachan_master_stats_v1", JSON.stringify(hydratedStats));
-        stampVeteranTips(hydratedStats);
-      } else {
-        const seededStats = hydrateStatsFromCloud(stats, null);
-        setStats(seededStats);
-        stampVeteranTips(seededStats);
-        await saveCloudStats(seededStats, user.uid);
-      }
-      // ACC-1: this used to publish this device's name/avatar over the account's. Reconcile instead.
-      await syncOwnProfileSafe(user.uid);
-      setCloudStatsHydrated(true);
-      showToast("Google account connected. Cloud progress sync is active.");
-    } catch (err: any) {
-      setAccountError(accountErrorMessage(err, "Google sign-in failed"));
-    } finally {
-      setAccountBusy(false);
-    }
-  };
+  const handleSignInAccount = (email: string, password: string) =>
+    connectProgressAccount(() => signInEmailAccount(email, password), "Signed in. Cloud progress loaded.", "Sign-in failed");
+
+  const handleGoogleAccount = () =>
+    connectProgressAccount(createOrLinkGoogleAccount,
+      "Google account connected. Cloud progress sync is active.", "Google sign-in failed");
 
   const handleResetPassword = async (email: string) => {
     setAccountBusy(true);
@@ -3675,19 +3842,18 @@ export default function App() {
   };
 
   const handleSignOutAccount = async () => {
+    if (progressBusy.current) return;
+    const epoch = beginProgressChange();
     setAccountBusy(true);
     setAccountError(null);
     try {
       await signOutAccount();
-      const user = currentUid();
-      setMyUid(user);
-      setAccountEmail(null);
-      setIsAccountUser(false);
-      setCloudStatsHydrated(true);
+      await activateProgressIdentity(auth.currentUser, epoch);
       showToast("Signed out. This browser remains available offline.");
     } catch (err: any) {
       setAccountError(err.message || "Sign-out failed");
     } finally {
+      finishProgressChange(epoch);
       setAccountBusy(false);
     }
   };
