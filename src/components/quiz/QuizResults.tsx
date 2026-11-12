@@ -7,16 +7,18 @@
 // repair line is a separate sentence. One small star flourish plays once (reduced motion: none).
 // Summary and the missed list sit in two columns from 960 px.
 
-import { StudioHeader, StudioMark, StudioShell, type StudioShellProps } from "./StudioShell";
+import type { ReactNode } from "react";
+import { StudioHeader, StudioMark, StudioShell, type StudioPresentation } from "./StudioShell";
 import type { QuizResultsActions, QuizResultsView } from "./viewTypes";
 
 export interface QuizResultsProps {
   view: QuizResultsView;
   actions: QuizResultsActions;
-  shell?: Pick<StudioShellProps, "themeId" | "reducedMotion" | "keyboardOpen" | "modalOpen" | "overlay">;
+  shell?: StudioPresentation;
+  status?: ReactNode;
 }
 
-export function QuizResults({ view, actions, shell }: QuizResultsProps) {
+export function QuizResults({ view, actions, shell, status }: QuizResultsProps) {
   const header = (
     <StudioHeader backLabel="Back to Practice" onBack={actions.onBackToPractice}>
       <p className="quiz-header__progress">Results</p>
@@ -25,7 +27,9 @@ export function QuizResults({ view, actions, shell }: QuizResultsProps) {
   );
 
   return (
-    <StudioShell label="Practice results" header={header} width="results" {...shell}>
+    <StudioShell label="Practice results" header={header} width="results" companion={view.companion ?? {
+      expression: "intro", speech: "A little practice is time well spent.",
+    }} {...shell}>
       <div className="quiz-results">
         <section className="quiz-card quiz-summary" aria-labelledby="quiz-results-headline">
           <span className="quiz-reco__mark quiz-results__star" aria-hidden="true">
@@ -35,6 +39,7 @@ export function QuizResults({ view, actions, shell }: QuizResultsProps) {
             {view.headline}
           </h1>
           <p className="quiz-results__percent">{view.percentLabel}</p>
+          {view.detail && <p className="quiz-body">{view.detail}</p>}
           {view.repairLine && <p className="quiz-body">{view.repairLine}</p>}
           {view.encouragement && <p className="quiz-body">{view.encouragement}</p>}
 
@@ -51,6 +56,8 @@ export function QuizResults({ view, actions, shell }: QuizResultsProps) {
             </div>
           </dl>
           {view.streakLine && <p className="quiz-streak">{view.streakLine}</p>}
+          {view.saveLabel && <p className="quiz-help">{view.saveLabel}</p>}
+          {status}
 
           <div className="quiz-stack">
             <button type="button" className="quiz-btn quiz-btn--primary quiz-btn--block" onClick={actions.onPrimary}>
@@ -88,9 +95,9 @@ export function QuizResults({ view, actions, shell }: QuizResultsProps) {
         </section>
 
         <div className="quiz-results__more">
-          <button type="button" className="quiz-btn quiz-btn--secondary" onClick={actions.onAnotherRound}>
+          {actions.onAnotherRound && <button type="button" className="quiz-btn quiz-btn--secondary" onClick={actions.onAnotherRound}>
             Another round
-          </button>
+          </button>}
           <button type="button" className="quiz-btn quiz-btn--secondary" onClick={actions.onBackToPractice}>
             Back to Practice
           </button>

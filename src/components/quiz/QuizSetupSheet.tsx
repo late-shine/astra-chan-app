@@ -7,7 +7,7 @@
 // offer one relevant alternative. There is no random padding and no silent pool widening.
 // Timers are NOT here: they are configured through Timed practice, never inside a normal Start.
 
-import { useId, useState, type RefObject } from "react";
+import { useId, useState, type ReactNode, type RefObject } from "react";
 import { Check, ChevronDown, CircleAlert } from "lucide-react";
 import { StudioSegmented, StudioSheet, StudioSwitch } from "./StudioShell";
 import type { QuizSetupActions, QuizSetupView } from "./viewTypes";
@@ -17,13 +17,15 @@ export interface QuizSetupSheetProps {
   actions: QuizSetupActions;
   /** The Customize button. Focus returns here when the sheet closes. */
   returnFocusRef?: RefObject<HTMLElement | null>;
+  customSelection?: ReactNode;
+  modeOptions?: ReactNode;
 }
 
 function plural(count: number, one: string, many: string): string {
   return count === 1 ? one : many;
 }
 
-export function QuizSetupSheet({ view, actions, returnFocusRef }: QuizSetupSheetProps) {
+export function QuizSetupSheet({ view, actions, returnFocusRef, customSelection, modeOptions }: QuizSetupSheetProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const poolId = useId();
   const noticeId = useId();
@@ -34,7 +36,7 @@ export function QuizSetupSheet({ view, actions, returnFocusRef }: QuizSetupSheet
   const startCount = Math.min(length, Math.max(0, matchCount));
   const shrinks = !isEmpty && matchCount < length;
 
-  const startLabel = isEmpty ? "Start practice" : `Start ${startCount} ${plural(startCount, "question", "questions")}`;
+  const startLabel = view.startLabel ?? (isEmpty ? "Start practice" : `Start ${startCount} ${plural(startCount, "question", "questions")}`);
 
   const handleStart = () => {
     // aria-disabled keeps the button focusable (so its reason can be read), so the guard lives here.
@@ -48,7 +50,7 @@ export function QuizSetupSheet({ view, actions, returnFocusRef }: QuizSetupSheet
         type="button"
         className="quiz-btn quiz-btn--primary quiz-btn--block"
         aria-disabled={isEmpty ? true : undefined}
-        aria-describedby={isEmpty || shrinks ? noticeId : undefined}
+        aria-describedby={isEmpty || shrinks || view.notice ? noticeId : undefined}
         onClick={handleStart}
       >
         {startLabel}
@@ -59,10 +61,11 @@ export function QuizSetupSheet({ view, actions, returnFocusRef }: QuizSetupSheet
   return (
     <StudioSheet title="Customize practice" closeLabel="Close customize" onClose={actions.onClose} footer={footer} size="setup" returnFocusRef={returnFocusRef}>
       <div className="quiz-form">
-        <div className="quiz-field">
+        {view.subjects.length > 1 && <div className="quiz-field">
           <span className="quiz-field__label">Subject</span>
           <StudioSegmented label="Subject" options={view.subjects} value={view.subject} onChange={actions.onSubjectChange} columns={3} />
-        </div>
+        </div>}
+        {modeOptions}
 
         {view.kana && (
           <>
@@ -101,7 +104,7 @@ export function QuizSetupSheet({ view, actions, returnFocusRef }: QuizSetupSheet
           </>
         )}
 
-        <div className="quiz-field">
+        {view.pools.length > 1 && <div className="quiz-field">
           <label className="quiz-field__label" htmlFor={poolId}>
             Practice pool
           </label>
@@ -112,7 +115,7 @@ export function QuizSetupSheet({ view, actions, returnFocusRef }: QuizSetupSheet
               </option>
             ))}
           </select>
-        </div>
+        </div>}
 
         <div className="quiz-field">
           <span className="quiz-field__label">Question type</span>
@@ -131,6 +134,7 @@ export function QuizSetupSheet({ view, actions, returnFocusRef }: QuizSetupSheet
         </div>
 
         <div id={noticeId} className="quiz-notice-slot" aria-live="polite">
+          {view.notice && <p className="quiz-notice"><CircleAlert aria-hidden="true" /><span>{view.notice}</span></p>}
           {shrinks && (
             <p className="quiz-notice">
               <CircleAlert aria-hidden="true" />
@@ -174,13 +178,13 @@ export function QuizSetupSheet({ view, actions, returnFocusRef }: QuizSetupSheet
             <ChevronDown aria-hidden="true" data-open={advancedOpen ? "true" : "false"} />
           </button>
           <div id={advancedPanelId} hidden={!advancedOpen} className="quiz-advanced__panel">
-            <div className="quiz-field">
+            {customSelection === undefined ? <div className="quiz-field">
               <span className="quiz-field__label">Custom selection</span>
               <button type="button" className="quiz-btn quiz-btn--secondary quiz-btn--block">
                 Choose specific items
               </button>
               <p className="quiz-help">Not wired in this prototype.</p>
-            </div>
+            </div> : customSelection}
             {view.kana && (
               <div className="quiz-field">
                 <span className="quiz-field__label">Answer choices</span>

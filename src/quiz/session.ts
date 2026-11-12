@@ -184,6 +184,15 @@ export function reduceSession(state: SessionState, event: SessionEvent): Session
     return seal(state, feedback({ ...at, volatile: true, autoNextCanceled: true }, event.clock));
   }
   if (event.questionId !== state.current.id || state.phase === 'results') return state;
+  if (event.type === 'SET_AUTO_NEXT') {
+    if (event.enabled === state.config.autoNext) return state;
+    const at = capture(state, event.clock);
+    return seal(state, { ...at, config: { ...at.config, autoNext: event.enabled },
+      autoNextCanceled: at.autoNextCanceled || !event.enabled && at.phase === 'feedback',
+      autoNextRemainingMs: event.enabled ? at.autoNextRemainingMs : null,
+      autoNextToken: event.enabled ? at.autoNextToken : null,
+      runtime: { ...at.runtime, autoNextDeadlineMonoMs: event.enabled ? at.runtime.autoNextDeadlineMonoMs : null } });
+  }
   if (event.type === 'CANCEL_AUTO_NEXT') {
     if (state.autoNextCanceled) return state;
     const at = capture(state, event.clock);

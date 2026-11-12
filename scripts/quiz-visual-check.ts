@@ -27,6 +27,8 @@
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { ATELIER_PORTRAITS, ATELIER_SCENES } from "../src/quiz/atelierAssets";
 
 // ─── tiny harness ────────────────────────────────────────────────────────────
 
@@ -135,106 +137,54 @@ check("no hex / rgb / hsl outside --quiz-* token declarations", literals.length 
 // ─── 3. contrast, from the real token values ─────────────────────────────────
 
 type Palette = Record<string, string>;
+const tokenRule = studioRules.find(rule => rule.prelude === ".quiz-studio" && /--quiz-bg\s*:/.test(rule.body));
+const palette: Palette = {};
+for (const match of tokenRule?.body.matchAll(/--quiz-([\w-]+)\s*:\s*([^;]+);/g) ?? []) palette[match[1]] = match[2].trim();
+check("one Rainlit Atelier palette is defined", Object.keys(palette).length >= 25);
+check("all app theme IDs use the same night palette", !studioRules.some(rule => /data-theme/.test(rule.prelude) && /--quiz-(bg|primary|surface)\s*:/.test(rule.body)));
+check("atelier uses the night image-loading fallback", palette.bg?.toUpperCase() === "#121116");
 
-function tokensOf(rule: Rule | undefined): Palette {
-  const out: Palette = {};
-  if (!rule) return out;
-  for (const match of rule.body.matchAll(/--quiz-([\w-]+)\s*:\s*(#[0-9A-Fa-f]{6})\s*;/g)) out[match[1]] = match[2].toUpperCase();
-  return out;
+type Color = [number, number, number, number];
+function color(input: string, backdrop: Color): Color {
+  const value = input?.replace(/var\(--quiz-([\w-]+)\)/g, (_, key: string) => palette[key] ?? "");
+  if (/^#[\da-f]{6}$/i.test(value)) return [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16)).concat(1) as Color;
+  const match = value?.match(/^rgb\(\s*(\d+)\s+(\d+)\s+(\d+)\s*\/\s*([\d.]+)\s*\)$/);
+  if (!match) throw new Error("Unsupported contrast color " + input);
+  const alpha = Number(match[4]);
+  return [0, 1, 2].map(i => Number(match[i + 1]) * alpha + backdrop[i] * (1 - alpha)).concat(1) as Color;
 }
-
-const lightRule = studioRules.find((r) => r.prelude === ".quiz-studio" && /--quiz-bg\s*:/.test(r.body));
-const darkRule = studioRules.find((r) => r.prelude.includes('[data-theme="dark"]') && /--quiz-bg\s*:/.test(r.body));
-const accentOf = (id: string) => tokensOf(studioRules.find((r) => r.prelude.includes(`[data-theme="${id}"]`) && /--quiz-primary\s*:/.test(r.body) && !/--quiz-bg/.test(r.body)));
-
-const light = tokensOf(lightRule);
-const dark = tokensOf(darkRule);
-check("found the light token rule", Object.keys(light).length >= 14, String(Object.keys(light).length));
-check("found the dark token rule", Object.keys(dark).length >= 14, String(Object.keys(dark).length));
-
-const channel = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
-function luminance(hex: string): number {
-  const lin = (v: number) => {
-    const c = v / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * lin(channel(hex, 0)) + 0.7152 * lin(channel(hex, 1)) + 0.0722 * lin(channel(hex, 2));
+function luminance(rgb: Color) {
+  const linear = rgb.slice(0, 3).map(value => value / 255 <= 0.04045 ? value / 255 / 12.92 : ((value / 255 + 0.055) / 1.055) ** 2.4);
+  return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
 }
-function ratio(a: string, b: string): number {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
+function ratio(fg: Color, bg: Color) {
+  const values = [luminance(fg), luminance(bg)].sort((a, b) => b - a);
+  return (values[0] + 0.05) / (values[1] + 0.05);
 }
-/** `color-mix(in srgb, A pct, B)` as the studio uses it for --quiz-selected-fill. */
-function mix(a: string, pct: number, b: string): string {
-  const to = (i: number) => Math.round(channel(a, i) * pct + channel(b, i) * (1 - pct)).toString(16).padStart(2, "0");
-  return `#${to(0)}${to(1)}${to(2)}`.toUpperCase();
-}
-check("selected-fill formula in CSS is 10% primary over surface", /--quiz-selected-fill:\s*color-mix\(in srgb,\s*var\(--quiz-primary\)\s*10%,\s*var\(--quiz-surface\)\)/.test(stripComments(studioPart)));
-
-interface Pair { name: string; fg: string; bg: string; min: number }
-
-function pairsFor(t: Palette): Pair[] {
-  const fill = mix(t.primary, 0.1, t.surface);
-  const text = 4.5;
-  const ui = 3;
-  return [
-    { name: "ink on bg", fg: t.ink, bg: t.bg, min: text },
-    { name: "ink on surface", fg: t.ink, bg: t.surface, min: text },
-    { name: "ink on surface-muted", fg: t.ink, bg: t["surface-muted"], min: text },
-    { name: "ink-muted on bg", fg: t["ink-muted"], bg: t.bg, min: text },
-    { name: "ink-muted on surface", fg: t["ink-muted"], bg: t.surface, min: text },
-    { name: "ink-muted on surface-muted", fg: t["ink-muted"], bg: t["surface-muted"], min: text },
-    { name: "primary text on bg", fg: t.primary, bg: t.bg, min: text },
-    { name: "primary text on surface", fg: t.primary, bg: t.surface, min: text },
-    { name: "on-primary on primary", fg: t["on-primary"], bg: t.primary, min: text },
-    { name: "success on success-soft", fg: t.success, bg: t["success-soft"], min: text },
-    { name: "error on error-soft", fg: t.error, bg: t["error-soft"], min: text },
-    { name: "ink on success-soft", fg: t.ink, bg: t["success-soft"], min: text },
-    { name: "ink on error-soft", fg: t.ink, bg: t["error-soft"], min: text },
-    { name: "ink-muted on success-soft", fg: t["ink-muted"], bg: t["success-soft"], min: text },
-    { name: "ink-muted on error-soft", fg: t["ink-muted"], bg: t["error-soft"], min: text },
-    { name: "ink on selected-fill", fg: t.ink, bg: fill, min: text },
-    { name: "ink-muted on selected-fill", fg: t["ink-muted"], bg: fill, min: text },
-    { name: "on-playful on playful", fg: t["on-playful"], bg: t.playful, min: text },
-    { name: "control-border on bg", fg: t["control-border"], bg: t.bg, min: ui },
-    { name: "control-border on surface", fg: t["control-border"], bg: t.surface, min: ui },
-    { name: "control-border on surface-muted", fg: t["control-border"], bg: t["surface-muted"], min: ui },
-    { name: "control-border on success-soft", fg: t["control-border"], bg: t["success-soft"], min: ui },
-    { name: "control-border on error-soft", fg: t["control-border"], bg: t["error-soft"], min: ui },
-    { name: "primary (selected border, focus ring) on surface", fg: t.primary, bg: t.surface, min: ui },
-    { name: "primary (focus ring) on bg", fg: t.primary, bg: t.bg, min: ui },
-    { name: "success (border / icon) on success-soft", fg: t.success, bg: t["success-soft"], min: ui },
-    { name: "error (border / icon) on error-soft", fg: t.error, bg: t["error-soft"], min: ui },
-    { name: "success-soft (icon glyph) on success", fg: t["success-soft"], bg: t.success, min: ui },
-    { name: "error-soft (icon glyph) on error", fg: t["error-soft"], bg: t.error, min: ui },
-  ];
-}
-
-const themes: { id: string; palette: Palette }[] = [
-  { id: "light (base, light id)", palette: light },
-  { id: "dark / dark-cosmic", palette: dark },
-  ...["dark-emerald", "dark-maple", "dark-cyber"].map((id) => ({ id, palette: { ...dark, ...accentOf(id) } })),
-];
-for (const id of ["dark-emerald", "dark-maple", "dark-cyber"]) check(`found the ${id} accent override`, !!accentOf(id).primary);
-
-console.log("Measured contrast (WCAG 2.x), from the token values in src/index.css:");
-for (const theme of themes) {
-  let worst = Infinity;
-  let worstName = "";
-  for (const pair of pairsFor(theme.palette)) {
-    if (!pair.fg || !pair.bg) {
-      check(`contrast ${theme.id}: ${pair.name} has both colours`, false);
-      continue;
+let minimumText = Infinity;
+let minimumEdge = Infinity;
+for (const backdrop of [[0, 0, 0, 1], [255, 255, 255, 1]] as Color[]) {
+  const name = backdrop[0] === 0 ? "black scene bound" : "white scene bound";
+  for (const surface of ["bg", "surface", "surface-solid", "surface-muted", "selected-fill", "companion-surface", "header-surface", "success-soft", "error-soft"]) {
+    for (const foreground of ["ink", "ink-muted", "playful"]) {
+      const value = ratio(color(palette[foreground], backdrop), color(palette[surface], backdrop));
+      minimumText = Math.min(minimumText, value);
+      check(`contrast: ${foreground} on ${surface}, ${name} >= 4.5`, value >= 4.5, value.toFixed(2));
     }
-    const value = ratio(pair.fg, pair.bg);
-    if (value < worst) {
-      worst = value;
-      worstName = pair.name;
-    }
-    check(`contrast ${theme.id}: ${pair.name} >= ${pair.min}`, value >= pair.min, `${value.toFixed(2)}:1`);
   }
-  console.log(`  ${theme.id.padEnd(24)} lowest ${worst.toFixed(2)}:1  (${worstName})`);
+  for (const [fg, bg, minimum] of [
+    ["on-primary", "primary", 4.5], ["on-primary", "primary-hover", 4.5], ["on-playful", "playful", 4.5],
+    ["success", "success-soft", 4.5], ["error", "error-soft", 4.5],
+    ["control-border", "surface-muted", 3], ["control-border", "selected-fill", 3],
+    ["success", "success-soft", 3], ["error", "error-soft", 3],
+    ["focus", "surface-muted", 3], ["focus", "surface-solid", 3], ["playful", "surface-muted", 3], ["playful", "selected-fill", 3],
+  ] as [string, string, number][]) {
+    const value = ratio(color(palette[fg], backdrop), color(palette[bg], backdrop));
+    if (minimum === 3) minimumEdge = Math.min(minimumEdge, value);
+    check(`contrast: ${fg} on ${bg}, ${name} >= ${minimum}`, value >= minimum, value.toFixed(2));
+  }
 }
+console.log(`Atelier composite bounds: text ${minimumText.toFixed(2)}:1, meaningful edges ${minimumEdge.toFixed(2)}:1 minimum.`);
 
 // ─── 4. size floors ──────────────────────────────────────────────────────────
 
@@ -295,6 +245,67 @@ for (const file of quizFiles) {
 }
 check("viewTypes.ts imports only types from preferences", /import type \{ ThemeId \} from "..\/..\/preferences"/.test(readFileSync("src/components/quiz/viewTypes.ts", "utf8")));
 
+// QZ5A art and bounded composition, using the current masters and real derivatives.
+function pngDimensions(path: string) {
+  const bytes = readFileSync(path);
+  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20), alpha: bytes[25] === 6 || bytes.includes(Buffer.from("tRNS")) };
+}
+const sourceFiles = [
+  ...Object.entries(ATELIER_PORTRAITS).map(([id, asset]) => ({ path: `Quiz assets/astra-${id}.png`, asset })),
+  ...Object.entries(ATELIER_SCENES).map(([id, asset]) => ({ path: `Quiz assets/atelier-night-${id}.png`, asset })),
+];
+for (const { path, asset } of sourceFiles) {
+  const bytes = readFileSync(path);
+  check(`${path} matches the inspected source master`, createHash("sha256").update(bytes).digest("hex") === asset.sourceSha256);
+}
+for (const [id, asset] of Object.entries(ATELIER_PORTRAITS)) {
+  const source = pngDimensions(`Quiz assets/astra-${id}.png`);
+  check(`${id}: current source dimensions recorded`, source.width === asset.sourceWidth && source.height === asset.sourceHeight);
+  check(`${id}: source alpha retained`, source.alpha && asset.alpha);
+  check(`${id}: conservative scale and anchors`, asset.anchor.scale <= 1 && asset.anchor.scale >= 0.9 && Math.abs(asset.anchor.offsetY) <= 2);
+  check(`${id}: phone URLs cap the 120px slot at 2x`, asset.mobileWebp.endsWith("-240.webp") && asset.mobileSrc.endsWith("-240.png"));
+  for (const [key, expected] of Object.entries(asset.bytes)) {
+    const [, width, extension] = key.match(/^(\d+)(webp|png)$/)!;
+    const path = `public/assets/quiz/atelier/astra-${id}-${width}.${extension}`;
+    check(`${id} ${key}: derivative size matches manifest`, statSync(path).size === expected);
+    check(`${id} ${key}: portrait budget`, expected <= (Number(width) <= 240 ? 100_000 : 250_000), String(expected));
+    if (extension === "png") {
+      const decoded = pngDimensions(path);
+      check(`${id} ${key}: proportional alpha PNG fallback`, decoded.alpha && decoded.width === Number(width) && decoded.height * 3 === decoded.width * 4);
+    }
+  }
+}
+for (const [id, asset] of Object.entries(ATELIER_SCENES)) {
+  for (const [key, expected] of Object.entries(asset.bytes)) {
+    const [, width, extension] = key.match(/^(\d+)(webp|jpg)$/)!;
+    const path = `public/assets/quiz/atelier/atelier-night-${id}-${width}.${extension}`;
+    check(`${id} ${key}: room budget and recorded bytes`, statSync(path).size === expected && expected <= (id === "desktop" ? 650_000 : 350_000));
+  }
+}
+const companion = readFileSync("src/components/quiz/QuizCompanion.tsx", "utf8");
+const shell = readFileSync("src/components/quiz/StudioShell.tsx", "utf8");
+check("scene sources are selected by responsive picture", shell.includes('(max-width: 767px)') && shell.includes('type="image/webp"'));
+check("portrait swap waits for decode", companion.includes("image.decode()") && companion.includes("desired.current !== expression"));
+check("phone picture selects only its capped source", companion.includes('media="(max-width: 1099px)" type="image/webp" srcSet={asset.mobileWebp}') && companion.includes('type="image/png" srcSet={asset.mobileSrc}'));
+check("phone preload uses its capped source", companion.includes("else image.src = asset.mobileWebp"));
+check("image loads have no quiz callback", !/dispatch\(|speak\(|chime\(|playChime\(/.test(companion));
+check("portraits do not crop face or hat", /object-fit:\s*contain/.test(studioPart));
+check("phone panel reserves 120 by 160 portrait", /width:\s*120px;\s*height:\s*160px/.test(studioPart));
+check("narrow phone reserves 96 by 128 portrait", /width:\s*96px;\s*height:\s*128px/.test(studioPart));
+check("large text can wrap companion columns", /\.quiz-companion\s*\{[^}]*flex-wrap:\s*wrap/s.test(studioPart));
+check("keyboard uses a compact companion strip", /\[data-keyboard="open"\] \.quiz-companion\s*\{[^}]*min-height:\s*44px/s.test(studioPart));
+check("one quiz scroll region remains", (shell.match(/className="quiz-scroll"/g) ?? []).length === 1);
+check("desktop companion uses the 1100px breakpoint", studioPart.includes("@media (min-width: 1100px)"));
+check("solid forced-colors fallback is present", studioPart.includes("@media (forced-colors: active)"));
+check("quiet feedback actions use the measured light foreground", declaration(".quiz-btn--quiet", "color") === "var(--quiz-playful)");
+check("sticky study actions reserve dock clearance", declaration(".quiz-footer", "padding")?.includes("var(--quiz-footer-clearance)") === true);
+check("scrollbar appearance cannot shift the companion panel", declaration(".quiz-scroll", "scrollbar-gutter") === "stable");
+for (const value of studioPart.matchAll(/backdrop-filter:\s*blur\((\d+)px\)/g)) check("local panel blur <= 5px", Number(value[1]) <= 5);
+check("room image has no blur or lighting filter", !/\.quiz-room(?: img)?\s*\{[^}]*\bfilter\s*:/.test(studioPart));
+for (const file of quizFiles.filter(file => !file.includes("preview"))) {
+  check(`${file}: no production art editor`, !/type=["']range["']|Adjust scene|Portrait fixture/.test(readFileSync(file, "utf8")));
+}
+
 // ─── 7. main.tsx gating ──────────────────────────────────────────────────────
 
 const main = readFileSync("src/main.tsx", "utf8");
@@ -312,4 +323,4 @@ if (failures.length > 0) {
   failures.forEach((failure) => console.log(`  ✗ ${failure}`));
   process.exit(1);
 }
-console.log("QZ1 visual-rule checks: all green.");
+console.log("Rainlit Atelier visual-rule checks: all green.");

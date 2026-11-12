@@ -8,7 +8,7 @@
 // opening Why or playing audio cancels auto-next for THIS question. This component only reports
 // that interaction through `onInteract`; the owner of the timer decides (and never restarts it).
 
-import { useId } from "react";
+import { useId, type CSSProperties } from "react";
 import { Check, Clock, Lightbulb, Pause, Volume2, X } from "lucide-react";
 import type { AutoNextView, QuizFeedbackView } from "./viewTypes";
 
@@ -52,10 +52,12 @@ export function QuizFeedback({ view, whyOpen, onToggleWhy, onListen, onInteract,
       <p className="quiz-feedback__sentence">{view.sentence}</p>
 
       {autoNext && autoNext.phase !== "cancelled" && (
-        <div className="quiz-autonext" data-phase={autoNext.phase} data-frozen={autoNext.frozen ? "true" : undefined}>
+        <div className="quiz-autonext" data-phase={autoNext.phase} data-frozen={autoNext.frozen ? "true" : undefined}
+          style={autoNext.durationMs ? { "--quiz-auto-duration": `${autoNext.durationMs}ms` } as CSSProperties : undefined}>
           <span className="quiz-autonext__label">{autoNext.label}</span>
-          {autoNext.phase === "counting" && (
-            <button type="button" className="quiz-btn quiz-btn--quiet" onClick={onPauseAutoNext}>
+          {onPauseAutoNext && (
+            <button type="button" className="quiz-btn quiz-btn--quiet" aria-disabled={autoNext.phase === "paused" ? true : undefined}
+              onClick={() => { if (autoNext.phase === "counting") onPauseAutoNext(); }}>
               <Pause aria-hidden="true" />
               Pause
             </button>

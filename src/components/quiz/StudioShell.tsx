@@ -1,7 +1,4 @@
-// Quiz Remake QZ1: the "Modern Japanese Studio" frame.
-//
-// Presentational only. StudioShell draws the opaque studio backdrop, the compact header slot, ONE
-// scrolling region, and the sticky footer that lives INSIDE that region (not a detached fixed bar).
+// QZ5A Rainlit Atelier. One scrolling region, bounded companion, and attached study actions.
 // All colours come from the --quiz-* tokens in src/index.css, which are scoped to `.quiz-studio`.
 // Nothing here reads stats, storage, SRS or the network.
 //
@@ -9,9 +6,11 @@
 // dialog from 768 px; focus trap, Escape, focus returns to the launcher) and StudioMark (the small
 // four-point Astra star).
 
-import { useEffect, useId, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { ChevronLeft, X } from "lucide-react";
-import type { QuizThemeId } from "./viewTypes";
+import { ATELIER_SCENES } from "../../quiz/atelierAssets";
+import { QuizCompanion } from "./QuizCompanion";
+import type { QuizCompanionView, QuizThemeId } from "./viewTypes";
 
 /* ───────────────────────────── Astra mark ───────────────────────────── */
 
@@ -37,21 +36,41 @@ export interface StudioShellProps {
   /** Rendered above the scrolling region and never scrolls. */
   header?: ReactNode;
   children: ReactNode;
-  /** Sticky footer inside the scrolling region. Gets the dock clearance below its actions. */
+  /** Actions remain attached to the study panel and reserve dock clearance. */
   footer?: ReactNode;
   /** Sheets / dialogs. Rendered after the content so they stack above it. */
   overlay?: ReactNode;
-  /** Optional theme override. Omit it and the studio follows the app's data-theme on <html>. */
+  /** Retains app theme metadata. All IDs share the r2 night palette inside this frame. */
   themeId?: QuizThemeId;
   /** Forces the reduced-motion rules (the OS setting is honoured separately in CSS). */
   reducedMotion?: boolean;
   /** True while the on-screen keyboard is open: the footer drops the dock clearance so the action stays reachable. */
   keyboardOpen?: boolean;
+  liveViewport?: { height?: number; offsetTop?: number };
   /** True while a sheet is open: the header and page become inert so focus cannot leave the dialog. */
   modalOpen?: boolean;
-  /** Which max-width the page column uses (Practice 1040, player 760, results 880, setup 720). */
+  /** Screen identity for responsive layout. Current atelier study area is bounded to 610px. */
   width?: StudioWidth;
   scrollRef?: RefObject<HTMLDivElement | null>;
+  companion?: QuizCompanionView;
+  speechEnabled?: boolean;
+  onSpeechChange?: (enabled: boolean) => void;
+  onCompanionInteract?: () => void;
+  /** Fixture-only failure state. Production uses image error handlers. */
+  artUnavailable?: boolean;
+}
+
+function AtelierRoom({ unavailable }: { unavailable: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const { desktop, mobile } = ATELIER_SCENES;
+  if (failed || unavailable) return null;
+  return <picture className="quiz-room" aria-hidden="true">
+    <source media="(max-width: 767px)" type="image/webp" srcSet={mobile.webpSrcSet} sizes="100vw" />
+    <source media="(max-width: 767px)" srcSet={mobile.srcSet} sizes="100vw" />
+    <source type="image/webp" srcSet={desktop.webpSrcSet} sizes="100vw" />
+    <img src={desktop.src} srcSet={desktop.srcSet} sizes="100vw" width={desktop.width} height={desktop.height}
+      alt="" fetchPriority="high" decoding="async" draggable={false} onError={() => setFailed(true)} />
+  </picture>;
 }
 
 export function StudioShell({
@@ -63,9 +82,13 @@ export function StudioShell({
   themeId,
   reducedMotion,
   keyboardOpen,
+  liveViewport,
   modalOpen,
   width = "home",
   scrollRef,
+  companion = { expression: "welcome", speech: "A little time for yourself. Let’s begin whenever you’re ready." },
+  onCompanionInteract,
+  artUnavailable = false,
 }: StudioShellProps) {
   return (
     <div
@@ -75,20 +98,35 @@ export function StudioShell({
       data-theme={themeId}
       data-motion={reducedMotion ? "reduced" : undefined}
       data-keyboard={keyboardOpen ? "open" : undefined}
+      data-live={liveViewport ? "true" : undefined}
+      style={liveViewport?.height ? {
+        "--quiz-studio-height": `${liveViewport.height}px`, "--quiz-viewport-top": `${liveViewport.offsetTop ?? 0}px`,
+      } as CSSProperties : undefined}
       data-footer={footer ? "true" : "false"}
       data-width={width}
     >
+      <AtelierRoom unavailable={artUnavailable} />
       <div className="quiz-studio__body" inert={modalOpen ? true : undefined}>
         {header}
         <div className="quiz-scroll" ref={scrollRef}>
-          <div className="quiz-page">{children}</div>
-          {footer}
+          <div className="quiz-atelier-stage">
+            <div className="quiz-study-column">
+              <div className="quiz-study">
+                <div className="quiz-page">{children}</div>
+                {footer}
+              </div>
+              <p className="quiz-atelier-caption" aria-hidden="true">A quiet room. One character at a time.</p>
+            </div>
+            <QuizCompanion view={companion} unavailable={artUnavailable} onInteract={onCompanionInteract} />
+          </div>
+          <div className="quiz-room-note" aria-hidden="true"><span>A rainy evening</span><span>Learn with Astra</span></div>
         </div>
       </div>
       {overlay}
     </div>
   );
 }
+export type StudioPresentation = Pick<StudioShellProps, "themeId" | "reducedMotion" | "keyboardOpen" | "liveViewport" | "modalOpen" | "overlay" | "scrollRef" | "companion" | "artUnavailable" | "onCompanionInteract" | "speechEnabled" | "onSpeechChange">;
 
 /* ───────────────────────────── Header ───────────────────────────── */
 
@@ -113,6 +151,7 @@ export function StudioHeader({ backLabel, onBack, backIcon = "back", children, t
         <button type="button" className="quiz-icon-btn" onClick={onBack} aria-label={backLabel}>
           {backIcon === "close" ? <X aria-hidden="true" /> : <ChevronLeft aria-hidden="true" />}
         </button>
+        <div className="quiz-header__brand" aria-hidden="true"><span>Astra’s atelier</span><span>A little time for yourself.</span></div>
         <div className="quiz-header__center">{children}</div>
         <div className="quiz-header__trail">{trailing}</div>
       </div>

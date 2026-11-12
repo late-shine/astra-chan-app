@@ -74,6 +74,7 @@ export function useQuizSession(options: Options) {
     const result = current.current.storage.writeSnapshot(next, owner, clock);
     lastCheckpoint.current = clock.monoMs;
     setRecoveryError(result.ok === false ? result.message : null);
+    return result.ok;
   }
   function failed(next: ActiveSession, failure: CommitFailure, message: string, clock: ClockStamp) {
     const pending = pendingScope(next, clock);
@@ -166,9 +167,19 @@ export function useQuizSession(options: Options) {
     setOtherTab(false);
     setState(live.current.state);
   }
-  function dismiss(): boolean {
+  function saveForLater(): boolean {
+    suspend();
     const { owner, state: active } = live.current;
-    if (!owner || active.phase !== 'results' || active.pending || !eligible(owner)) return false;
+    return !!owner && active.phase !== 'idle' && eligible(owner) &&
+      (active.phase === 'paused' || active.phase === 'results' || active.pauseRequested) &&
+      checkpoint(active, owner, quizClock());
+  }
+
+  function discard(): boolean {
+    const { owner, state: active } = live.current;
+    if (!owner || active.phase === 'idle' || active.pending || !eligible(owner) ||
+      (active.phase !== 'paused' && active.phase !== 'results' && active.records.length > 0)) return false;
+    if (!claim(owner, active.config.sessionId, quizClock())) return false;
     const removed = current.current.storage.removeSnapshot(owner);
     if (removed.ok === false) { setRecoveryError(removed.message); return false; }
     detach(owner);
@@ -300,7 +311,8 @@ export function useQuizSession(options: Options) {
   }, []);
 
   return {
-    state, dispatch, suspend, detach, dismiss, recoveryError, otherTab,
+    state, dispatch, suspend, detach, discard, saveForLater, recoveryError, otherTab,
     canReplace: (owner: string) => current.current.storage.leaseAvailable(owner, tabId(), quizClock().epochMs),
   };
 }
+export type QuizSessionController = ReturnType<typeof useQuizSession>;

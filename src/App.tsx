@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { onAuthStateChanged, type User as FirebaseUser } from "firebase/auth";
 import { motion, AnimatePresence, useTransform, useReducedMotion } from "motion/react";
 import {
@@ -128,7 +128,7 @@ import {
 } from "./preferences";
 import { pickQuizPreferences } from "./quiz/preferences";
 import { createCloudSaveQueue, quizBrowserStorage, readHydrationJournal, type StatsBinding } from "./quiz/browserStorage";
-import { canUseDeviceStats, hydrateQuizProgress, readQuizProgress, sanitizeQuizProgress, withQuizMaps } from "./quiz/progress";
+import { canUseDeviceStats, hydrateQuizProgress, quizHistoryFromStats, readQuizProgress, sanitizeQuizProgress, withQuizMaps } from "./quiz/progress";
 import { useQuizProgressBridge, type QuizProgressBridge } from "./quiz/useQuizProgressBridge";
 import { quizClock, quizDeviceId, useQuizSession } from "./quiz/useQuizSession";
 import {
@@ -144,10 +144,10 @@ import {
   writeLocalProfile,
 } from "./profileSync";
 import MenuScreen from "./components/MenuScreen";
-import ResultsScreen from "./components/ResultsScreen";
 import VocabQuizScreen from "./components/VocabQuizScreen";
 import KanjiQuizScreen from "./components/KanjiQuizScreen";
-import QuizScreen from "./components/QuizScreen";
+import { QuizFlow, type KanaLaunch } from "./components/quiz/QuizFlow";
+import type { Catalogs } from "./quiz/types";
 import KanjiScrollScreen from "./components/KanjiScrollScreen";
 import ProfileScreen from "./components/ProfileScreen";
 import ReviewDeckScreen from "./components/ReviewDeckScreen";
@@ -325,13 +325,17 @@ function readSavedBgScene(): number {
   return 0;
 }
 
+const KANA_CATALOGS: Catalogs = { hiragana: HIRAGANA_DATA, katakana: KATAKANA_DATA, vocabulary: [], kanji: [] };
+
 export default function App() {
   const { x: parallaxX, y: parallaxY } = useMouseParallax();
   const bgParallaxX = useTransform(parallaxX, (v) => v * -16);
   const bgParallaxY = useTransform(parallaxY, (v) => v * -10);
   // Screens navigation state
   const [currentScreen, setCurrentScreen] = useState<"menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "sandbox" | "grammar-dojo" | "reading-room">("menu");
-  const [quizMode, setQuizMode] = useState<"choice" | "romaji" | "survival">("choice");
+  const [quizCompanionSpeech, setQuizCompanionSpeech] = useState(true);
+  const [kanaLaunch, setKanaLaunch] = useState<KanaLaunch>("practice");
+  const studioQuiz = currentScreen === "quiz" || currentScreen === "results";
 
   /* ===== POLISH C4: REFERENCE CHARTS TOPIC AND SANDBOX ENTRY MODE (memory only) ===== */
   // The Charts topic lives here so Back from the Sandbox page returns to the SAME topic. It resets to
@@ -456,11 +460,6 @@ export default function App() {
     }));
   }, []);
 
-  // Selection configurations
-  const [selectedStages, setSelectedStages] = useState<string[]>(["basic"]);
-  const [quizAlphabet, setQuizAlphabet] = useState<"hiragana" | "katakana" | "both">("hiragana");
-  const [selectedDifficulty, setSelectedDifficulty] = useState<"relax" | "medium" | "hard" | "legend">("medium");
-
   // Tab & Learning Desk Navigation states
   const [activeHubTab, setActiveHubTab] = useState<"learn" | "practice">("learn");
   const [showStudyRoom, setShowStudyRoom] = useState(true);
@@ -486,7 +485,6 @@ export default function App() {
 
   // Music track selection: "synth" = built-in synth, "ten_no_yowai" = Akie track, "one_voice" = Rokudenashi track
   const [selectedMusicTrack, setSelectedMusicTrack] = useState<MusicTrackId>(readSavedMusicTrack);
-  const [numChoices, setNumChoices] = useState<4 | 6>(4);
 
   // Background scene cycling (0=Rainy Window, 1=Astra's Garden, 2=Sakura Dawn, 3=Moonlit Study)
   const [activeBgScene, setActiveBgScene] = useState<number>(readSavedBgScene);
@@ -1095,35 +1093,6 @@ export default function App() {
     };
   }, [isMusicPlaying, ambientSoundType, activeMediaSource, selectedMusicTrack]);
 
-  // Active quiz variables
-  const [quizPool, setQuizPool] = useState<(HiraganaItem | KatakanaItem)[]>([]);
-  const [quizIndex, setQuizIndex] = useState(0);
-  const [currentQuestion, setCurrentQuestion] = useState<HiraganaItem | KatakanaItem | null>(null);
-  const [choices, setChoices] = useState<string[]>([]);
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [answerStatus, setAnswerStatus] = useState<"correct" | "incorrect" | null>(null);
-  const [waitingForNext, setWaitingForNext] = useState(false);
-  const [typedInput, setTypedInput] = useState("");
-
-  // Character Picker state (solo quiz pre-launch panel)
-  const [showCharPicker, setShowCharPicker] = useState(false);
-  const [pickerDeck, setPickerDeck] = useState<(HiraganaItem | KatakanaItem)[]>([]);
-  const [pendingQuizMode, setPendingQuizMode] = useState<"choice" | "romaji" | "survival" | null>(null);
-  const [pickerSelectedChars, setPickerSelectedChars] = useState<Set<string>>(new Set());
-  const [quizLength, setQuizLength] = useState<10 | 20 | 30 | "all">(10);
-
-  // Countdown timer variables
-  const [timeLeft, setTimeLeft] = useState(10);
-  const [timerMax, setTimerMax] = useState(10);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // timerKey: incremented on each new question — gives each question a unique timer epoch
-  const [timerKey, setTimerKey] = useState(0);
-
-  // Survival Mode variables
-  const [survivalTimeMax, setSurvivalTimeMax] = useState(45);
-  const [survivalTimeLeft, setSurvivalTimeLeft] = useState(45);
-  const [survivalScore, setSurvivalScore] = useState(0);
-
   // Profile screen collapsible section states + calendar month navigation
   const [calendarOpen, setCalendarOpen] = useState(true);
   const [badgesOpen, setBadgesOpen] = useState(true);
@@ -1131,11 +1100,6 @@ export default function App() {
     const d = new Date();
     return { year: d.getFullYear(), month: d.getMonth() }; // month: 0-indexed
   });
-
-  // Quiz session result tracking (for results screen)
-  const [sessionCorrect, setSessionCorrect] = useState(0);
-  const [sessionXpEarned, setSessionXpEarned] = useState(0);
-  const [sessionWrongChars, setSessionWrongChars] = useState<Array<{ kana: string; romaji: string }>>([]);
 
   // ── VOCAB QUIZ STATE ──────────────────────────────────────────────────────
   const [vocabQuizMode, setVocabQuizMode] = useState<"meaning" | "reading">("meaning");
@@ -1172,13 +1136,6 @@ export default function App() {
 
   // Profile script toggle (hiragana / katakana)
   const [profileCharSet, setProfileCharSet] = useState<"hiragana" | "katakana">("hiragana");
-
-  // Ref holding current quizMode to avoid stale closures in callbacks
-  const quizModeRef = useRef(quizMode);
-  // FIX: Keep quizModeRef in sync with state
-  useEffect(() => {
-    quizModeRef.current = quizMode;
-  }, [quizMode]);
 
   // Input refs for romaji typing inputs — used to restore focus after each question
   // advance so the virtual keyboard never dismisses on mobile.
@@ -1277,6 +1234,7 @@ export default function App() {
   const [progressChanging, setProgressChanging] = useState(false);
   const [cloudSyncReady, setCloudSyncReady] = useState(false);
   const [localProgressReadable, setLocalProgressReadable] = useState(true);
+  const [quizCloudPending, setQuizCloudPending] = useState(false);
   const localReadableRef = useRef(true);
   const bindingRef = useRef<StatsBinding | 'transition' | null>(null);
   const offlineOwnerRef = useRef<string | null>(null);
@@ -1306,11 +1264,25 @@ export default function App() {
     },
     isCurrentOwner: isCurrentQuizOwner,
   });
+  const quizReady = statsHydrated && cloudStatsHydrated && !progressChanging && localProgressReadable &&
+    !!progressOwner && statsBinding?.owner === progressOwner;
   const quizSession = useQuizSession({
-    owner: progressOwner, ready: statsHydrated && cloudStatsHydrated && !progressChanging && localProgressReadable &&
-      !!progressOwner && statsBinding?.owner === progressOwner,
+    owner: progressOwner, ready: quizReady,
     cloud: isAccountUser, storage: quizBrowserStorage, bridge: quizBridge, isCurrentOwner: isCurrentQuizOwner,
   });
+  const quizHistory = useMemo(() => quizHistoryFromStats(stats), [stats.quizSkills, stats.characterProgress]);
+  const openKanaPractice = (launch: KanaLaunch) => {
+    setKanaLaunch(launch);
+    setShowProfilePanel(false);
+    setCurrentScreen("quiz");
+  };
+  const leaveKanaPractice = () => {
+    setShowStudyRoom(false);
+    setActiveHubTab("practice");
+    setCurrentScreen("menu");
+  };
+  useEffect(() => { if (!studioQuiz) quizSession.suspend(); }, [studioQuiz]);
+
   const cloudSaves = useRef<ReturnType<typeof createCloudSaveQueue> | null>(null);
   if (!cloudSaves.current) {
     cloudSaves.current = createCloudSaveQueue(async request => {
@@ -1322,6 +1294,7 @@ export default function App() {
       if (!isCurrentQuizOwner(request.binding.owner)) return;
       const result = quizBrowserStorage.acknowledgeOutbox(request.binding.owner, request.stats);
       if (result.ok === false) throw new Error(result.message);
+      if (request.stats === statsRef.current) setQuizCloudPending(false);
       if (request.binding.backupUpload) {
         const acknowledged = quizBrowserStorage.acknowledgeBackupUpload(request.binding);
         if (acknowledged.ok === true && acknowledged.value) adoptBinding({ owner: request.binding.owner });
@@ -1583,6 +1556,7 @@ export default function App() {
   useEffect(() => {
     if (!cloudSyncReady || !cloudStatsHydrated || !isAccountUser || !statsBinding ||
       !isCurrentQuizOwner(statsBinding.owner) || !quizBridge.isDurable(stats)) return;
+    setQuizCloudPending(true);
     cloudQueue.enqueue({ binding: statsBinding, stats });
   }, [cloudSyncReady, cloudStatsHydrated, isAccountUser, progressChanging, statsBinding, stats, quizBridge.storageError]);
 
@@ -1679,7 +1653,6 @@ export default function App() {
     currentScreen === "menu" &&
     showStudyRoom &&
     dockPanel === null &&
-    !showCharPicker &&
     !showProfilePanel &&
     (tourReplay || (tourDecided && tourPending));
 
@@ -2001,21 +1974,6 @@ export default function App() {
     }
   };
 
-  // Calculates timer limits based on selected difficulty settings
-  const getTimerSecondsLimit = () => {
-    switch (selectedDifficulty) {
-      case "relax":
-        return 999; // Essentially unlimited
-      case "hard":
-        return 6;
-      case "legend":
-        return 3;
-      case "medium":
-      default:
-        return 12;
-    }
-  };
-
   // Multi-choice generator with smart foils/distractors
   const generateChoices = (correctItem: HiraganaItem | KatakanaItem, generalDeck: (HiraganaItem | KatakanaItem)[], choiceCount: number = 4) => {
     const potentialFoils = generalDeck.filter((it) => it.romaji !== correctItem.romaji);
@@ -2052,78 +2010,6 @@ export default function App() {
 
     return choices;
   };
-
-  // Launch customized study state
-  // ── CHARACTER PICKER — opens before any solo quiz mode ────────────────────
-  const openCharPicker = (mode: "choice" | "romaji" | "survival") => {
-    let alphabetPool: (HiraganaItem | KatakanaItem)[] = [];
-    if (quizAlphabet === "hiragana") alphabetPool = HIRAGANA_DATA;
-    else if (quizAlphabet === "katakana") alphabetPool = KATAKANA_DATA;
-    else alphabetPool = [...HIRAGANA_DATA, ...KATAKANA_DATA];
-
-    const matchedDeck = alphabetPool.filter((k) => selectedStages.includes(k.category));
-    if (matchedDeck.length === 0) {
-      showToast("Select at least one stage of characters from the menu settings!");
-      return;
-    }
-
-    setPendingQuizMode(mode);
-    setPickerDeck(matchedDeck);
-    setPickerSelectedChars(new Set(matchedDeck.map((c) => c.kana)));
-    setShowCharPicker(true);
-  };
-
-  const confirmStartQuiz = () => {
-    if (!pendingQuizMode) return;
-    if (pickerSelectedChars.size < 3) {
-      showToast("Please select at least 3 characters!");
-      return;
-    }
-
-    let alphabetPool: (HiraganaItem | KatakanaItem)[] = [];
-    if (quizAlphabet === "hiragana") alphabetPool = HIRAGANA_DATA;
-    else if (quizAlphabet === "katakana") alphabetPool = KATAKANA_DATA;
-    else alphabetPool = [...HIRAGANA_DATA, ...KATAKANA_DATA];
-    const rawDeck = alphabetPool.filter((k) => selectedStages.includes(k.category));
-    const selectedArray = pickerDeck.filter((c) => pickerSelectedChars.has(c.kana));
-    const targetLength = quizLength === "all" ? selectedArray.length : (quizLength as number);
-
-    const pool: (HiraganaItem | KatakanaItem)[] = [];
-    if (selectedArray.length === 0) { showToast("No characters match your selection!"); return; }
-    while (pool.length < targetLength) {
-      const shuffled = [...selectedArray].sort(() => Math.random() - 0.5);
-      pool.push(...shuffled);
-    }
-    const finalPool = pool.slice(0, targetLength);
-
-    setShowCharPicker(false);
-    const mode = pendingQuizMode;
-    setQuizMode(mode);
-    quizModeRef.current = mode;
-    setAnswerStatus(null);
-    setSelectedAnswer(null);
-    setTypedInput("");
-    setSessionCorrect(0);
-    setSessionXpEarned(0);
-    setSessionWrongChars([]);
-
-    if (mode === "survival") {
-      setSurvivalScore(0);
-      setSurvivalTimeLeft(45);
-      setMascotMood("idle");
-      const randomized = [...finalPool].sort(() => Math.random() - 0.5);
-      setQuizPool(randomized);
-      setQuizIndex(0);
-      setupNewQuestion(randomized[0], rawDeck, 45);
-      setCurrentScreen("quiz");
-    } else {
-      setQuizPool(finalPool);
-      setQuizIndex(0);
-      setupNewQuestion(finalPool[0], rawDeck);
-      setCurrentScreen("quiz");
-    }
-  };
-  // ── END CHARACTER PICKER FUNCTIONS ─────────────────────────────────────────
 
   // ── VOCAB QUIZ HELPERS ──────────────────────────────────────────────────────
   const generateVocabChoices = (item: VocabularyItem, pool: VocabularyItem[], mode: "meaning" | "reading"): string[] => {
@@ -2340,113 +2226,13 @@ export default function App() {
   };
   // ── END KANJI QUIZ HELPERS ──────────────────────────────────────────────────
 
-  const startQuizSession = (mode: "choice" | "romaji" | "survival") => {
-    // Collect selected stages & alphabet
-    let alphabetPool: (HiraganaItem | KatakanaItem)[] = [];
-    if (quizAlphabet === "hiragana") {
-      alphabetPool = HIRAGANA_DATA;
-    } else if (quizAlphabet === "katakana") {
-      alphabetPool = KATAKANA_DATA;
-    } else {
-      alphabetPool = [...HIRAGANA_DATA, ...KATAKANA_DATA];
-    }
-
-    const matchedDeck = alphabetPool.filter((k) => selectedStages.includes(k.category));
-    if (matchedDeck.length === 0) {
-      showToast("Select at least one stage of characters from the menu settings!");
-      return;
-    }
-
-    setQuizMode(mode);
-    quizModeRef.current = mode;
-    setAnswerStatus(null);
-    setSelectedAnswer(null);
-    setTypedInput("");
-
-    // Reset session tracking
-    setSessionCorrect(0);
-    setSessionXpEarned(0);
-    setSessionWrongChars([]);
-
-    if (mode === "survival") {
-      setSurvivalScore(0);
-      setSurvivalTimeLeft(45);
-      setMascotMood("idle");
-
-      // Generate random pool for survival (pure random)
-      const randomized = [...matchedDeck].sort(() => Math.random() - 0.5);
-      setQuizPool(randomized);
-      setQuizIndex(0);
-      setupNewQuestion(randomized[0], matchedDeck, 45);
-      setCurrentScreen("quiz");
-    } else {
-      // Adaptive weighting: characters with lower accuracy appear more often
-      const weighted: (HiraganaItem | KatakanaItem)[] = [];
-      for (const char of matchedDeck) {
-        const prog = stats.characterProgress[char.kana];
-        let weight = 2; // default: unseen chars appear twice
-        if (prog && prog.total >= 2) {
-          const accuracy = prog.correct / prog.total;
-          // Perfect: weight 1, Struggling: weight up to 5
-          weight = Math.max(1, Math.round((1 - accuracy) * 4) + 1);
-        }
-        for (let w = 0; w < weight; w++) weighted.push(char);
-      }
-
-      // Fisher-Yates shuffle the weighted pool, then pick 10 unique
-      for (let i = weighted.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [weighted[i], weighted[j]] = [weighted[j], weighted[i]];
-      }
-      const seen = new Set<string>();
-      const randomized: (HiraganaItem | KatakanaItem)[] = [];
-      for (const char of weighted) {
-        if (!seen.has(char.kana)) { seen.add(char.kana); randomized.push(char); }
-        if (randomized.length >= 10) break;
-      }
-      // Fill up to 10 if deck was too small
-      for (const char of matchedDeck) {
-        if (randomized.length >= 10) break;
-        if (!seen.has(char.kana)) { seen.add(char.kana); randomized.push(char); }
-      }
-
-      setQuizPool(randomized);
-      setQuizIndex(0);
-      setupNewQuestion(randomized[0], matchedDeck);
-      setCurrentScreen("quiz");
-    }
-  };
-
-  const setupNewQuestion = (question: HiraganaItem | KatakanaItem, sourceDeck: (HiraganaItem | KatakanaItem)[], overwriteTime?: number) => {
-    setCurrentQuestion(question);
-    setSelectedAnswer(null);
-    setAnswerStatus(null);
-    setTypedInput("");
-
-    const options = generateChoices(question, sourceDeck, numChoices);
-    setChoices(options);
-
-    // Audio cue of Japanese character so user can listen on flash loads
-    if (autoPronounce) {
-      speakJapanese(question.kana);
-    }
-
-    // Reset countdowns — increment timerKey so the useEffect starts a fresh interval
-    if (quizModeRef.current !== "survival") {
-      const secondsNeeded = getTimerSecondsLimit();
-      setTimerMax(secondsNeeded);
-      setTimeLeft(secondsNeeded);
-      setTimerKey(k => k + 1); // triggers the timer useEffect to restart cleanly
-    }
-  };
-
   // Controls study streak daily tick updates
   // FIX: All reads use functional prev to prevent stale-closure XP loss
   const awardXPAndIncrementAttempt = (wasCorrect: boolean, xpEarned: number) => {
     const day = new Date();
     day.setHours(0, 0, 0, 0);
     const todayStr = day.toLocaleDateString("en-CA");
-    const characterName = currentQuestion?.kana || "unknown";
+    const characterName = "unknown"; // Grammar uses the existing generic attempt bucket.
 
     setStats((prev) => {
       const existing = prev.studyDates || [];
@@ -2484,197 +2270,6 @@ export default function App() {
 
       return updated;
     });
-  };
-
-  // 2. Countdown Timer Ticker Engine
-  // timerKey increments every new question — each question gets its own clean interval epoch
-  useEffect(() => {
-    if (currentScreen !== "quiz") return;
-
-    if (quizMode === "survival") {
-      // Survival: 100ms ticks for smooth countdown bar
-      timerRef.current = setInterval(() => {
-        setSurvivalTimeLeft((prev) => {
-          const next = Math.round((prev - 0.1) * 10) / 10;
-          if (next <= 0) {
-            clearInterval(timerRef.current!);
-            handleSurvivalTimeExpired();
-            return 0;
-          }
-          return next;
-        });
-      }, 100);
-    } else {
-      // Standard per-question timer (skip in relax mode)
-      if (selectedDifficulty === "relax") return;
-
-      timerRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(timerRef.current!);
-            handleTimerExpired();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-    // FIX: timerKey replaces currentQuestion — each new question bumps timerKey, giving a fresh interval
-  }, [currentScreen, timerKey, quizMode, selectedDifficulty]);
-
-  const handleTimerExpired = () => {
-    playChime(false);
-    setAnswerStatus("incorrect");
-    setMascotMood("failure");
-    awardXPAndIncrementAttempt(false, 0);
-
-    setTimeout(() => {
-      advanceQuizIndex();
-    }, 2200);
-  };
-
-  const handleSurvivalTimeExpired = () => {
-    playChime(false);
-    showToast(`Time's up! Score: ${survivalScore}`);
-    // FIX: Persist best survival score using functional update to avoid stale closure
-    setStats((prev) => {
-      if (survivalScore > (prev.survivalBestScore || 0)) {
-        const updated = { ...prev, survivalBestScore: survivalScore };
-        return updated;
-      }
-      return prev;
-    });
-    setCurrentScreen("menu");
-  };
-
-  // Submit multiple choice selection response
-  const handleSelectChoice = (romaji: string) => {
-    if (answerStatus !== null) return; // Prevent double taps during active timeouts
-    if (timerRef.current) clearInterval(timerRef.current);
-
-    setSelectedAnswer(romaji);
-    const correct = romaji === currentQuestion?.romaji;
-
-    if (correct) {
-      setAnswerStatus("correct");
-      setMascotMood("success");
-      playChime(true);
-
-      if (quizMode === "survival") {
-        setSurvivalScore((prev) => prev + 1);
-        setSurvivalTimeLeft((prev) => Math.min(60, prev + 5));
-        awardXPAndIncrementAttempt(true, 15);
-        showToast("+5s added!");
-      } else {
-        const bonusMultiplier = selectedDifficulty === "legend" ? 25 : selectedDifficulty === "hard" ? 20 : 15;
-        setSessionCorrect(prev => prev + 1);
-        setSessionXpEarned(prev => prev + bonusMultiplier);
-        awardXPAndIncrementAttempt(true, bonusMultiplier);
-        showToast(`Correct! +${bonusMultiplier} XP`);
-      }
-    } else {
-      setAnswerStatus("incorrect");
-      setMascotMood("failure");
-      playChime(false);
-
-      if (quizMode === "survival") {
-        setSurvivalTimeLeft((prev) => Math.max(0, prev - 8));
-        awardXPAndIncrementAttempt(false, 0);
-        showToast("Wrong! −8 seconds.");
-      } else {
-        if (currentQuestion) {
-          setSessionWrongChars(prev => [...prev, { kana: currentQuestion.kana, romaji: currentQuestion.romaji }]);
-        }
-        awardXPAndIncrementAttempt(false, 0);
-      }
-    }
-
-    // In survival mode auto-advance; in offline quiz show Next button
-    if (quizMode === "survival") {
-      setTimeout(() => { advanceQuizIndex(); }, 2200);
-    } else {
-      setWaitingForNext(true);
-    }
-  };
-
-  // Check typed Romaji Spelling Answer
-  const handleTypedSubmit = () => {
-    if (answerStatus !== null) return;
-    const cleanInput = typedInput.trim().toLowerCase();
-    if (!cleanInput) return;
-
-    if (timerRef.current) clearInterval(timerRef.current);
-
-    const isCorrect = cleanInput === currentQuestion?.romaji;
-    if (isCorrect) {
-      setAnswerStatus("correct");
-      setMascotMood("success");
-      playChime(true);
-      const reward = selectedDifficulty === "legend" ? 35 : selectedDifficulty === "hard" ? 30 : 25;
-      setSessionCorrect(prev => prev + 1);
-      setSessionXpEarned(prev => prev + reward);
-      awardXPAndIncrementAttempt(true, reward);
-      showToast(`Marvelous! Typed Correctly. +${reward} XP`);
-    } else {
-      setAnswerStatus("incorrect");
-      setMascotMood("failure");
-      playChime(false);
-      if (currentQuestion) {
-        setSessionWrongChars(prev => [...prev, { kana: currentQuestion.kana, romaji: currentQuestion.romaji }]);
-      }
-      awardXPAndIncrementAttempt(false, 0);
-    }
-
-      // Show Next button instead of auto-advancing (offline only)
-      setWaitingForNext(true);
-  };
-
-  const advanceQuizIndex = () => {
-    setWaitingForNext(false);
-    const nextIdx = quizIndex + 1;
-    let alphabetPool: (HiraganaItem | KatakanaItem)[] = [];
-    if (quizAlphabet === "hiragana") {
-      alphabetPool = HIRAGANA_DATA;
-    } else if (quizAlphabet === "katakana") {
-      alphabetPool = KATAKANA_DATA;
-    } else {
-      alphabetPool = [...HIRAGANA_DATA, ...KATAKANA_DATA];
-    }
-    const rawDeck = alphabetPool.filter((k) => selectedStages.includes(k.category));
-
-    if (quizMode === "survival") {
-      // Continues infinitely inside survival mode by fetching randomized items
-      setQuizIndex(nextIdx);
-      const nextQ = rawDeck[Math.floor(Math.random() * rawDeck.length)];
-      setupNewQuestion(nextQ, rawDeck);
-    } else {
-      if (nextIdx < quizPool.length) {
-        setQuizIndex(nextIdx);
-        setupNewQuestion(quizPool[nextIdx], rawDeck);
-      } else {
-        // Navigate to results screen with session summary
-        playChime(true);
-        setCurrentScreen("results");
-        setMascotMood("success");
-      }
-    }
-  };
-
-  // Toggle stage selects from checklist
-  const handleToggleStage = (stageCode: string) => {
-    if (selectedStages.includes(stageCode)) {
-      if (selectedStages.length > 1) {
-        setSelectedStages((prev) => prev.filter((s) => s !== stageCode));
-      } else {
-        showToast("Enable at least one stage to practice!");
-      }
-    } else {
-      setSelectedStages((prev) => [...prev, stageCode]);
-    }
   };
 
   // Navigations between Daily Kanji scripture scrolls
@@ -3366,7 +2961,7 @@ export default function App() {
     if (pool.length > qIdx) {
       const sourceDeck = getOnlineSourceDeck(settings.alphabet);
       if (settings.quizMode === "choice") {
-        setOnlineQuestionChoices(generateChoices(pool[qIdx], sourceDeck, numChoices));
+        setOnlineQuestionChoices(generateChoices(pool[qIdx], sourceDeck, quizPreferences.quizChoiceCount));
       }
     }
 
@@ -4044,18 +3639,14 @@ export default function App() {
   // ── Polish A1: floating sound + atmosphere dock ────────────────────────────
   // The dock (src/components/SoundAtmosphereDock.tsx) is presentational. State, the
   // audio element and every storage write stay in this component. One panel at a
-  // time; it closes on a screen change and when the character picker opens.
+  // time; it closes on a screen change.
   useEffect(() => {
     setDockPanel(null);
   }, [currentScreen]);
 
-  useEffect(() => {
-    if (showCharPicker) setDockPanel(null);
-  }, [showCharPicker]);
-
   // Quiz-type screens: Atmosphere is hidden and the Music launcher is small and faded (a tap still opens the Music panel).
   const dockQuiet =
-    currentScreen === "quiz" ||
+    studioQuiz ||
     currentScreen === "vocab-quiz" ||
     currentScreen === "kanji-quiz" ||
     currentScreen === "online-multiplayer" ||
@@ -4118,7 +3709,13 @@ export default function App() {
     setVocabQuizPhase,
     setKanjiQuizPhase,
     openOnlineMultiplayer,
-    openCharPicker,
+    openKanaPractice,
+    kanaPreferences: quizPreferences,
+    kanaResume: quizSession.state.phase !== "idle" && quizSession.state.config.subject === "kana" ? {
+      title: quizSession.state.phase === "results" ? "View saved results" : "Resume kana practice",
+      description: quizSession.state.phase === "results" ? "Review your last kana round" : quizSession.state.config.origin === "survival"
+        ? `Kana · Survival question ${quizSession.state.index + 1}` : `Kana · Question ${quizSession.state.index + 1} of ${quizSession.state.questions.length}`,
+    } : undefined,
     showStudyRoom,
     setShowStudyRoom,
     activeHubTab,
@@ -4150,33 +3747,11 @@ export default function App() {
     showToast,
     hasCard,
     addCard,
-    quizAlphabet,
-    setQuizAlphabet,
-    selectedStages,
-    handleToggleStage,
-    selectedDifficulty,
-    setSelectedDifficulty,
     selectedJapaneseVoiceURI,
     handleSelectJapaneseVoice,
     availableJapaneseVoices,
     autoPronounce,
     setAutoPronounce,
-    numChoices,
-    setNumChoices,
-  };
-
-  // Props for the extracted ResultsScreen component (Phase 2 of the App.tsx split).
-  const resultsScreenProps = {
-    sessionCorrect,
-    quizPool,
-    sessionXpEarned,
-    sessionWrongChars,
-    quizMode,
-    speakJapanese,
-    openCharPicker,
-    setCurrentScreen,
-    setMascotMood,
-    setArchiveFilter,
   };
 
   // Props for the extracted VocabQuizScreen component (Phase 3 of the App.tsx split).
@@ -4242,30 +3817,6 @@ export default function App() {
     startKanjiQuiz,
     returnToPracticeHub,
     handleKanjiAnswer,
-  };
-
-  // Props for the extracted QuizScreen component (Phase 5 of the App.tsx split).
-  const quizScreenProps = {
-    currentQuestion,
-    quizMode,
-    quizIndex,
-    quizPool,
-    survivalScore,
-    survivalTimeLeft,
-    selectedDifficulty,
-    timeLeft,
-    timerMax,
-    answerStatus,
-    typedInput,
-    choices,
-    selectedAnswer,
-    waitingForNext,
-    speakJapanese,
-    setCurrentScreen,
-    setTypedInput,
-    handleTypedSubmit,
-    handleSelectChoice,
-    advanceQuizIndex,
   };
 
   // Props for the extracted KanjiScrollScreen component (Phase 6 of the App.tsx split).
@@ -4446,7 +3997,7 @@ export default function App() {
     setOnlinePickerSelectedChars,
     onlineQuestionCount,
     setOnlineQuestionCount,
-    quizMode,
+    quizMode: "choice" as const,
     friends,
     inviteResponses,
     pendingInviteUids,
@@ -4469,7 +4020,7 @@ export default function App() {
   };
   // ──── RENDER ───────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen text-natural-charcoal font-sans overflow-x-hidden flex flex-col justify-between py-2 px-4 relative bg-natural-bg transition-colors duration-300">
+    <div className={studioQuiz ? "relative w-full bg-natural-bg" : "min-h-screen text-natural-charcoal font-sans overflow-x-hidden flex flex-col justify-between py-2 px-4 relative bg-natural-bg transition-colors duration-300"}>
       <input
         ref={progressUploadInputRef}
         type="file"
@@ -4485,6 +4036,7 @@ export default function App() {
         className="hidden"
       />
       {/* ===== FIXED MULTI-SCENE BACKGROUNDS (position:fixed prevents twitching on clicks) ===== */}
+      {!studioQuiz && <>
       <motion.div className="fixed inset-0 pointer-events-none select-none z-0 overflow-hidden" style={{ x: bgParallaxX, y: bgParallaxY, scale: 1.05 }}>
         {/* Scene 0 — Misty Sakura Path */}
         <div
@@ -4555,6 +4107,7 @@ export default function App() {
         theme={theme}
         activeBgScene={activeBgScene}
       />
+      </>}
 
       {/* GUIDED TOUR (Polish B2). Root level, outside <main> and outside the layout wrapper's stacking context, so the
           ring and card sit above the dock (z-30 inside the wrapper) and below the character picker (z-40), the toast
@@ -4590,211 +4143,9 @@ export default function App() {
         </AnimatePresence>
       </div>
 
-      {/* ================= CHARACTER PICKER MODAL ================= */}
-      <AnimatePresence>
-        {showCharPicker && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-            onClick={(e) => { if (e.target === e.currentTarget) setShowCharPicker(false); }}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 12 }}
-              transition={{ duration: 0.2 }}
-              className="w-full max-w-2xl max-h-[88vh] bg-natural-card border border-natural-border rounded-3xl shadow-2xl flex flex-col overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* ── Picker Header ── */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-natural-border shrink-0">
-                <div>
-                  <h3 className="font-serif text-lg font-bold text-natural-forest flex items-center gap-2">
-                    {pendingQuizMode === "survival" ? "🕯️" : pendingQuizMode === "romaji" ? <PenTool className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                    Choose Your Characters
-                  </h3>
-                  <p className="text-[11px] text-natural-sage font-mono mt-0.5 tracking-wide">
-                    Pick which kana appear in your quiz
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowCharPicker(false)}
-                  className="p-2 rounded-xl border border-natural-border text-natural-forest-light hover:text-natural-forest hover:bg-natural-bg/40 transition cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* ── Scrollable character grid (grouped by kana row) ── */}
-              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5 min-h-0">
-                {(() => {
-                  // Build ordered group map preserving original deck order
-                  const groupOrder: string[] = [];
-                  const groupMap: Record<string, (HiraganaItem | KatakanaItem)[]> = {};
-                  for (const char of pickerDeck) {
-                    if (!groupMap[char.group]) {
-                      groupOrder.push(char.group);
-                      groupMap[char.group] = [];
-                    }
-                    groupMap[char.group].push(char);
-                  }
-
-                  return groupOrder.map((group) => {
-                    const chars = groupMap[group];
-                    const allSelected = chars.every((c) => pickerSelectedChars.has(c.kana));
-
-                    return (
-                      <div key={group} className="flex flex-col gap-2">
-                        {/* Row label + Select All / Clear All */}
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-mono font-bold text-natural-sage uppercase tracking-widest">
-                            {group}
-                          </span>
-                          <div className="flex gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPickerSelectedChars((prev) => {
-                                  const next = new Set(prev);
-                                  chars.forEach((c) => next.add(c.kana));
-                                  return next;
-                                });
-                              }}
-                              className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition cursor-pointer ${allSelected
-                                ? "border-natural-forest bg-natural-forest/10 text-natural-forest"
-                                : "border-natural-border bg-natural-card text-natural-forest-light hover:border-natural-forest hover:text-natural-forest"
-                              }`}
-                            >
-                              Select All
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPickerSelectedChars((prev) => {
-                                  const next = new Set(prev);
-                                  chars.forEach((c) => next.delete(c.kana));
-                                  return next;
-                                });
-                              }}
-                              className="px-2.5 py-1 text-[10px] font-bold rounded-lg border border-natural-border bg-natural-card text-natural-forest-light hover:border-natural-terracotta/70 hover:text-natural-terracotta transition cursor-pointer"
-                            >
-                              Clear
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Character cells */}
-                        <div className="flex flex-wrap gap-1.5">
-                          {chars.map((char) => {
-                            const isSelected = pickerSelectedChars.has(char.kana);
-                            return (
-                              <button
-                                key={char.kana}
-                                type="button"
-                                title={char.romaji}
-                                onClick={() => {
-                                  setPickerSelectedChars((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(char.kana)) next.delete(char.kana);
-                                    else next.add(char.kana);
-                                    return next;
-                                  });
-                                }}
-                                className={`flex flex-col items-center justify-center w-12 h-14 rounded-xl border text-center transition-all duration-150 cursor-pointer select-none ${
-                                  isSelected
-                                    ? "bg-natural-forest border-natural-forest text-natural-bg shadow-sm scale-105"
-                                    : "bg-natural-bg/50 border-natural-border text-natural-charcoal hover:border-natural-forest/50 hover:bg-natural-bg"
-                                }`}
-                              >
-                                <span className="text-lg font-bold font-serif leading-none">{char.kana}</span>
-                                <span className={`text-[8px] font-mono mt-0.5 tracking-wide ${isSelected ? "text-natural-bg/70" : "text-natural-sage"}`}>
-                                  {char.romaji}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-
-              {/* ── Footer: quiz length + count + action buttons ── */}
-              <div className="px-5 py-4 border-t border-natural-border flex flex-col gap-3 bg-natural-card/90 shrink-0">
-                {/* Quiz length selector */}
-                <div className="flex items-center gap-3 flex-wrap">
-                  <span className="text-[11px] font-semibold text-natural-forest-light font-mono uppercase tracking-wider shrink-0">
-                    Questions
-                  </span>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {([10, 20, 30, "all"] as const).map((len) => (
-                      <button
-                        key={String(len)}
-                        type="button"
-                        onClick={() => setQuizLength(len)}
-                        className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
-                          quizLength === len
-                            ? "bg-natural-forest border-natural-forest text-natural-bg shadow-sm"
-                            : "bg-natural-bg/50 border-natural-border text-natural-charcoal hover:border-natural-forest/50 hover:bg-natural-bg"
-                        }`}
-                      >
-                        {len === "all" ? `All (${pickerSelectedChars.size})` : len}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Count pill + cancel + start */}
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <p className="text-xs font-mono text-natural-sage">
-                    <span className={`font-bold ${pickerSelectedChars.size < 3 ? "text-natural-terracotta" : "text-natural-forest"}`}>
-                      {pickerSelectedChars.size}
-                    </span>
-                    {" "}char{pickerSelectedChars.size !== 1 ? "s" : ""} selected
-                    {quizLength !== "all" && pickerSelectedChars.size >= 3 && (
-                      <span className="text-natural-sage"> · {quizLength} questions</span>
-                    )}
-                    {pickerSelectedChars.size < 3 && (
-                      <span className="text-natural-terracotta"> · need at least 3</span>
-                    )}
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowCharPicker(false)}
-                      className="px-4 py-2 rounded-xl border border-natural-border text-natural-forest-light text-xs font-bold hover:bg-natural-bg/40 transition cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={confirmStartQuiz}
-                      disabled={pickerSelectedChars.size < 3}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition cursor-pointer flex items-center gap-1.5 ${
-                        pickerSelectedChars.size >= 3
-                          ? "bg-natural-forest text-natural-bg hover:bg-natural-forest-light"
-                          : "bg-natural-border text-natural-sage cursor-not-allowed"
-                      }`}
-                    >
-                      <Play className="w-3.5 h-3.5" />
-                      Start Quiz
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Incoming Invites Dropdown */}
       <AnimatePresence>
-        {incomingInvites.length > 0 && (
+        {!studioQuiz && incomingInvites.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -4842,10 +4193,10 @@ export default function App() {
       </AnimatePresence>
 
       {/* MAIN LAYOUT WRAPPER */}
-      <div className={`w-full ${(currentScreen === "charts" || currentScreen === "sandbox" || currentScreen === "grammar-dojo" || currentScreen === "reading-room") ? "max-w-5xl px-2 sm:px-4" : "max-w-4xl"} mx-auto flex-grow flex flex-col z-10 relative`} style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" }}>
+      <div className={studioQuiz ? "relative z-10 w-full" : `w-full ${(currentScreen === "charts" || currentScreen === "sandbox" || currentScreen === "grammar-dojo" || currentScreen === "reading-room") ? "max-w-5xl px-2 sm:px-4" : "max-w-4xl"} mx-auto flex-grow flex flex-col z-10 relative`} style={studioQuiz ? undefined : { paddingBottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" }}>
 
         {/* APP HEADER */}
-        <header className="flex flex-col sm:flex-row items-center justify-between gap-4 py-3 border-b border-natural-border/60 mb-4">
+        {!studioQuiz && <header className="flex flex-col sm:flex-row items-center justify-between gap-4 py-3 border-b border-natural-border/60 mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 border border-natural-border rounded-xl bg-natural-card shadow-sm">
               <span className="text-xl font-bold font-serif text-natural-forest tracking-wider">あ</span>
@@ -5252,7 +4603,7 @@ export default function App() {
               </AnimatePresence>
             </div>
           </div>
-        </header>
+        </header>}
 
 
         {/* COMPANION STATUS BOARD */}
@@ -5286,7 +4637,7 @@ export default function App() {
           aria-label={SCREEN_TITLES[currentScreen] ?? "Screen"}
           tabIndex={-1}
           className="flex-grow flex flex-col justify-center outline-none"
-          variants={prefersReducedMotion ? SCREEN_VARIANTS_REDUCED : SCREEN_VARIANTS}
+          variants={prefersReducedMotion || studioQuiz ? SCREEN_VARIANTS_REDUCED : SCREEN_VARIANTS}
           initial="enter"
           animate="center"
           exit="exit"
@@ -5308,13 +4659,33 @@ export default function App() {
           {currentScreen === "menu" && <MenuScreen {...menuScreenProps} />}
 
           {/* ================= SCREEN 2: ACTIVE QUIZ WORKSPACE ================= */}
-          {currentScreen === "quiz" && currentQuestion && <QuizScreen {...quizScreenProps} />}
+          {studioQuiz && <QuizFlow speechEnabled={quizCompanionSpeech} onSpeechChange={setQuizCompanionSpeech} owner={progressOwner} controller={quizSession} ready={quizReady}
+            unavailable={statsHydrated && cloudStatsHydrated && !progressChanging && !quizReady}
+            launch={currentScreen === "results" ? "resume" : kanaLaunch} catalogs={KANA_CATALOGS} history={quizHistory}
+            preferences={quizPreferences} onPreferenceChange={patch => setQuizPreferences(previous => ({ ...previous, ...patch }))}
+            onReadCustom={() => {
+              if (!progressOwner || !isCurrentQuizOwner(progressOwner)) return [];
+              const draft = quizBrowserStorage.readCustom(progressOwner);
+              if (draft.ok === true) return draft.value;
+              showToast(draft.message);
+              return [];
+            }} onSaveCustom={ids => {
+              if (!progressOwner || !isCurrentQuizOwner(progressOwner)) return;
+              const saved = quizBrowserStorage.writeCustom(progressOwner, ids);
+              if (saved.ok === false) showToast(saved.message);
+            }}
+            previousBest={stats.survivalBestScore ?? 0} streak={stats.streakCount}
+            cloudPending={isAccountUser && (quizCloudPending || !cloudSyncReady)}
+            exampleFor={glyph => {
+              const example = HIRAGANA_DATA.find(item => item.kana === glyph)?.examples?.[0]
+                ?? KATAKANA_DATA.find(item => item.kana === glyph)?.examples?.[0];
+              return example && { ja: example.japanese, reading: example.romaji, en: example.english };
+            }}
+            autoPronounce={autoPronounce} speak={speakJapanese} chime={playChime}
+            onBack={leaveKanaPractice} onProfile={() => setCurrentScreen("profile")} />}
 
           {/* ================= SCREEN 3: DYNAMIC DAILY KANJI MODULE ================= */}
           {currentScreen === "kanji-scroll" && <KanjiScrollScreen {...kanjiScrollScreenProps} />}
-
-          {/* ================= SCREEN 4b: QUIZ RESULTS ================= */}
-          {currentScreen === "results" && <ResultsScreen {...resultsScreenProps} />}
 
           {/* ================= SCREEN: VOCAB QUIZ ================= */}
           {currentScreen === "vocab-quiz" && <VocabQuizScreen {...vocabQuizScreenProps} />}
@@ -5430,14 +4801,14 @@ export default function App() {
         />
 
         {/* FOOTER METRICS AND CREDITS */}
-        <footer className="text-center py-4 border-t border-natural-border mt-6 relative select-none">
+        {!studioQuiz && <footer className="text-center py-4 border-t border-natural-border mt-6 relative select-none">
           <p className="text-xs text-natural-forest-light font-serif italic mb-1">
             Keep studying — every character brings you closer to fluency. 🌸
           </p>
           <span className="text-[9px] text-natural-sage font-mono tracking-widest uppercase font-bold">
             Progress saved automatically
           </span>
-        </footer>
+        </footer>}
 
       </div>
     </div>

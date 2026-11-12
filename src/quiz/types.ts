@@ -229,6 +229,7 @@ export type SessionEvent =
   | (SessionScope & { readonly type: 'AUTO_NEXT'; readonly token: number })
   | (SessionScope & { readonly type: 'TICK' | 'PAUSE' | 'RESUME' | 'FINISH' })
   | (SessionScope & { readonly type: 'DRAFT'; readonly value: string })
+  | (SessionScope & { readonly type: 'SET_AUTO_NEXT'; readonly enabled: boolean })
   | (SessionScope & { readonly type: 'CANCEL_AUTO_NEXT'; readonly reason: 'expand' | 'listen' | 'pointer' | 'focus' | 'sheet' | 'manual' })
   | (CommitScope & { readonly type: 'COMMIT_OK' | 'RETRY_COMMIT' | 'CONTINUE_VOLATILE' })
   | (CommitScope & { readonly type: 'COMMIT_FAILED'; readonly failure: CommitFailure });

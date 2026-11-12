@@ -26,12 +26,12 @@ import {
   GraduationCap,
   User,
   X,
-  Check,
-  ChevronDown,
 } from "lucide-react";
 
 import { HIRAGANA_DATA, KATAKANA_DATA, KANJI_DATA, VOCABULARY_DATA } from "../data";
 import { HiraganaItem, KatakanaItem, StudentStats, SRSCard } from "../types";
+import type { KanaLaunch } from "./quiz/QuizFlow";
+import { quizKanaStages, type QuizPreferences } from "../quiz/preferences";
 import { VOCAB_CATEGORY_META, countVocabularyByCategory } from "../vocab/vocabCategories";
 import { formatSessionLine, formatWaitingLine, type SessionSummary } from "../srsScheduler";
 import { isKanjiQueryActive, searchKanji } from "../kanjiSearch";
@@ -162,7 +162,9 @@ interface MenuScreenProps {
   setVocabQuizPhase: React.Dispatch<React.SetStateAction<"config" | "quiz" | "results">>;
   setKanjiQuizPhase: React.Dispatch<React.SetStateAction<"config" | "quiz" | "results">>;
   openOnlineMultiplayer: () => void;
-  openCharPicker: (mode: "choice" | "romaji" | "survival") => void;
+  openKanaPractice: (launch: KanaLaunch) => void;
+  kanaPreferences: QuizPreferences;
+  kanaResume?: { title: string; description: string };
 
   // Study room / hub tab state
   showStudyRoom: boolean;
@@ -205,19 +207,11 @@ interface MenuScreenProps {
   addCard: (word: string, type: SRSCard["type"]) => void;
 
   // Practice tab: quiz settings
-  quizAlphabet: "hiragana" | "katakana" | "both";
-  setQuizAlphabet: React.Dispatch<React.SetStateAction<"hiragana" | "katakana" | "both">>;
-  selectedStages: string[];
-  handleToggleStage: (stageCode: string) => void;
-  selectedDifficulty: "relax" | "medium" | "hard" | "legend";
-  setSelectedDifficulty: React.Dispatch<React.SetStateAction<"relax" | "medium" | "hard" | "legend">>;
   selectedJapaneseVoiceURI: string;
   handleSelectJapaneseVoice: (voiceURI: string) => void;
   availableJapaneseVoices: SpeechSynthesisVoice[];
   autoPronounce: boolean;
   setAutoPronounce: React.Dispatch<React.SetStateAction<boolean>>;
-  numChoices: 4 | 6;
-  setNumChoices: React.Dispatch<React.SetStateAction<4 | 6>>;
 }
 
 // Handler moved here from App.tsx: >15 lines, used only by the menu screen
@@ -274,57 +268,11 @@ function shortQuery(query: string): string {
 
 // Same visible focus ring as the C2 search controls (a theme token, so it reads in all six themes).
 const PRACTICE_FOCUS_RING = SEARCH_FOCUS_RING;
-// Legends inside the settings card look like the old small headings.
 const PRACTICE_LEGEND = "text-xs font-semibold text-natural-forest-light mb-2";
 
-const QUIZ_SCRIPT_LABELS = {
-  hiragana: "Hiragana",
-  katakana: "Katakana",
-  both: "Hiragana + Katakana",
-} as const;
-
-// Stage codes are the ones `handleToggleStage` in App already uses; `short` is the word used in the summary line.
-const QUIZ_STAGES = [
-  { id: "basic", name: "Core — Gojūon", short: "Core", chars: 46, hint: "Standard vowels & core rows" },
-  { id: "dakuon", name: "Voiced — Dakuon", short: "Voiced", chars: 20, hint: "Voiced letters using diacritic tacks" },
-  { id: "handakuon", name: "Semi-voiced", short: "Semi-voiced", chars: 5, hint: "Half-voiced P-Row bursts" },
-  { id: "yoon", name: "Combos — Yōon", short: "Combos", chars: 33, hint: "Fused combination symbols" },
-] as const;
-
-const QUIZ_TIMERS = [
-  { code: "relax", name: "Relaxed", cap: "No Limit", summary: "No timer" },
-  { code: "medium", name: "Medium", cap: "12s cap", summary: "12 s timer" },
-  { code: "hard", name: "Hard", cap: "6s cap", summary: "6 s timer" },
-  { code: "legend", name: "Legendary", cap: "3s cap", summary: "3 s timer" },
-] as const;
-
-const QUIZ_CHOICE_COUNTS = [
-  { count: 4, name: "4 Options", desc: "Standard" },
-  { count: 6, name: "6 Options", desc: "Harder" },
-] as const;
-
-/** One line from the existing settings state, e.g. "Hiragana · Core only · 12 s timer · 4 choices". It always names the stage set, because the default is Core only. */
-function describeKanaSettings(
-  script: "hiragana" | "katakana" | "both",
-  stages: string[],
-  difficulty: "relax" | "medium" | "hard" | "legend",
-  choices: 4 | 6,
-  autoPronounce: boolean,
-): string {
-  const picked = QUIZ_STAGES.filter((stage) => stages.includes(stage.id));
-  const stageText =
-    picked.length === 0
-      ? "No stage"
-      : picked.length === QUIZ_STAGES.length
-        ? "All stages"
-        : picked.length === 1
-          ? `${picked[0].short} only`
-          : picked.map((stage) => stage.short).join(" + ");
-  const timer = QUIZ_TIMERS.find((t) => t.code === difficulty)?.summary ?? "";
-  const parts: string[] = [QUIZ_SCRIPT_LABELS[script], stageText, timer, `${choices} choices`];
-  if (autoPronounce) parts.push("Auto-pronounce on");
-  return parts.filter(Boolean).join(" · ");
-}
+const KANA_SCRIPT_LABELS = { hiragana: "Hiragana", katakana: "Katakana", both: "Both scripts" };
+const KANA_STAGE_LABELS = { basic: "Core", dakuon: "Dakuten", handakuon: "Handakuten", yoon: "Yoon" };
+const KANA_KIND_LABELS = { read: "Read", pick: "Pick", type: "Type", mixed: "Mixed" };
 
 interface PracticeLauncherProps {
   id: string;
@@ -374,7 +322,9 @@ export default function MenuScreen(props: MenuScreenProps) {
     setVocabQuizPhase,
     setKanjiQuizPhase,
     openOnlineMultiplayer,
-    openCharPicker,
+    openKanaPractice,
+    kanaPreferences,
+    kanaResume,
     showStudyRoom,
     setShowStudyRoom,
     activeHubTab,
@@ -406,19 +356,11 @@ export default function MenuScreen(props: MenuScreenProps) {
     showToast,
     hasCard,
     addCard,
-    quizAlphabet,
-    setQuizAlphabet,
-    selectedStages,
-    handleToggleStage,
-    selectedDifficulty,
-    setSelectedDifficulty,
     selectedJapaneseVoiceURI,
     handleSelectJapaneseVoice,
     availableJapaneseVoices,
     autoPronounce,
     setAutoPronounce,
-    numChoices,
-    setNumChoices,
   } = props;
 
   const handleToggleVocabularyLearned = useHandleToggleVocabularyLearned(stats, setStats, showToast);
@@ -475,8 +417,9 @@ export default function MenuScreen(props: MenuScreenProps) {
   const reduceMotion = useReducedMotion();
 
   // ── C6: Practice hub. The disclosure is local UI state (closed on every visit); the settings themselves stay in App. ──
-  const [kanaMoreOpen, setKanaMoreOpen] = React.useState(false);
-  const kanaSummary = describeKanaSettings(quizAlphabet, selectedStages, selectedDifficulty, numChoices, autoPronounce);
+  const kanaSummary = [KANA_SCRIPT_LABELS[kanaPreferences.quizKanaScript],
+    quizKanaStages(kanaPreferences.quizKanaStagesMask).map(stage => KANA_STAGE_LABELS[stage]).join(" + "),
+    KANA_KIND_LABELS[kanaPreferences.quizKanaKind], `${kanaPreferences.quizLength} questions`, "Untimed"].join(" / ");
 
   return (
             // C3b: the Study Room and the Bookshelf / Writing Desk hub swap with the same soft fade
@@ -1346,7 +1289,7 @@ export default function MenuScreen(props: MenuScreenProps) {
               )}
 
               {/* ================= TAB CONTENT 2: PRACTICE HUB (QUIZ) =================
-                  C6: launchers first at every width, then ONE settings card that says it is for the kana quiz only.
+                  Kana launchers first, followed by the Studio setup link and existing voice controls.
                   Script and Stages stay visible; Timer, Answer choices and Voice sit behind "More options" (closed by default),
                   and the summary line keeps the effective settings (including "Core only") on screen at all times. */}
               {activeHubTab === "practice" && (
@@ -1358,31 +1301,37 @@ export default function MenuScreen(props: MenuScreenProps) {
                         <h3 id="practice-kana-heading" className="font-serif text-lg text-natural-forest font-bold tracking-wide">
                           Kana quiz
                         </h3>
-                        <p className="text-xs text-natural-charcoal/70 mt-0.5">Uses the kana quiz settings below.</p>
+                        <p className="text-xs text-natural-charcoal/70 mt-0.5">Practice in the kana Studio.</p>
                       </div>
 
+                      {kanaResume && <PracticeLauncher id="action-quiz-resume" title={kanaResume.title}
+                        description={kanaResume.description} icon={<Play className="w-5 h-5 text-natural-forest" />}
+                        onClick={() => openKanaPractice("resume")} />}
                       <PracticeLauncher
                         id="action-quiz-choice"
-                        title="Multiple Choice"
-                        description="Match the kana to its romaji reading"
+                        title="Start kana practice"
+                        description="Start an untimed round with your saved settings"
                         tag={{ text: "Start here", tone: "start" }}
                         icon={<Play className="w-5 h-5 text-natural-forest" />}
-                        onClick={() => openCharPicker("choice")}
+                        onClick={() => openKanaPractice("practice")}
                       />
                       <PracticeLauncher
                         id="action-quiz-romaji"
                         title="Type the Answer"
                         description="Spell out the romaji on your keyboard"
                         icon={<PenTool className="w-5 h-5 text-natural-forest" />}
-                        onClick={() => openCharPicker("romaji")}
+                        onClick={() => openKanaPractice("typed")}
                       />
+                      <PracticeLauncher id="action-kana-timed" title="Timed practice"
+                        description="Choose 12, 6 or 3 seconds per question" icon={<Play className="w-5 h-5 text-natural-forest" />}
+                        onClick={() => openKanaPractice("timed")} />
                       <PracticeLauncher
                         id="action-survival"
                         title="Survival Mode"
                         description="Race the clock — wrong answers cost time!"
                         tag={{ text: "Challenge", tone: "challenge" }}
                         icon={<Flame className="w-5 h-5 text-natural-terracotta" />}
-                        onClick={() => openCharPicker("survival")}
+                        onClick={() => openKanaPractice("survival")}
                       />
                     </section>
 
@@ -1434,7 +1383,7 @@ export default function MenuScreen(props: MenuScreenProps) {
                         Kana quiz settings
                       </h3>
                       <p className="text-xs text-natural-charcoal/70 mt-0.5">
-                        For Multiple Choice, Type the Answer and Survival only.
+                        Customize your script, question type and round length in the Studio.
                       </p>
                     </div>
 
@@ -1447,180 +1396,54 @@ export default function MenuScreen(props: MenuScreenProps) {
                       {kanaSummary}
                     </p>
 
+                    <button type="button" onClick={() => openKanaPractice("customize")}
+                      className={`min-h-[44px] rounded-xl border border-natural-border/70 px-3 py-2 text-sm font-bold text-natural-forest hover:border-natural-forest ${PRACTICE_FOCUS_RING}`}>
+                      Customize kana practice
+                    </button>
                     <fieldset className="min-w-0">
-                      <legend className={PRACTICE_LEGEND}>Script</legend>
-                      <div className="grid grid-cols-3 gap-2">
-                        {[
-                          { id: "hiragana" as const, label: "Hiragana" },
-                          { id: "katakana" as const, label: "Katakana" },
-                          { id: "both" as const, label: "Both Mixed" },
-                        ].map((item) => (
+                      <legend className={PRACTICE_LEGEND}>Voice</legend>
+                      <div className="flex flex-col gap-3 bg-natural-bg/50 border border-natural-border rounded-xl p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex flex-col gap-0.5">
+                            <span className="text-sm font-semibold text-natural-forest"><span aria-hidden="true">🔊 </span>Auto-pronounce in quiz</span>
+                            <span className="text-[11px] text-natural-forest-light leading-snug">
+                              Speaks the kana after you answer.
+                            </span>
+                          </div>
                           <button
-                            key={item.id}
                             type="button"
-                            aria-pressed={quizAlphabet === item.id}
-                            onClick={() => {
-                              playClickTick();
-                              setQuizAlphabet(item.id);
-                            }}
-                            className={`min-h-[44px] py-2 px-1 text-xs font-serif font-bold rounded-lg border transition text-center cursor-pointer ${PRACTICE_FOCUS_RING} ${quizAlphabet === item.id
-                              ? "bg-natural-forest border-natural-forest text-natural-bg font-semibold shadow-sm"
-                              : "bg-natural-card border-natural-border/70 text-natural-charcoal hover:border-natural-forest-light"
+                            aria-pressed={autoPronounce}
+                            aria-label="Auto-pronounce in quiz"
+                            onClick={() => setAutoPronounce(!autoPronounce)}
+                            className={`shrink-0 min-h-[44px] px-3 rounded-xl text-xs font-mono font-bold tracking-wider transition cursor-pointer ${PRACTICE_FOCUS_RING} ${autoPronounce
+                              ? "bg-natural-forest text-natural-bg"
+                              : "bg-natural-card border border-natural-border text-natural-forest hover:border-natural-forest"
                               }`}
                           >
-                            {item.label}
+                            {autoPronounce ? "On (auto-play)" : "Off (silent)"}
                           </button>
-                        ))}
-                      </div>
-                    </fieldset>
-
-                    <fieldset className="min-w-0">
-                      <legend className={PRACTICE_LEGEND}>Stages (pick one or more)</legend>
-                      <div className="grid grid-cols-2 gap-2">
-                        {QUIZ_STAGES.map((stage) => {
-                          const on = selectedStages.includes(stage.id);
-                          return (
-                            <button
-                              key={stage.id}
-                              type="button"
-                              aria-pressed={on}
-                              onClick={() => handleToggleStage(stage.id)}
-                              className={`min-h-[44px] flex flex-col gap-1 p-3 rounded-xl border text-left transition cursor-pointer ${PRACTICE_FOCUS_RING} ${on
-                                ? "bg-natural-forest/10 border-natural-forest text-natural-forest shadow-sm"
-                                : "bg-natural-bg/40 border-natural-border/60 text-natural-charcoal hover:border-natural-forest-light/60"
-                                }`}
-                            >
-                              <span className="flex items-start justify-between gap-2">
-                                <span className="font-bold text-sm leading-snug">{stage.name}</span>
-                                {/* The tick is the non-colour cue; aria-pressed carries the state for screen readers */}
-                                <span
-                                  aria-hidden="true"
-                                  className={`shrink-0 w-4 h-4 mt-0.5 rounded border flex items-center justify-center ${on
-                                    ? "bg-natural-forest border-natural-forest text-natural-bg"
-                                    : "bg-natural-card border-natural-border"
-                                    }`}
-                                >
-                                  {on && <Check className="w-3 h-3" />}
-                                </span>
-                              </span>
-                              <span className="text-[11px] font-mono font-bold text-natural-forest-light">{stage.chars} chars</span>
-                              <span className="text-[11px] leading-snug text-natural-forest-light">{stage.hint}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </fieldset>
-
-                    {/* More options: a real disclosure. The panel is hidden (not just collapsed), so its controls leave the tab order while closed. */}
-                    <div className="border-t border-natural-border/60 pt-4">
-                      <button
-                        type="button"
-                        aria-expanded={kanaMoreOpen}
-                        aria-controls="practice-kana-more"
-                        onClick={() => setKanaMoreOpen((open) => !open)}
-                        className={`w-full min-h-[44px] flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl border border-natural-border/70 bg-natural-bg/50 hover:border-natural-forest transition cursor-pointer text-left ${PRACTICE_FOCUS_RING}`}
-                      >
-                        <span className="min-w-0">
-                          <span className="block text-sm font-bold text-natural-forest">More options</span>
-                          <span className="block text-[11px] text-natural-forest-light leading-snug">Timer, answer choices and voice</span>
-                        </span>
-                        <ChevronDown
-                          aria-hidden="true"
-                          className={`w-4 h-4 shrink-0 text-natural-forest ${kanaMoreOpen ? "rotate-180" : ""}`}
-                        />
-                      </button>
-
-                      <div id="practice-kana-more" hidden={!kanaMoreOpen}>
-                        <div className="flex flex-col gap-4 pt-4">
-                          <fieldset className="min-w-0">
-                            <legend className={PRACTICE_LEGEND}>Timer per question</legend>
-                            <div className="grid grid-cols-2 gap-2">
-                              {QUIZ_TIMERS.map((d) => (
-                                <button
-                                  key={d.code}
-                                  type="button"
-                                  aria-pressed={selectedDifficulty === d.code}
-                                  onClick={() => setSelectedDifficulty(d.code)}
-                                  className={`min-h-[44px] p-2.5 rounded-lg border text-center transition duration-200 cursor-pointer ${PRACTICE_FOCUS_RING} ${selectedDifficulty === d.code
-                                    ? "bg-natural-clay/10 border-natural-clay text-natural-clay font-bold"
-                                    : "bg-natural-bg/40 border-natural-border/60 text-natural-charcoal/80 text-xs hover:border-natural-clay/40"
-                                    }`}
-                                >
-                                  <span className="block text-xs uppercase tracking-wide font-bold">{d.name}</span>
-                                  <span className="text-[11px] opacity-80 font-mono mt-0.5 block font-bold">{d.cap}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </fieldset>
-
-                          <fieldset className="min-w-0">
-                            <legend className={PRACTICE_LEGEND}>Answer choices</legend>
-                            <div className="grid grid-cols-2 gap-2">
-                              {QUIZ_CHOICE_COUNTS.map((opt) => (
-                                <button
-                                  key={opt.count}
-                                  type="button"
-                                  aria-pressed={numChoices === opt.count}
-                                  onClick={() => setNumChoices(opt.count)}
-                                  className={`min-h-[44px] p-2.5 rounded-lg border text-center transition duration-200 cursor-pointer ${PRACTICE_FOCUS_RING} ${numChoices === opt.count
-                                    ? "bg-natural-forest/10 border-natural-forest text-natural-forest font-bold"
-                                    : "bg-natural-bg/40 border-natural-border/60 text-natural-charcoal/80 text-xs hover:border-natural-forest/40"
-                                    }`}
-                                >
-                                  <span className="block text-xs uppercase tracking-wide font-bold">{opt.name}</span>
-                                  <span className="text-[11px] opacity-80 font-mono mt-0.5 block font-bold">{opt.desc}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </fieldset>
-
-                          <fieldset className="min-w-0">
-                            <legend className={PRACTICE_LEGEND}>Voice</legend>
-                            <div className="flex flex-col gap-3 bg-natural-bg/50 border border-natural-border rounded-xl p-3">
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0 flex flex-col gap-0.5">
-                                  <span className="text-sm font-semibold text-natural-forest"><span aria-hidden="true">🔊 </span>Auto-pronounce on load</span>
-                                  <span className="text-[11px] text-natural-forest-light leading-snug">
-                                    Speaks the kana when each question appears.
-                                  </span>
-                                </div>
-                                <button
-                                  type="button"
-                                  aria-pressed={autoPronounce}
-                                  aria-label="Auto-pronounce on load"
-                                  onClick={() => setAutoPronounce(!autoPronounce)}
-                                  className={`shrink-0 min-h-[44px] px-3 rounded-xl text-xs font-mono font-bold tracking-wider transition cursor-pointer ${PRACTICE_FOCUS_RING} ${autoPronounce
-                                    ? "bg-natural-forest text-natural-bg"
-                                    : "bg-natural-card border border-natural-border text-natural-forest hover:border-natural-forest"
-                                    }`}
-                                >
-                                  {autoPronounce ? "On (auto-play)" : "Off (silent)"}
-                                </button>
-                              </div>
-                              <div className="flex flex-col gap-1">
-                                <label htmlFor="practice-voice-select" className="text-[11px] font-semibold text-natural-forest-light">
-                                  Japanese voice
-                                </label>
-                                <select
-                                  id="practice-voice-select"
-                                  value={selectedJapaneseVoiceURI}
-                                  onChange={(e) => handleSelectJapaneseVoice(e.target.value)}
-                                  disabled={availableJapaneseVoices.length === 0}
-                                  className={`w-full min-h-[44px] bg-natural-card border border-natural-border/80 text-natural-forest text-xs font-bold font-serif px-2.5 py-1.5 rounded-xl cursor-pointer transition disabled:opacity-50 ${PRACTICE_FOCUS_RING}`}
-                                >
-                                  <option value="">{availableJapaneseVoices.length ? "Default voice" : "Default voice only"}</option>
-                                  {availableJapaneseVoices.map((voice) => (
-                                    <option key={voice.voiceURI} value={voice.voiceURI}>
-                                      {voice.name}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </div>
-                          </fieldset>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label htmlFor="practice-voice-select" className="text-[11px] font-semibold text-natural-forest-light">
+                            Japanese voice
+                          </label>
+                          <select
+                            id="practice-voice-select"
+                            value={selectedJapaneseVoiceURI}
+                            onChange={(e) => handleSelectJapaneseVoice(e.target.value)}
+                            disabled={availableJapaneseVoices.length === 0}
+                            className={`w-full min-h-[44px] bg-natural-card border border-natural-border/80 text-natural-forest text-xs font-bold font-serif px-2.5 py-1.5 rounded-xl cursor-pointer transition disabled:opacity-50 ${PRACTICE_FOCUS_RING}`}
+                          >
+                            <option value="">{availableJapaneseVoices.length ? "Default voice" : "Default voice only"}</option>
+                            {availableJapaneseVoices.map((voice) => (
+                              <option key={voice.voiceURI} value={voice.voiceURI}>
+                                {voice.name}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       </div>
-                    </div>
+                    </fieldset>
                   </section>
                 </div>
               )}

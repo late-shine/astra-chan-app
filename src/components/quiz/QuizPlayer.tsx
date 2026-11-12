@@ -15,8 +15,8 @@
 //  - LeavePracticeSheet is the S1.4 exit sheet. It is exported from here and uses StudioSheet.
 
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
-import { Check, Ellipsis, X } from "lucide-react";
-import { StudioHeader, StudioShell, StudioSheet, StudioSwitch, type StudioShellProps } from "./StudioShell";
+import { Check, Ellipsis, Pause, X } from "lucide-react";
+import { StudioHeader, StudioShell, StudioSheet, StudioSwitch, type StudioPresentation } from "./StudioShell";
 import type { QuizAnswerState, QuizChoiceView, QuizPlayerActions, QuizQuestionView } from "./viewTypes";
 
 type ChoiceState = "idle" | "correct" | "wrong" | "locked";
@@ -30,7 +30,7 @@ function choiceState(choice: QuizChoiceView, answer: QuizAnswerState): ChoiceSta
 
 /* ───────────────────────────── More menu ───────────────────────────── */
 
-function QuizMoreMenu({ autoNext, onAutoNextChange }: { autoNext: boolean; onAutoNextChange: (on: boolean) => void }) {
+function QuizMoreMenu({ speechEnabled = true, onSpeechChange, autoNext, onAutoNextChange, onPause, onOpen }: { speechEnabled?: boolean; onSpeechChange?: (enabled: boolean) => void; autoNext: boolean; onAutoNextChange: (on: boolean) => void; onPause?: () => void; onOpen?: () => void }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -64,7 +64,7 @@ function QuizMoreMenu({ autoNext, onAutoNextChange }: { autoNext: boolean; onAut
         aria-label="More options"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => { if (!open) onOpen?.(); setOpen(!open); }}
       >
         <Ellipsis aria-hidden="true" />
       </button>
@@ -76,6 +76,8 @@ function QuizMoreMenu({ autoNext, onAutoNextChange }: { autoNext: boolean; onAut
             label="Auto-next after correct answers"
             description="Wrong answers always wait for Next."
           />
+          {onSpeechChange && <StudioSwitch checked={speechEnabled} onChange={onSpeechChange} label="Companion speech" description="Quiet company, for this visit only." />}
+          {onPause && <button type="button" className="quiz-btn quiz-btn--quiet" onClick={onPause}><Pause aria-hidden="true" /> Pause practice</button>}
         </div>
       )}
     </div>
@@ -92,14 +94,20 @@ export interface LeavePracticeSheetProps {
   onFinish: () => void;
   onDiscard: () => void;
   returnFocusRef?: RefObject<HTMLElement | null>;
+  saveError?: string | null;
+  hasPending?: boolean;
+  offerEmptyFinish?: boolean;
+  offerDiscardSaved?: boolean;
 }
 
-export function LeavePracticeSheet({ answeredCount, onKeepPracticing, onSaveAndLeave, onFinish, onDiscard, returnFocusRef }: LeavePracticeSheetProps) {
+export function LeavePracticeSheet({ answeredCount, onKeepPracticing, onSaveAndLeave, onFinish, onDiscard, returnFocusRef, saveError, hasPending, offerEmptyFinish, offerDiscardSaved }: LeavePracticeSheetProps) {
   const hasAnswers = answeredCount > 0;
   return (
     <StudioSheet title="Leave this practice?" closeLabel="Keep practicing" onClose={onKeepPracticing} size="compact" returnFocusRef={returnFocusRef}>
       <div className="quiz-form">
         <p className="quiz-body">{hasAnswers ? "Your saved answers will stay." : "You have not answered anything yet, so nothing needs saving."}</p>
+        {hasPending && <p className="quiz-help">Some answers are still waiting to save.</p>}
+        {saveError && <p className="quiz-notice" role="status">{saveError}</p>}
         <div className="quiz-stack">
           <button type="button" className="quiz-btn quiz-btn--primary quiz-btn--block" onClick={onKeepPracticing}>
             Keep practicing
@@ -112,12 +120,14 @@ export function LeavePracticeSheet({ answeredCount, onKeepPracticing, onSaveAndL
               <button type="button" className="quiz-btn quiz-btn--secondary quiz-btn--block" onClick={onFinish}>
                 Finish and see results
               </button>
+              {offerDiscardSaved && !hasPending && <button type="button" className="quiz-btn quiz-btn--quiet quiz-btn--block" onClick={onDiscard}>Discard saved position</button>}
             </>
-          ) : (
+          ) : <>
+            {offerEmptyFinish && <button type="button" className="quiz-btn quiz-btn--secondary quiz-btn--block" onClick={onFinish}>Finish and see results</button>}
             <button type="button" className="quiz-btn quiz-btn--secondary quiz-btn--block" onClick={onDiscard}>
               Discard and leave
             </button>
-          )}
+          </>}
         </div>
       </div>
     </StudioSheet>
@@ -135,6 +145,8 @@ export interface QuizPlayerProps {
   autoNextEnabled: boolean;
   /** The compact feedback block (a <QuizFeedback/>). Rendered only after the question is answered. */
   feedback?: ReactNode;
+  status?: ReactNode;
+  blocked?: boolean;
   /** Plain text for the single polite live region. Empty before the answer. */
   announcement: string;
   actions: QuizPlayerActions;
@@ -143,15 +155,15 @@ export interface QuizPlayerProps {
   /** Focus target after a manual Next (typed mode). */
   inputRef?: RefObject<HTMLInputElement | null>;
   /** Pass-through for the studio frame: theme override, reduced motion, keyboard-open, modal-open and the sheet overlay. */
-  shell?: Pick<StudioShellProps, "themeId" | "reducedMotion" | "keyboardOpen" | "modalOpen" | "overlay">;
+  shell?: StudioPresentation;
 }
 
-export function QuizPlayer({ question, answer, typedValue, autoNextEnabled, feedback, announcement, actions, promptRef, inputRef, shell }: QuizPlayerProps) {
+export function QuizPlayer({ question, answer, typedValue, autoNextEnabled, feedback, status, blocked = false, announcement, actions, promptRef, inputRef, shell }: QuizPlayerProps) {
   const inputId = useId();
   const answered = answer.status === "answered";
-  const isLast = question.index >= question.total - 1;
+  const isLast = question.finalQuestion ?? question.index >= question.total - 1;
   const typed = question.mode === "typed";
-  const canCheck = typedValue.trim().length > 0;
+  const canCheck = !blocked && typedValue.trim().length > 0;
   const outcome = answer.status === "answered" ? answer.outcome : undefined;
 
   const header = (
@@ -159,11 +171,11 @@ export function QuizPlayer({ question, answer, typedValue, autoNextEnabled, feed
       backLabel="Exit practice"
       backIcon="close"
       onBack={actions.onExit}
-      progress={(question.index + (answered ? 1 : 0)) / Math.max(1, question.total)}
-      trailing={<QuizMoreMenu autoNext={autoNextEnabled} onAutoNextChange={actions.onAutoNextChange} />}
+      progress={question.positionLabel ? undefined : (question.index + (answered ? 1 : 0)) / Math.max(1, question.total)}
+      trailing={<QuizMoreMenu speechEnabled={shell?.speechEnabled} onSpeechChange={shell?.onSpeechChange} autoNext={autoNextEnabled} onAutoNextChange={actions.onAutoNextChange} onPause={actions.onPause} onOpen={actions.onFeedbackFocus} />}
     >
       <p className="quiz-header__progress">
-        {question.index + 1} / {question.total}
+        {question.positionLabel ?? `${question.index + 1} / ${question.total}`}
       </p>
       <p className="quiz-header__label">
         {question.subjectLabel} · {question.kindLabel}
@@ -191,9 +203,10 @@ export function QuizPlayer({ question, answer, typedValue, autoNextEnabled, feed
       <button
         type="button"
         className="quiz-btn quiz-btn--primary quiz-btn--block"
-        aria-disabled={answered ? undefined : true}
+        aria-disabled={answered && !blocked ? undefined : true}
+        onFocus={answered ? actions.onFeedbackFocus : undefined}
         onClick={() => {
-          if (answered) actions.onNext();
+          if (answered && !blocked) actions.onNext();
         }}
       >
         {isLast ? "See results" : "Next"}
@@ -207,9 +220,18 @@ export function QuizPlayer({ question, answer, typedValue, autoNextEnabled, feed
     </div>
   );
 
+  const companion = answered
+    ? outcome === "correct" ? { expression: "pleased" as const, speech: "A little progress, one character at a time." }
+      : { expression: "encouraging" as const, speech: "Let’s look at this one together." }
+    : { expression: "focused" as const, speech: "Take your time. I’m right here." };
+
   return (
-    <StudioShell label="Practice question" header={header} footer={footer} width="player" {...shell}>
+    <StudioShell label="Practice question" header={header} footer={typed || answered ? footer : undefined} width="player"
+      companion={companion} onCompanionInteract={actions.onFeedbackFocus} {...shell}>
       <div className="quiz-player" key={question.id}>
+        <div className="quiz-question-meta"><p className="quiz-question-label">{question.kindLabel}</p>
+          {!question.timer && <span>At your own pace</span>}
+        </div>
         {question.timer && (
           <div className="quiz-timer" data-kind={question.timer.kind}>
             <span className="quiz-timer__label">{question.timer.label}</span>
@@ -222,7 +244,7 @@ export function QuizPlayer({ question, answer, typedValue, autoNextEnabled, feed
         <div className="quiz-stage" data-mode={question.mode} data-size={question.prompt.size}>
           <p className="quiz-instruction">{question.instruction}</p>
           <div ref={promptRef} className="quiz-prompt" tabIndex={-1}>
-            <span className="quiz-jp quiz-prompt__text" lang="ja">
+            <span className={question.prompt.ja === false ? "quiz-prompt__text" : "quiz-jp quiz-prompt__text"} lang={question.prompt.ja === false ? undefined : "ja"}>
               {question.prompt.text}
             </span>
             {question.prompt.reading && (
@@ -253,13 +275,16 @@ export function QuizPlayer({ question, answer, typedValue, autoNextEnabled, feed
               spellCheck={false}
               enterKeyHint="done"
               placeholder={question.typedPlaceholder}
+              maxLength={256}
               value={typedValue}
-              readOnly={answered}
+              readOnly={answered || blocked}
               onChange={(event) => {
-                if (!answered) actions.onTypedChange(event.target.value);
+                if (!answered && !blocked) actions.onTypedChange(event.target.value);
               }}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && !answered && canCheck) {
+                const native = event.nativeEvent;
+                if (event.key === "Enter" && !answered && canCheck && !event.defaultPrevented && !event.repeat &&
+                  !native.isComposing && native.keyCode !== 229 && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
                   event.preventDefault();
                   actions.onSubmitTyped(event);
                 }
@@ -270,7 +295,7 @@ export function QuizPlayer({ question, answer, typedValue, autoNextEnabled, feed
           <div className="quiz-choices" data-layout={question.choiceLayout} role="group" aria-label="Answer choices">
             {question.choices.map((choice, i) => {
               const state = choiceState(choice, answer);
-              const locked = answered;
+              const locked = answered || blocked;
               return (
                 <button
                   key={choice.id}
@@ -308,6 +333,8 @@ export function QuizPlayer({ question, answer, typedValue, autoNextEnabled, feed
         )}
 
         {answered && feedback}
+        {status}
+        {!answered && !typed && <p className="quiz-player__help">Take a breath. Choose the answer that feels familiar.</p>}
       </div>
 
       <div className="quiz-sr" role="status" aria-live="polite" aria-atomic="true">

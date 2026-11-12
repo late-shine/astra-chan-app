@@ -159,6 +159,16 @@ check('auto cannot run early', step(auto, { ...autoEvent, clock: clock(2600) }) 
 check('stale auto token rejected', step(auto, { ...autoEvent, token: 999 }) === auto);
 auto = step(auto, autoEvent);
 check('correct auto advances once', auto.index === 1 && step(auto, autoEvent) === auto);
+const beforeToggle = commit(answer(begin('live-auto-toggle'), 1000), 1001);
+const toggledOff = step(beforeToggle, { type: 'SET_AUTO_NEXT', ...scope(beforeToggle, 1100), enabled: false });
+check('turning off auto-next clears the current deadline and its snapshot fields', !toggledOff.config.autoNext &&
+  toggledOff.runtime.autoNextDeadlineMonoMs === null && toggledOff.autoNextRemainingMs === null && toggledOff.autoNextToken === null &&
+  validateSnapshot(createSnapshot(toggledOff, 'toggle-owner', clock(1101)), 'toggle-owner', clock(1, BASE + 1102)).ok);
+const toggledOn = step(toggledOff, { type: 'SET_AUTO_NEXT', ...scope(toggledOff, 1200), enabled: true });
+const nextToggle = next(toggledOn, 1300);
+check('re-enabling waits until the next correct answer', toggledOn.config.autoNext && toggledOn.runtime.autoNextDeadlineMonoMs === null &&
+  commit(answer(nextToggle, 1400), 1401).runtime.autoNextDeadlineMonoMs === 3001);
+check('a toggle from the prior question cannot update the live setting', step(nextToggle, { type: 'SET_AUTO_NEXT', ...scope(beforeToggle, 1301), enabled: false }) === nextToggle);
 let canceled = commit(answer(begin('canceled'), 1000), 1001);
 canceled = step(canceled, { type: 'CANCEL_AUTO_NEXT', ...scope(canceled, 1500), reason: 'expand' });
 check('Why permanently cancels this auto-next', canceled.autoNextCanceled && canceled.runtime.autoNextDeadlineMonoMs === null

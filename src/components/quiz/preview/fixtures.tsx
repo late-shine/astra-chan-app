@@ -373,7 +373,7 @@ export const TYPED_SAMPLE: TypedSample = {
 
 /* ───────────────────────────── Results ───────────────────────────── */
 
-export type ResultsVariant = "misses" | "perfect" | "repair";
+export type ResultsVariant = "misses" | "perfect" | "repair" | "partial";
 
 export function resultsView(subject: QuizSubject, variant: ResultsVariant): QuizResultsView {
   const label = SUBJECT_LABEL[subject];
@@ -395,6 +395,11 @@ export function resultsView(subject: QuizSubject, variant: ResultsVariant): Quiz
     ],
   };
 
+  if (variant === "partial") return {
+    headline: "3 of 5 correct first try", percentLabel: "60%", contextLabel: `${label} · Partial round`,
+    detail: "5 unanswered", xpLines: [{ label: "Answer XP", value: "+45" }, { label: "Completion bonus", value: "+0" }],
+    xpTotal: "+45 XP", missed: missedBySubject[subject].slice(0, 2), primaryLabel: "Try another round",
+  };
   if (variant === "perfect") {
     return {
       headline: "10 of 10 correct first try",

@@ -50,6 +50,11 @@ const PREVIEW_ONLY = [
   "Music panel stand-in",
   "Preview: toggle Mika ready",
   "QuizPreview",
+  "Portrait fixture",
+  "Art unavailable",
+  "Follow the visible state",
+  "Companion word bank",
+  "Draw authored line",
 ];
 
 for (const file of scripts) {
@@ -58,11 +63,11 @@ for (const file of scripts) {
 }
 check("no chunk file named like the preview", !files.some((f) => /preview/i.test(f)), files.filter((f) => /preview/i.test(f)).join(", "));
 
-// The studio CSS itself is allowed (it ships inside the one CSS file; it is inert without a .quiz-studio element).
+// Live kana uses the scoped studio CSS. The preview-only JavaScript still must be absent.
 // The dev-only preview CHROME classes are tiny and live in the same stylesheet; they are allowed too, but are listed.
 const cssFiles = files.filter((f) => f.endsWith(".css"));
 const hasStudioCss = cssFiles.some((f) => readFileSync(f, "utf8").includes("quiz-studio"));
-console.log(`Studio CSS present in the bundle: ${hasStudioCss ? "yes (expected, it is scoped and inert)" : "no"}`);
+check("production bundle includes the live studio styles", hasStudioCss);
 
 console.log(`\n${passed} checks passed, ${failures.length} failed.`);
 if (failures.length > 0) {

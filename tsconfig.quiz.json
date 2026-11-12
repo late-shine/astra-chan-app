@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "paths": {
+      "@/*": ["./*"],
+      "react": ["./node_modules/quiz-react-types/index.d.ts"],
+      "react/*": ["./node_modules/quiz-react-types/*"]
+    }
+  },
+  "include": ["src/quiz/**/*.ts", "src/components/quiz/**/*.ts", "src/components/quiz/**/*.tsx", "scripts/quiz-*-sim.ts"]
+}

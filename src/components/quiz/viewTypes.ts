@@ -7,6 +7,12 @@
 
 import type { SyntheticEvent } from "react";
 import type { ThemeId } from "../../preferences";
+import type { AtelierExpression } from "../../quiz/atelierAssets";
+
+export interface QuizCompanionView {
+  expression: AtelierExpression;
+  speech: string;
+}
 
 /** The same ids the app already stores for the saved theme. The studio maps them to light/dark tokens in CSS. */
 export type QuizThemeId = ThemeId;
@@ -119,6 +125,8 @@ export interface QuizSetupView {
   autoNext: boolean;
   /** How many items match the current choices. Drives the shrink / empty messages. */
   matchCount: number;
+  startLabel?: string;
+  notice?: string;
   /** Offered when the pool is empty, e.g. "Include Voiced kana". */
   emptyAlternative?: { id: string; label: string; reason: string };
 }
@@ -153,6 +161,7 @@ export interface QuizPromptView {
   text: string;
   /** "glyph" = one character at 88 px (64 px in typed mode); "word" = 36 px with wrapping. */
   size: "glyph" | "word";
+  ja?: boolean;
   /** A reading shown only when it is NOT the tested answer. Never set it on a reading question. */
   reading?: string;
   /** A short context line, e.g. "as in 学生 (student)". */
@@ -173,6 +182,8 @@ export interface QuizQuestionView {
   /** Zero-based. The header shows `index + 1 / total`. */
   index: number;
   total: number;
+  positionLabel?: string;
+  finalQuestion?: boolean;
   /** "Kana" */
   subjectLabel: string;
   /** "Read the character" */
@@ -229,6 +240,7 @@ export interface AutoNextView {
   label: string;
   /** Test / preview hook: show the line and bar without running the bar animation (the owner also holds the timer). */
   frozen?: boolean;
+  durationMs?: number;
 }
 
 export interface QuizPlayerActions {
@@ -239,6 +251,8 @@ export interface QuizPlayerActions {
   onNext: () => void;
   onExit: () => void;
   onAutoNextChange: (on: boolean) => void;
+  onPause?: () => void;
+  onFeedbackFocus?: () => void;
 }
 
 /* ───────────────────────────── Results ───────────────────────────── */
@@ -257,6 +271,7 @@ export interface MissedItemView {
 }
 
 export interface QuizResultsView {
+  companion?: QuizCompanionView;
   /** "7 of 10 correct first try" */
   headline: string;
   /** "70%" secondary text */
@@ -266,6 +281,8 @@ export interface QuizResultsView {
   xpLines: XpLineView[];
   xpTotal: string;
   streakLine?: string;
+  detail?: string;
+  saveLabel?: string;
   /** Shown after a repair round: "2 corrected in the repair round". */
   repairLine?: string;
   missed: MissedItemView[];
@@ -280,6 +297,6 @@ export interface QuizResultsView {
 export interface QuizResultsActions {
   onPrimary: () => void;
   onAddToReviewDeck?: () => void;
-  onAnotherRound: () => void;
+  onAnotherRound?: () => void;
   onBackToPractice: () => void;
 }

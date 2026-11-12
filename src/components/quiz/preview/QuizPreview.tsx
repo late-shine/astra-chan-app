@@ -1,3 +1,4 @@
+import { CompanionFixture } from "./CompanionFixture";
 // Quiz Remake QZ1: the visual prototype page. DEVELOPMENT ONLY (reached with ?quiz-preview=1, see src/main.tsx).
 //
 // It renders the six studio components with hard-coded fixtures. It has no feature flag, no persistence,
@@ -14,6 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type SyntheticEvent } from "react";
 import { Music, Palette } from "lucide-react";
+import { ATELIER_PORTRAITS, type AtelierExpression } from "../../../quiz/atelierAssets";
 import { PracticeHome } from "../PracticeHome";
 import { QuizFeedback } from "../QuizFeedback";
 import { LeavePracticeSheet, QuizPlayer } from "../QuizPlayer";
@@ -47,19 +49,22 @@ import {
 
 /* ───────────────────────────── Control state ───────────────────────────── */
 
-type FixtureId = "practice" | "setup" | "question" | "correct" | "wrong" | "typed" | "results" | "duel";
+type FixtureId = "companion" | "practice" | "setup" | "question" | "correct" | "correct-paused" | "wrong" | "typed" | "paused" | "results" | "duel";
 type DockMode = "off" | "quiet" | "full" | "open";
 type TimerMode = "off" | "steady" | "survival";
 type PoolMode = "normal" | "small" | "empty";
 type WrongKind = "wrong" | "timeout";
 
 const FIXTURES: { id: FixtureId; label: string }[] = [
+  { id: "companion", label: "Companion word bank" },
   { id: "practice", label: "Practice home" },
   { id: "setup", label: "Customize sheet" },
   { id: "question", label: "Question, unanswered" },
   { id: "correct", label: "Correct feedback" },
+  { id: "correct-paused", label: "Correct, auto-next paused" },
   { id: "wrong", label: "Wrong, Why expanded" },
   { id: "typed", label: "Typed answer, keyboard open" },
+  { id: "paused", label: "Paused recovery" },
   { id: "results", label: "Results" },
   { id: "duel", label: "Duel lobby" },
 ];
@@ -84,6 +89,8 @@ interface Controls {
   wrongKind: WrongKind;
   results: ResultsVariant;
   freeze: boolean;
+  portrait: "auto" | AtelierExpression;
+  artMissing: boolean;
 }
 
 const DEFAULT_CONTROLS: Controls = {
@@ -103,6 +110,8 @@ const DEFAULT_CONTROLS: Controls = {
   wrongKind: "wrong",
   results: "misses",
   freeze: true,
+  portrait: "auto",
+  artMissing: false,
 };
 
 function pick<T extends string>(value: string | null, allowed: readonly T[], fallback: T): T {
@@ -129,14 +138,16 @@ function readControls(): Controls {
     noHistory: flag("nohistory", false),
     pool: pick(q.get("pool"), ["normal", "small", "empty"] as const, "normal"),
     wrongKind: pick(q.get("wrong"), ["wrong", "timeout"] as const, "wrong"),
-    results: pick(q.get("results"), ["misses", "perfect", "repair"] as const, "misses"),
+    results: pick(q.get("results"), ["misses", "perfect", "repair", "partial"] as const, "misses"),
     freeze: flag("freeze", true),
+    portrait: pick(q.get("portrait"), ["auto", ...Object.keys(ATELIER_PORTRAITS)] as ("auto" | AtelierExpression)[], "auto"),
+    artMissing: flag("artmissing", false),
   };
 }
 
 /* ───────────────────────────── Session state ───────────────────────────── */
 
-type Screen = "practice" | "player" | "typed" | "results" | "duel";
+type Screen = "practice" | "player" | "typed" | "paused" | "results" | "duel";
 
 interface Session {
   screen: Screen;
@@ -171,11 +182,12 @@ function fixtureSession(fixture: FixtureId, c: Controls, autoNextOn: boolean): S
     case "question":
       return { ...base, screen: "player" };
     case "correct":
+    case "correct-paused":
       return {
         ...base,
         screen: "player",
         answer: { status: "answered", outcome: "correct", selectedId: sample.correctId, correctId: sample.correctId },
-        autoPhase: autoNextOn ? "counting" : "cancelled",
+        autoPhase: fixture === "correct-paused" ? "paused" : autoNextOn ? "counting" : "cancelled",
       };
     case "wrong":
       return {
@@ -191,6 +203,8 @@ function fixtureSession(fixture: FixtureId, c: Controls, autoNextOn: boolean): S
       };
     case "typed":
       return { ...base, screen: "typed" };
+    case "paused":
+      return { ...base, screen: "paused" };
     case "results":
       return { ...base, screen: "results" };
     case "duel":
@@ -304,6 +318,8 @@ export default function QuizPreview() {
     if (c.wrongKind !== "wrong") q.set("wrong", c.wrongKind);
     if (c.results !== "misses") q.set("results", c.results);
     q.set("freeze", c.freeze ? "1" : "0");
+    if (c.portrait !== "auto") q.set("portrait", c.portrait);
+    if (c.artMissing) q.set("artmissing", "1");
     if (!showToggle) q.set("controls", "0");
     window.history.replaceState(null, "", `${window.location.pathname}?${q.toString()}`);
   }, [c, showToggle]);
@@ -509,7 +525,9 @@ export default function QuizPreview() {
     />
   ) : undefined;
 
-  const shell = { themeId: c.theme, reducedMotion: c.reduced, keyboardOpen: c.keyboard } as const;
+  const shell = { themeId: c.theme, reducedMotion: c.reduced, keyboardOpen: c.keyboard, artUnavailable: c.artMissing,
+    ...(c.portrait === "auto" ? {} : { companion: { expression: c.portrait, speech: "Take your time. I’m right here." } }),
+  } as const;
 
   /* ── screens ── */
   let screenEl: ReactNode;
@@ -551,6 +569,14 @@ export default function QuizPreview() {
         />
       </StudioShell>
     );
+  } else if (session.screen === "paused") {
+    screenEl = <StudioShell {...shell} label="Paused practice fixture" width="player"
+      companion={{ expression: c.portrait === "auto" ? "intro" : c.portrait, speech: "Your practice is here. Continue whenever you’re ready." }}
+      header={<StudioHeader backLabel="Back to Practice" onBack={() => patchSession({ screen: "practice" })}><p className="quiz-header__progress">Kana practice</p></StudioHeader>}>
+      <section className="quiz-card quiz-stack"><h1 className="quiz-title">Practice paused</h1><p className="quiz-body">Kana · Question 4 of 10</p>
+        <button type="button" className="quiz-btn quiz-btn--primary" onClick={() => patchSession({ screen: "player" })}>Resume</button>
+      </section>
+    </StudioShell>;
   } else if (session.screen === "player" || session.screen === "typed") {
     const answeredCount = session.qIndex + (answered ? 1 : 0);
     screenEl = (
@@ -605,7 +631,9 @@ export default function QuizPreview() {
   } else if (session.screen === "results") {
     screenEl = (
       <QuizResults
-        view={resultsView(c.subject, c.results)}
+        view={{ ...resultsView(c.subject, c.results), companion: {
+          expression: c.results === "perfect" ? "celebrate" : c.results === "partial" ? "intro" : "encouraging", speech: "A little practice is time well spent.",
+        } }}
         shell={shell}
         actions={{
           onPrimary: () => startPractice("player"),
@@ -648,7 +676,7 @@ export default function QuizPreview() {
 
   return (
     <div className="quiz-preview-root" style={c.keyboard ? ({ ["--quiz-studio-height" as string]: "calc(100dvh - min(42dvh, 21rem))" } as CSSProperties) : undefined}>
-      {screenEl}
+      {c.fixture === "companion" ? <CompanionFixture /> : screenEl}
 
       {c.dock !== "off" && !c.keyboard && (
         <div className="quiz-preview-dock" aria-hidden="true">
@@ -724,6 +752,10 @@ export default function QuizPreview() {
 
               <fieldset>
                 <legend>Look</legend>
+                <label>Portrait fixture <select value={c.portrait} onChange={event => patch({ portrait: event.target.value as Controls["portrait"] })}>
+                  <option value="auto">Follow the visible state</option>{Object.keys(ATELIER_PORTRAITS).map(id => <option key={id} value={id}>{id}</option>)}
+                </select></label>
+                {check("Art unavailable", c.artMissing, artMissing => patch({ artMissing }))}
                 <label>
                   Theme{" "}
                   <select value={c.theme} onChange={(e) => patch({ theme: e.target.value as QuizThemeId })}>
@@ -752,7 +784,7 @@ export default function QuizPreview() {
                 <legend>Session</legend>
                 <div>Timer {radios("timer", ["off", "steady", "survival"] as const, c.timer, (t) => patch({ timer: t }))}</div>
                 <div>Wrong fixture {radios("wrong", ["wrong", "timeout"] as const, c.wrongKind, (wrongKind) => setAndRejump({ wrongKind }))}</div>
-                <div>Results {radios("results", ["misses", "perfect", "repair"] as const, c.results, (results) => patch({ results }))}</div>
+                <div>Results {radios("results", ["misses", "perfect", "repair", "partial"] as const, c.results, (results) => patch({ results }))}</div>
                 <div>Setup pool {radios("pool", ["normal", "small", "empty"] as const, c.pool, (pool) => patch({ pool }))}</div>
                 <div>
                   {check("Resume banner", c.resume, (resume) => {
