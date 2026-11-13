@@ -240,3 +240,76 @@ export interface SessionSnapshot {
 }
 export type SnapshotValidation = { readonly ok: true; readonly state: ActiveSession }
   | { readonly ok: false; readonly reason: 'malformed' | 'version' | 'owner' | 'expired' | 'size' | 'future-clock'; readonly message: string };
+
+// QZ9 protocol2 DTOs only. No production room writer uses these until QZ10.
+export type DuelRole = 'host' | 'guest';
+export type DuelKind = 'kana-read' | 'kana-type' | 'vocab-meaning' | 'vocab-reading' | 'vocab-reverse' | 'kanji-meaning' | 'kanji-on';
+export interface DuelPublicPool {
+  readonly filter: 'all' | 'theme' | 'explicit'; readonly label: string;
+  readonly script?: KanaScript | 'both'; readonly stages?: readonly KanaStage[];
+  readonly category?: string; readonly targetIds?: readonly string[];
+}
+export interface DuelSettings {
+  readonly subject: Subject; readonly kind: DuelKind; readonly pool: DuelPublicPool;
+  readonly count: 5 | 10 | 20; readonly difficulty: DuelDifficulty;
+  readonly durationMs: number; readonly mode: 'competitive' | 'parallel';
+}
+export interface DuelManifest { readonly schemaVersion: 1; readonly settingsRevision: number; readonly questions: readonly Question[] }
+export interface DuelAnswer {
+  readonly receiptId: string; readonly outcome: 'correct' | 'wrong' | 'timeout';
+  readonly response?: Response; readonly capturedAt: number; readonly acceptedAt: number; readonly elapsedMs: number;
+}
+export interface DuelWindow { readonly startAt: number; readonly deadlineAt: number }
+export interface DuelRound {
+  readonly windows: Readonly<Partial<Record<DuelRole,DuelWindow>>>;
+  readonly answers?: Readonly<Partial<Record<DuelRole,DuelAnswer>>>;
+  readonly lockedAt?: number; readonly winner?: DuelRole;
+}
+export interface DuelPayload {
+  readonly seriesId: string; readonly generation: number; readonly matchId: string;
+  readonly settingsRevision: number; readonly settings: DuelSettings;
+  readonly readiness?: Readonly<Partial<Record<DuelRole,{readonly revision:number;readonly protocol:2}>>>;
+  readonly manifest?: DuelManifest; readonly rounds?: Readonly<Record<string,DuelRound>>;
+  readonly competitiveIndex: number;
+  readonly progress: Readonly<Record<DuelRole,{readonly index:number;readonly finished:boolean}>>;
+  readonly createdAt: number; readonly expiresAt: number;
+  readonly endedAt?: number; readonly endedReason?: 'complete' | 'left' | 'connection' | 'expired';
+}
+export interface DuelRoom {
+  readonly protocolVersion: 2; readonly status: 'waiting' | 'playing' | 'finished';
+  readonly hostId:string; readonly guestId:string|null; readonly hostName:string; readonly guestName:string|null;
+  readonly hostAvatar?:string; readonly guestAvatar?:string|null;
+  // Compatibility shell mirrors only; v2 is the sole protocol authority.
+  readonly seed:number;
+  readonly settings:{readonly alphabet:'hiragana'|'katakana'|'kanji'|'mixed';readonly difficulty:DuelDifficulty;
+    readonly questionCount:number;readonly quizMode:'choice'|'romaji';readonly questionDuration:number;
+    readonly stages:readonly string[];readonly multiplayerMode:'competitive'|'parallel'};
+  readonly currentQuestion:number; readonly questionStartedAt:number|null;
+  readonly scores:Readonly<Record<DuelRole,number>>; readonly answers?:Readonly<Record<string,never>>;
+  readonly v2:DuelPayload;
+  readonly presence?:Readonly<Record<string,Readonly<Record<string,true>>>>;
+  readonly lastSeen?:Readonly<Record<string,number>>;
+}
+/** now must be read afresh INSIDE each retryable transaction callback. */
+export interface DuelScope { readonly uid:string;readonly matchId:string;readonly revision:number;readonly now:number }
+export interface DuelAnswerEvent {
+  readonly index:number;readonly receiptId:string;readonly capturedAt:number;readonly response:Response;
+}
+export interface DuelPlayerSummary {
+  readonly points:number;readonly correct:number;readonly wrong:number;readonly timeout:number;
+  readonly attempted:number;readonly unattempted:number;readonly elapsedMs:number;readonly accuracy:number|null;
+}
+export interface DuelSummary {
+  readonly matchId:string;readonly total:number;readonly complete:boolean;readonly partial:boolean;
+  readonly endedReason:DuelPayload['endedReason']|null;
+  readonly host:DuelPlayerSummary;readonly guest:DuelPlayerSummary;
+  readonly winner:DuelRole|'tie'|null;
+}
+export interface DuelHistory {
+  readonly id:string;readonly roomCode:string;readonly opponentUid:string;readonly opponentName:string;readonly opponentAvatar:string;
+  readonly myScore:number;readonly opponentScore:number;readonly result:'win'|'loss'|'tie'|'aborted';
+  readonly quizMode:'choice'|'romaji';readonly difficulty:DuelDifficulty;readonly multiplayerMode:'competitive'|'parallel';
+  readonly questionCount:number;readonly playedAt:number;readonly protocolVersion:2;readonly subject:Subject;readonly kind:DuelKind;
+  readonly endedReason:NonNullable<DuelPayload['endedReason']>;readonly myCorrect:number;readonly opponentCorrect:number;
+  readonly myElapsedMs:number;readonly opponentElapsedMs:number;
+}
