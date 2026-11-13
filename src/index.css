@@ -749,6 +749,7 @@ input, select, textarea, button {
 
 /* ── Practice home ───────────────────────────────────────────────────────── */
 .quiz-home { display: flex; flex-direction: column; gap: 1.5rem; }
+.quiz-results__deck { grid-column: 1 / -1; }
 .quiz-home__side { display: flex; flex-direction: column; gap: 1.5rem; min-width: 0; }
 .quiz-home__group { display: flex; flex-direction: column; gap: 0.75rem; }
 .quiz-reco { position: relative; display: flex; flex-direction: column; gap: 0.5rem; }

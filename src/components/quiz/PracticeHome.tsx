@@ -38,7 +38,7 @@ export function PracticeHome({ view, actions, customizeRef }: PracticeHomeProps)
           </div>
           <div className="quiz-resume__actions">
             <button type="button" className="quiz-btn quiz-btn--primary" onClick={actions.onResume}>
-              Resume
+              {resume.actionLabel ?? "Resume"}
             </button>
             <button type="button" className="quiz-btn quiz-btn--secondary" onClick={actions.onDiscardResume}>
               Discard
@@ -58,7 +58,7 @@ export function PracticeHome({ view, actions, customizeRef }: PracticeHomeProps)
           {recommendation.summary}
         </h2>
         <p className="quiz-body">{recommendation.note}</p>
-        <button type="button" className="quiz-btn quiz-btn--primary quiz-btn--block quiz-reco__cta" onClick={actions.onStart}>
+        <button type="button" aria-disabled={recommendation.blocked || undefined} className={`quiz-btn ${resume ? "quiz-btn--secondary" : "quiz-btn--primary"} quiz-btn--block quiz-reco__cta`} onClick={() => {if(!recommendation.blocked) actions.onStart();}}>
           {recommendation.cta}
         </button>
       </section>

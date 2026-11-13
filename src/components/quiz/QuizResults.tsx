@@ -68,6 +68,8 @@ export function QuizResults({ view, actions, shell, status }: QuizResultsProps) 
                 {view.reviewDeckLabel}
               </button>
             )}
+            {view.reviewDeckNote && <p className="quiz-help" role="status">{view.reviewDeckNote}</p>}
+            {actions.onOpenReviewDeck && <button type="button" className="quiz-btn quiz-btn--quiet" onClick={actions.onOpenReviewDeck}>Open Review Deck</button>}
           </div>
         </section>
 
@@ -93,6 +95,13 @@ export function QuizResults({ view, actions, shell, status }: QuizResultsProps) 
             </ul>
           )}
         </section>
+
+        {!!view.reviewCards?.length && <section className="quiz-card quiz-stack quiz-results__deck" aria-label="Missed cards for Review Deck">
+          <h2 className="quiz-section-title">Keep practising later</h2>
+          <p className="quiz-help">Add up to five per batch, or choose individual cards. Adding does not change an existing card’s schedule.</p>
+          {view.reviewCards.map(card=>card.present ? <p key={card.id} className="quiz-help">{card.label.replace(/^Add /, "").replace(/ to Review Deck$/, "")} · In Review Deck</p>
+            : <button key={card.id} type="button" className="quiz-btn quiz-btn--secondary" onClick={()=>actions.onAddCard?.(card.id)}>{card.label}</button>)}
+        </section>}
 
         <div className="quiz-results__more">
           {actions.onAnotherRound && <button type="button" className="quiz-btn quiz-btn--secondary" onClick={actions.onAnotherRound}>

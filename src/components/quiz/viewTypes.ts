@@ -27,6 +27,7 @@ export interface SubjectOption {
 /* ───────────────────────────── Practice home ───────────────────────────── */
 
 export interface ResumeBannerView {
+  actionLabel?: string;
   /** e.g. "Words" */
   subjectLabel: string;
   /** e.g. "Question 4 of 10" */
@@ -34,6 +35,7 @@ export interface ResumeBannerView {
 }
 
 export interface RecommendationView {
+  blocked?: boolean;
   /** "Your next practice" */
   eyebrow: string;
   /** "10 questions · Kana · Untimed" */
@@ -277,6 +279,8 @@ export interface MissedItemView {
 }
 
 export interface QuizResultsView {
+  reviewCards?: {id:string;label:string;present:boolean}[];
+  reviewDeckNote?: string;
   companion?: QuizCompanionView;
   /** "7 of 10 correct first try" */
   headline: string;
@@ -301,6 +305,8 @@ export interface QuizResultsView {
 }
 
 export interface QuizResultsActions {
+  onAddCard?: (id:string) => void;
+  onOpenReviewDeck?: () => void;
   onPrimary: () => void;
   onAddToReviewDeck?: () => void;
   onAnotherRound?: () => void;

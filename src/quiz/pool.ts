@@ -110,6 +110,18 @@ function prepare(catalogs: Catalogs, config: BuildConfig): { candidates: Candida
 export function getEligibility(catalogs: Catalogs, config: BuildConfig): EligibilityReport {
   return prepare(catalogs, config).report;
 }
+/** Recommendation facts from the exact eligible pool; no answer-bearing catalog escapes. */
+export function poolHistory(catalogs: Catalogs, config: BuildConfig, history: QuizHistory) {
+  const {candidates,report} = prepare(catalogs,config);
+  const buckets = {weak:0,new:0,other:0};
+  let recentMisses = 0;
+  for (const candidate of candidates) {
+    buckets[historyBucket(candidate,history,config.now)]++;
+    const miss = history.skills?.[candidate.skillKey]?.lastFirstMissAt;
+    if (miss !== undefined && config.now >= miss && config.now-miss <= 72*60*60*1000) recentMisses++;
+  }
+  return {report,buckets,recentMisses};
+}
 export type HistoryBucket = 'weak' | 'new' | 'other';
 export function historyBucket(candidate: Candidate, history: QuizHistory, now: number): HistoryBucket {
   const record = history.skills?.[candidate.skillKey];

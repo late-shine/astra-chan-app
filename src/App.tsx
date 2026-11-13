@@ -153,10 +153,11 @@ import ProfileScreen from "./components/ProfileScreen";
 import ReviewDeckScreen from "./components/ReviewDeckScreen";
 import OnlineMultiplayerScreen from "./components/OnlineMultiplayerScreen";
 import { useSRS } from "./hooks/useSRS";
-import { mergeSrsCards, mergeSrsSettings, normalizeSrsCards, normalizeSrsSettings } from "./srsScheduler";
+import { formatSessionLine, formatWaitingLine, mergeSrsCards, mergeSrsSettings, normalizeSrsCards, normalizeSrsSettings } from "./srsScheduler";
 import { hasProgress, mergeTips, sanitizeTips, TIP_IDS, type TipId } from "./tips";
 import { SCREEN_SETTLE_MS, SCREEN_VARIANTS, SCREEN_VARIANTS_REDUCED } from "./screenMotion";
 import wonderingImg from "./assets/images/astra-wondering.jpeg";
+import deepAfkImg from "./assets/images/astra-deep-afk.png";
 import excitedImg from "./assets/images/astra-excited.png.jpeg";
 import bgMistySakura from "./assets/images/bg_misty_sakura.jpg";
 import bgSakuraTrain from "./assets/images/bg_sakura_train.jpg";
@@ -463,6 +464,8 @@ export default function App() {
   // Tab & Learning Desk Navigation states
   const [activeHubTab, setActiveHubTab] = useState<"learn" | "practice">("learn");
   const [showStudyRoom, setShowStudyRoom] = useState(true);
+  const atelierHome = currentScreen === "menu" && !showStudyRoom && activeHubTab === "practice";
+  const atelierScreen = studioQuiz || atelierHome;
   const [subLearnTab, setSubLearnTab] = useState<"hiragana" | "katakana" | "kanji" | "vocabulary">("hiragana");
   const [selectedLearnChar, setSelectedLearnChar] = useState<HiraganaItem | KatakanaItem | null>(null);
 
@@ -1238,15 +1241,12 @@ export default function App() {
     cloud: isAccountUser, storage: quizBrowserStorage, bridge: quizBridge, isCurrentOwner: isCurrentQuizOwner,
   });
   const quizHistory = useMemo(() => quizHistoryFromStats(stats), [stats.quizSkills, stats.characterProgress]);
-  const openKanaPractice = (launch: KanaLaunch) => {
-    setKanaLaunch(launch);
-    setShowProfilePanel(false);
-    setCurrentScreen("quiz");
+  const enterQuiz = (subject: "kana" | "vocab" | "kanji") => {
+    setKanaLaunch("resume"); setShowProfilePanel(false);
+    setCurrentScreen(subject === "vocab" ? "vocab-quiz" : subject === "kanji" ? "kanji-quiz" : "quiz");
   };
-  const openVocabPractice = () => { setKanaLaunch("customize"); setShowProfilePanel(false); setCurrentScreen("vocab-quiz"); };
-  const openKanjiPractice = () => { setKanaLaunch("customize"); setShowProfilePanel(false); setCurrentScreen("kanji-quiz"); };
   const soloRequestedSubject = currentScreen === "vocab-quiz" ? "vocab" : currentScreen === "kanji-quiz" ? "kanji" : "kana";
-  const soloDraftSubject = quizSession.state.phase !== "idle" ? quizSession.state.config.subject : soloRequestedSubject;
+  const soloDraftSubject = quizSession.state.phase !== "idle" ? quizSession.state.config.subject : atelierHome ? quizPreferences.quizSubject : soloRequestedSubject;
   const openQuizResume = () => { setKanaLaunch("resume"); setShowProfilePanel(false); setCurrentScreen(quizSession.state.phase !== "idle" && quizSession.state.config.subject === "vocab" ? "vocab-quiz" : quizSession.state.phase !== "idle" && quizSession.state.config.subject === "kanji" ? "kanji-quiz" : "quiz"); };
   const studiedQuizKanji = useMemo(() => KANJI_DATA.filter(item => (stats.characterProgress[item.kanji]?.total ?? 0) > 0).map(item => item.kanji), [stats.characterProgress]);
   const learnedQuizWords = useMemo(() => Object.keys(stats.vocabularyProgress).filter(word => stats.vocabularyProgress[word]), [stats.vocabularyProgress]);
@@ -2274,7 +2274,7 @@ export default function App() {
   const idleIntervalRef    = useRef<ReturnType<typeof setInterval> | null>(null);
   const excitedTimeoutRef  = useRef<ReturnType<typeof setTimeout>  | null>(null);
   // Stores the mood that was active before going idle, so we can restore it on return
-  const prevMoodRef        = useRef<"welcome" | "streak" | "success" | "failure" | "kanji" | "idle" | "clicked" | "learn-flashcard" | "learn-vocabs" | "survival-danger" | "wondering" | "afk" | "excited">("welcome");
+  const prevMoodRef        = useRef<typeof mascotMood>("welcome");
   // Stable refs so the effect below never needs to re-run due to state changes
   const mascotMoodRef      = useRef(mascotMood);
   const currentScreenRef   = useRef(currentScreen);
@@ -2285,6 +2285,13 @@ export default function App() {
   useEffect(() => { mascotMoodRef.current = mascotMood; },    [mascotMood]);
   useEffect(() => { currentScreenRef.current = currentScreen; }, [currentScreen]);
 
+  // Warm the deep-idle artwork during the 20-second wondering stage.
+  useEffect(() => {
+    if (mascotMood !== "wondering") return;
+    const image = new Image();
+    image.src = deepAfkImg;
+  }, [mascotMood]);
+
   // Idle/AFK detection — runs once on mount, reads everything via refs
   useEffect(() => {
     const QUIZ_SCREENS = ["quiz", "kanji-quiz", "vocab-quiz", "review-deck"];
@@ -2292,9 +2299,14 @@ export default function App() {
     // Helper: trigger "excited" return animation then restore prev mood
     const triggerExcitedReturn = () => {
       if (excitedTimeoutRef.current) clearTimeout(excitedTimeoutRef.current);
+      mascotMoodRef.current = "excited";
       setMascotMood("excited");
       excitedTimeoutRef.current = setTimeout(() => {
-        setMascotMood(prevMoodRef.current);
+        // Do not overwrite a newer screen-specific reaction.
+        if (mascotMoodRef.current === "excited") {
+          mascotMoodRef.current = prevMoodRef.current;
+          setMascotMood(prevMoodRef.current);
+        }
         excitedTimeoutRef.current = null;
       }, 4000);
     };
@@ -2304,16 +2316,18 @@ export default function App() {
       if (QUIZ_SCREENS.includes(currentScreenRef.current)) return;
       const curMood = mascotMoodRef.current;
 
-      if (elapsed >= 3 * 60 * 1000) {
-        // 3 minutes → AFK
+      if (elapsed >= 35 * 1000) {
+        // 35 seconds total → deep AFK (20 seconds after wondering)
         if (curMood !== "afk" && curMood !== "excited") {
           if (curMood !== "wondering") prevMoodRef.current = curMood;
+          mascotMoodRef.current = "afk";
           setMascotMood("afk");
         }
       } else if (elapsed >= 15 * 1000) {
         // 15 seconds → wondering
         if (curMood !== "wondering" && curMood !== "afk" && curMood !== "excited") {
           prevMoodRef.current = curMood;
+          mascotMoodRef.current = "wondering";
           setMascotMood("wondering");
         }
       }
@@ -2357,6 +2371,7 @@ export default function App() {
       }
     };
 
+    window.addEventListener("keydown",    handleInteraction);
     window.addEventListener("click",      handleInteraction);
     window.addEventListener("touchstart", handleInteraction);
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -2364,9 +2379,10 @@ export default function App() {
     // Interval still handles the case where the user is on the page but just not touching anything
     idleIntervalRef.current = setInterval(() => {
       applyIdleMood(Date.now() - lastInteractionRef.current);
-    }, 15_000);
+    }, 1_000); // check often enough to reach the 15s and 35s thresholds
 
     return () => {
+      window.removeEventListener("keydown",    handleInteraction);
       window.removeEventListener("click",      handleInteraction);
       window.removeEventListener("touchstart", handleInteraction);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
@@ -2697,6 +2713,7 @@ export default function App() {
   };
 
   const returnToPracticeHub = () => {
+    setShowStudyRoom(false);
     setActiveHubTab("practice");
     setCurrentScreen("menu");
   };
@@ -3405,7 +3422,7 @@ export default function App() {
 
   // Quiz-type screens: Atmosphere is hidden and the Music launcher is small and faded (a tap still opens the Music panel).
   const dockQuiet =
-    studioQuiz ||
+    atelierScreen ||
     currentScreen === "vocab-quiz" ||
     currentScreen === "kanji-quiz" ||
     currentScreen === "online-multiplayer" ||
@@ -3466,13 +3483,6 @@ export default function App() {
     setCurrentScreen,
     setCurrentKanjiIndex,
     openOnlineMultiplayer,
-    openKanaPractice, openVocabPractice, openKanjiPractice, openQuizResume,
-    kanaPreferences: quizPreferences,
-    quizResume: quizSession.state.phase !== "idle" ? {
-      title: quizSession.state.phase === "results" ? "View saved results" : `Resume ${soloSubjectLabel(quizSession.state.config.subject).toLowerCase()} practice`,
-      description: quizSession.state.phase === "results" ? `Review your last ${soloSubjectLabel(quizSession.state.config.subject).toLowerCase()} round` : quizSession.state.config.origin === "survival"
-        ? `Kana · Survival question ${quizSession.state.index + 1}` : `${soloSubjectLabel(quizSession.state.config.subject)} · Question ${quizSession.state.index + 1} of ${quizSession.state.questions.length}`,
-    } : undefined,
     showStudyRoom,
     setShowStudyRoom,
     activeHubTab,
@@ -3712,7 +3722,7 @@ export default function App() {
   };
   // ──── RENDER ───────────────────────────────────────────────────────────────
   return (
-    <div className={studioQuiz ? "relative w-full bg-natural-bg" : "min-h-screen text-natural-charcoal font-sans overflow-x-hidden flex flex-col justify-between py-2 px-4 relative bg-natural-bg transition-colors duration-300"}>
+    <div className={atelierScreen ? "relative w-full bg-natural-bg" : "min-h-screen text-natural-charcoal font-sans overflow-x-hidden flex flex-col justify-between py-2 px-4 relative bg-natural-bg transition-colors duration-300"}>
       <input
         ref={progressUploadInputRef}
         type="file"
@@ -3728,7 +3738,7 @@ export default function App() {
         className="hidden"
       />
       {/* ===== FIXED MULTI-SCENE BACKGROUNDS (position:fixed prevents twitching on clicks) ===== */}
-      {!studioQuiz && <>
+      {!atelierScreen && <>
       <motion.div className="fixed inset-0 pointer-events-none select-none z-0 overflow-hidden" style={{ x: bgParallaxX, y: bgParallaxY, scale: 1.05 }}>
         {/* Scene 0 — Misty Sakura Path */}
         <div
@@ -3837,7 +3847,7 @@ export default function App() {
 
       {/* Incoming Invites Dropdown */}
       <AnimatePresence>
-        {!studioQuiz && incomingInvites.length > 0 && (
+        {!atelierScreen && incomingInvites.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -3885,10 +3895,10 @@ export default function App() {
       </AnimatePresence>
 
       {/* MAIN LAYOUT WRAPPER */}
-      <div className={studioQuiz ? "relative z-10 w-full" : `w-full ${(currentScreen === "charts" || currentScreen === "sandbox" || currentScreen === "grammar-dojo" || currentScreen === "reading-room") ? "max-w-5xl px-2 sm:px-4" : "max-w-4xl"} mx-auto flex-grow flex flex-col z-10 relative`} style={studioQuiz ? undefined : { paddingBottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" }}>
+      <div className={atelierScreen ? "relative z-10 w-full" : `w-full ${(currentScreen === "charts" || currentScreen === "sandbox" || currentScreen === "grammar-dojo" || currentScreen === "reading-room") ? "max-w-5xl px-2 sm:px-4" : "max-w-4xl"} mx-auto flex-grow flex flex-col z-10 relative`} style={atelierScreen ? undefined : { paddingBottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" }}>
 
         {/* APP HEADER */}
-        {!studioQuiz && <header className="flex flex-col sm:flex-row items-center justify-between gap-4 py-3 border-b border-natural-border/60 mb-4">
+        {!atelierScreen && <header className="flex flex-col sm:flex-row items-center justify-between gap-4 py-3 border-b border-natural-border/60 mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 border border-natural-border rounded-xl bg-natural-card shadow-sm">
               <span className="text-xl font-bold font-serif text-natural-forest tracking-wider">あ</span>
@@ -4329,7 +4339,7 @@ export default function App() {
           aria-label={SCREEN_TITLES[currentScreen] ?? "Screen"}
           tabIndex={-1}
           className="flex-grow flex flex-col justify-center outline-none"
-          variants={prefersReducedMotion || studioQuiz ? SCREEN_VARIANTS_REDUCED : SCREEN_VARIANTS}
+          variants={prefersReducedMotion || atelierScreen ? SCREEN_VARIANTS_REDUCED : SCREEN_VARIANTS}
           initial="enter"
           animate="center"
           exit="exit"
@@ -4348,10 +4358,20 @@ export default function App() {
         >
 
           {/* ================= SCREEN 1: MENU ================= */}
-          {currentScreen === "menu" && <MenuScreen {...menuScreenProps} />}
+          {currentScreen === "menu" && !atelierHome && <MenuScreen {...menuScreenProps} />}
 
           {/* ================= SCREEN 2: ACTIVE QUIZ WORKSPACE ================= */}
-          {studioQuiz && <QuizFlow subject={soloRequestedSubject} learnedWords={learnedQuizWords} studiedKanji={studiedQuizKanji} speechEnabled={quizCompanionSpeech} onSpeechChange={setQuizCompanionSpeech} owner={progressOwner} controller={quizSession} ready={quizReady}
+          {atelierScreen && <QuizFlow home={atelierHome} onEnterSession={enterQuiz} onResume={openQuizResume}
+            onStudyRoom={() => {setShowStudyRoom(true);setCurrentScreen("menu");}}
+            onFriend={openOnlineMultiplayer}
+            reviewDeck={{title:"Review Deck",detail:totalCount === 0 ? "No cards yet — add missed items after practice." : [formatSessionLine(sessionSummary) ?? "Done for today",formatWaitingLine(sessionSummary)].filter(Boolean).join(" · "),badge:sessionSummary.total ? `${sessionSummary.total} today` : totalCount ? "Done" : "0"}}
+            reviewDue={sessionSummary.total} dailyNewCap={normalizeSrsSettings(stats.srsSettings).dailyNewCap}
+            hasReviewCard={hasCard} onAddReviewCard={(key,type) => {
+              if (!progressOwner || !isCurrentQuizOwner(progressOwner) || !quizReady || hasCard(key,type)) return false;
+              addCard(key,type); return true;
+            }}
+            onOpenReviewDeck={() => {setSrsQueue(getSessionQueue());setSrsQueueIndex(0);setSrsRevealed(false);setCurrentScreen("review-deck");}}
+            subject={atelierHome ? quizPreferences.quizSubject : soloRequestedSubject} learnedWords={learnedQuizWords} studiedKanji={studiedQuizKanji} speechEnabled={quizCompanionSpeech} onSpeechChange={setQuizCompanionSpeech} owner={progressOwner} controller={quizSession} ready={quizReady}
             unavailable={statsHydrated && cloudStatsHydrated && !progressChanging && !quizReady}
             launch={currentScreen === "results" ? "resume" : kanaLaunch} catalogs={SOLO_CATALOGS} history={quizHistory}
             preferences={quizPreferences} onPreferenceChange={patch => setQuizPreferences(previous => ({ ...previous, ...patch }))}
@@ -4498,7 +4518,7 @@ export default function App() {
         />
 
         {/* FOOTER METRICS AND CREDITS */}
-        {!studioQuiz && <footer className="text-center py-4 border-t border-natural-border mt-6 relative select-none">
+        {!atelierScreen && <footer className="text-center py-4 border-t border-natural-border mt-6 relative select-none">
           <p className="text-xs text-natural-forest-light font-serif italic mb-1">
             Keep studying — every character brings you closer to fluency. 🌸
           </p>

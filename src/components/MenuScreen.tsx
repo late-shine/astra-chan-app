@@ -30,13 +30,12 @@ import {
 
 import { HIRAGANA_DATA, KATAKANA_DATA, KANJI_DATA, VOCABULARY_DATA } from "../data";
 import { HiraganaItem, KatakanaItem, StudentStats, SRSCard } from "../types";
-import type { KanaLaunch } from "./quiz/QuizFlow";
-import { quizKanaStages, type QuizPreferences } from "../quiz/preferences";
 import { VOCAB_CATEGORY_META, countVocabularyByCategory } from "../vocab/vocabCategories";
 import { formatSessionLine, formatWaitingLine, type SessionSummary } from "../srsScheduler";
 import { isKanjiQueryActive, searchKanji } from "../kanjiSearch";
 import { SCREEN_VARIANTS, SCREEN_VARIANTS_REDUCED } from "../screenMotion";
 import wonderingImg from "../assets/images/astra-wondering.jpeg";
+import deepAfkImg from "../assets/images/astra-deep-afk.png";
 import excitedImg from "../assets/images/astra-excited.png.jpeg";
 import companionImg from "../assets/images/synthid-removed-Gemini_Generated_Image_csh1tcsh1tcsh1tc.png";
 import astraReadingImg from "../assets/images/Astra-reading.png";
@@ -159,13 +158,7 @@ interface MenuScreenProps {
   // Navigation
   setCurrentScreen: React.Dispatch<React.SetStateAction<ScreenType>>;
   setCurrentKanjiIndex: React.Dispatch<React.SetStateAction<number>>;
-  openVocabPractice: () => void;
-  openQuizResume: () => void;
-  openKanjiPractice: () => void;
   openOnlineMultiplayer: () => void;
-  openKanaPractice: (launch: KanaLaunch) => void;
-  kanaPreferences: QuizPreferences;
-  quizResume?: { title: string; description: string };
 
   // Study room / hub tab state
   showStudyRoom: boolean;
@@ -264,68 +257,11 @@ function shortQuery(query: string): string {
   return q.length > 30 ? `${q.slice(0, 30)}…` : q;
 }
 
-// ─── C6: Practice hub helpers ─────────────────────────────────────────────
-// Presentation only. Every value below mirrors a label that already existed in the hub; nothing here touches scoring, timers or pools.
-
-// Same visible focus ring as the C2 search controls (a theme token, so it reads in all six themes).
-const PRACTICE_FOCUS_RING = SEARCH_FOCUS_RING;
-const PRACTICE_LEGEND = "text-xs font-semibold text-natural-forest-light mb-2";
-
-const KANA_SCRIPT_LABELS = { hiragana: "Hiragana", katakana: "Katakana", both: "Both scripts" };
-const KANA_STAGE_LABELS = { basic: "Core", dakuon: "Dakuten", handakuon: "Handakuten", yoon: "Yoon" };
-const KANA_KIND_LABELS = { read: "Read", pick: "Pick", type: "Type", mixed: "Mixed" };
-
-interface PracticeLauncherProps {
-  id: string;
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-  tag?: { text: string; tone: "start" | "challenge" };
-  onClick: () => void;
-}
-
-/** A launcher card. Every launcher keeps the `id` it had before C6. Hover lift only when motion is allowed. */
-function PracticeLauncher({ id, title, description, icon, tag, onClick }: PracticeLauncherProps) {
-  return (
-    <button
-      type="button"
-      id={id}
-      onClick={onClick}
-      className={`w-full text-left min-h-[44px] px-4 py-3.5 rounded-2xl bg-natural-card border border-natural-border/70 hover:border-natural-forest motion-safe:hover:-translate-y-0.5 duration-300 transition flex items-center justify-between gap-3 shadow-sm cursor-pointer ${PRACTICE_FOCUS_RING}`}
-    >
-      <span className="min-w-0">
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-natural-forest font-serif text-base font-bold">{title}</span>
-          {tag && (
-            <span
-              className={`px-2 py-0.5 rounded-full text-[11px] font-bold leading-none ${tag.tone === "start"
-                ? "bg-natural-forest text-natural-bg"
-                : "bg-natural-terracotta/10 text-natural-terracotta border border-natural-terracotta/30"
-                }`}
-            >
-              {tag.text}
-            </span>
-          )}
-        </span>
-        <span className="block text-xs text-natural-charcoal/70 mt-0.5">{description}</span>
-      </span>
-      <span className="shrink-0" aria-hidden="true">
-        {icon}
-      </span>
-    </button>
-  );
-}
-
 export default function MenuScreen(props: MenuScreenProps) {
   const {
     setCurrentScreen,
     setCurrentKanjiIndex,
-    openVocabPractice, openQuizResume,
-    openKanjiPractice,
     openOnlineMultiplayer,
-    openKanaPractice,
-    kanaPreferences,
-    quizResume,
     showStudyRoom,
     setShowStudyRoom,
     activeHubTab,
@@ -417,11 +353,6 @@ export default function MenuScreen(props: MenuScreenProps) {
   const sessionToDo = sessionSummary.total;
   const reduceMotion = useReducedMotion();
 
-  // ── C6: Practice hub. The disclosure is local UI state (closed on every visit); the settings themselves stay in App. ──
-  const kanaSummary = [KANA_SCRIPT_LABELS[kanaPreferences.quizKanaScript],
-    quizKanaStages(kanaPreferences.quizKanaStagesMask).map(stage => KANA_STAGE_LABELS[stage]).join(" + "),
-    KANA_KIND_LABELS[kanaPreferences.quizKanaKind], kanaPreferences.quizLength === "all" ? "All eligible characters" : `${kanaPreferences.quizLength} questions`, "Untimed"].join(" / ");
-
   return (
             // C3b: the Study Room and the Bookshelf / Writing Desk hub swap with the same soft fade
             // as the screens (keyed, wait mode). Nothing else about the layout changes.
@@ -492,7 +423,9 @@ export default function MenuScreen(props: MenuScreenProps) {
                           src={
                             mascotMood === "reading"
                               ? astraReadingImg
-                              : mascotMood === "wondering" || mascotMood === "afk"
+                              : mascotMood === "afk"
+                              ? deepAfkImg
+                              : mascotMood === "wondering"
                               ? wonderingImg
                               : mascotMood === "excited"
                               ? excitedImg
@@ -1289,160 +1222,6 @@ export default function MenuScreen(props: MenuScreenProps) {
                 </div>
               )}
 
-              {/* ================= TAB CONTENT 2: PRACTICE HUB (QUIZ) =================
-                  Kana launchers first, followed by the Studio setup link and existing voice controls.
-                  Script and Stages stay visible; Timer, Answer choices and Voice sit behind "More options" (closed by default),
-                  and the summary line keeps the effective settings (including "Core only") on screen at all times. */}
-              {activeHubTab === "practice" && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                  {/* Launchers: the first thing a learner sees, on phones and on desktop */}
-                  <div className="flex flex-col gap-6 min-w-0">
-                      {quizResume && <PracticeLauncher id="action-quiz-resume" title={quizResume.title}
-                        description={quizResume.description} icon={<Play className="w-5 h-5 text-natural-forest" />}
-                        onClick={openQuizResume} />}
-
-                    <section aria-labelledby="practice-kana-heading" className="flex flex-col gap-3">
-                      <div>
-                        <h3 id="practice-kana-heading" className="font-serif text-lg text-natural-forest font-bold tracking-wide">
-                          Kana quiz
-                        </h3>
-                        <p className="text-xs text-natural-charcoal/70 mt-0.5">Practice in the kana Studio.</p>
-                      </div>
-
-                      <PracticeLauncher
-                        id="action-quiz-choice"
-                        title="Start kana practice"
-                        description="Start an untimed round with your saved settings"
-                        tag={{ text: "Start here", tone: "start" }}
-                        icon={<Play className="w-5 h-5 text-natural-forest" />}
-                        onClick={() => openKanaPractice("practice")}
-                      />
-                      <PracticeLauncher
-                        id="action-quiz-romaji"
-                        title="Type the Answer"
-                        description="Spell out the romaji on your keyboard"
-                        icon={<PenTool className="w-5 h-5 text-natural-forest" />}
-                        onClick={() => openKanaPractice("typed")}
-                      />
-                      <PracticeLauncher id="action-kana-timed" title="Timed practice"
-                        description="Choose 12, 6 or 3 seconds per question" icon={<Play className="w-5 h-5 text-natural-forest" />}
-                        onClick={() => openKanaPractice("timed")} />
-                      <PracticeLauncher
-                        id="action-survival"
-                        title="Survival Mode"
-                        description="Race the clock — wrong answers cost time!"
-                        tag={{ text: "Challenge", tone: "challenge" }}
-                        icon={<Flame className="w-5 h-5 text-natural-terracotta" />}
-                        onClick={() => openKanaPractice("survival")}
-                      />
-                    </section>
-
-                    <section aria-labelledby="practice-also-heading" className="flex flex-col gap-3">
-                      <div>
-                        <h3 id="practice-also-heading" className="font-serif text-lg text-natural-forest font-bold tracking-wide">
-                          Also practice
-                        </h3>
-                        <p className="text-xs text-natural-charcoal/70 mt-0.5">Words and kanji have their own question types and pools.</p>
-                      </div>
-
-                      <PracticeLauncher
-                        id="action-vocab-quiz"
-                        title="Vocabulary Quiz"
-                        description="Practice meanings, readings and reverse recognition"
-                        icon={<Award className="w-5 h-5 text-natural-clay" />}
-                        onClick={openVocabPractice}
-                      />
-                      <PracticeLauncher
-                        id="action-kanji-quiz"
-                        title="Kanji Quiz"
-                        description="Practice meanings, on’yomi, kun’yomi and curated words"
-                        icon={<BookMarked className="w-5 h-5 text-natural-forest" />}
-                        onClick={openKanjiPractice}
-                      />
-                      <PracticeLauncher
-                        id="action-online-duel"
-                        title="Speed Duel"
-                        description="Race a friend online — first correct wins!"
-                        icon={<Globe className="w-5 h-5 text-natural-forest" />}
-                        onClick={openOnlineMultiplayer}
-                      />
-                    </section>
-                  </div>
-
-                  {/* Kana quiz settings: after the launchers in the DOM, beside them on desktop */}
-                  <section
-                    aria-labelledby="practice-kana-settings-heading"
-                    className="min-w-0 flex flex-col gap-4 bg-natural-card border border-natural-border/70 p-5 rounded-3xl shadow-sm"
-                  >
-                    <div>
-                      <h3 id="practice-kana-settings-heading" className="font-serif text-lg text-natural-forest font-bold tracking-wide">
-                        Kana quiz settings
-                      </h3>
-                      <p className="text-xs text-natural-charcoal/70 mt-0.5">
-                        Customize your script, question type and round length in the Studio.
-                      </p>
-                    </div>
-
-                    {/* Always visible: what the next kana quiz will use (the default stage set is Core only) */}
-                    <p
-                      id="practice-kana-summary"
-                      className="bg-natural-bg/60 border border-natural-border/60 rounded-xl px-3 py-2 text-xs font-mono font-bold text-natural-forest leading-relaxed"
-                    >
-                      <span className="sr-only">Current settings: </span>
-                      {kanaSummary}
-                    </p>
-
-                    <button type="button" onClick={() => openKanaPractice("customize")}
-                      className={`min-h-[44px] rounded-xl border border-natural-border/70 px-3 py-2 text-sm font-bold text-natural-forest hover:border-natural-forest ${PRACTICE_FOCUS_RING}`}>
-                      Customize kana practice
-                    </button>
-                    <fieldset className="min-w-0">
-                      <legend className={PRACTICE_LEGEND}>Voice</legend>
-                      <div className="flex flex-col gap-3 bg-natural-bg/50 border border-natural-border rounded-xl p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex flex-col gap-0.5">
-                            <span className="text-sm font-semibold text-natural-forest"><span aria-hidden="true">🔊 </span>Auto-pronounce in quiz</span>
-                            <span className="text-[11px] text-natural-forest-light leading-snug">
-                              Speaks Japanese after you answer.
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            aria-pressed={autoPronounce}
-                            aria-label="Auto-pronounce in quiz"
-                            onClick={() => setAutoPronounce(!autoPronounce)}
-                            className={`shrink-0 min-h-[44px] px-3 rounded-xl text-xs font-mono font-bold tracking-wider transition cursor-pointer ${PRACTICE_FOCUS_RING} ${autoPronounce
-                              ? "bg-natural-forest text-natural-bg"
-                              : "bg-natural-card border border-natural-border text-natural-forest hover:border-natural-forest"
-                              }`}
-                          >
-                            {autoPronounce ? "On (auto-play)" : "Off (silent)"}
-                          </button>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <label htmlFor="practice-voice-select" className="text-[11px] font-semibold text-natural-forest-light">
-                            Japanese voice
-                          </label>
-                          <select
-                            id="practice-voice-select"
-                            value={selectedJapaneseVoiceURI}
-                            onChange={(e) => handleSelectJapaneseVoice(e.target.value)}
-                            disabled={availableJapaneseVoices.length === 0}
-                            className={`w-full min-h-[44px] bg-natural-card border border-natural-border/80 text-natural-forest text-xs font-bold font-serif px-2.5 py-1.5 rounded-xl cursor-pointer transition disabled:opacity-50 ${PRACTICE_FOCUS_RING}`}
-                          >
-                            <option value="">{availableJapaneseVoices.length ? "Default voice" : "Default voice only"}</option>
-                            {availableJapaneseVoices.map((voice) => (
-                              <option key={voice.voiceURI} value={voice.voiceURI}>
-                                {voice.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                    </fieldset>
-                  </section>
-                </div>
-              )}
                 </>
               )}
             </motion.div>

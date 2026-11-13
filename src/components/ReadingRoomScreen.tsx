@@ -18,6 +18,7 @@ import { getPassageText, SEED_READING_PASSAGES, type ReadingPassage, type Readin
 import astraReadingImg from "../assets/images/Astra-reading.png";
 import astraReadingClickedImg from "../assets/images/Astra-reading-clicked.png";
 import wonderingImg from "../assets/images/astra-wondering.jpeg";
+import deepAfkImg from "../assets/images/astra-deep-afk.png";
 import excitedImg from "../assets/images/astra-excited.png.jpeg";
 
 interface ReadingRoomScreenProps {
@@ -195,7 +196,8 @@ export default function ReadingRoomScreen({
   // Resolve Large Astra illustration
   const largeAstraImg = useMemo(() => {
     if (mascotMood === "clicked") return astraReadingClickedImg;
-    if (mascotMood === "wondering" || mascotMood === "afk") return wonderingImg;
+    if (mascotMood === "afk") return deepAfkImg;
+    if (mascotMood === "wondering") return wonderingImg;
     if (mascotMood === "excited") return excitedImg;
     return astraReadingImg;
   }, [mascotMood]);

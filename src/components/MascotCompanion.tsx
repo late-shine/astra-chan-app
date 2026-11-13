@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { motion } from "motion/react";
 import companionImg from "../assets/images/synthid-removed-Gemini_Generated_Image_csh1tcsh1tcsh1tc.png";
 import wonderingImg from "../assets/images/astra-wondering.jpeg";
+import deepAfkImg from "../assets/images/astra-deep-afk.png";
 import excitedImg from "../assets/images/astra-excited.png.jpeg";
 import bgCatSakura from "../assets/images/bg_cat_sakura.jpg";
 import { Sparkles, Heart } from "lucide-react";
@@ -40,7 +41,8 @@ export default function MascotCompanion({
   const currentImage = useMemo(() => {
     if (mood === "clicked" && readingRoomActive && readingClickedImage) return readingClickedImage;
     if (mood === "reading" && readingImage) return readingImage;
-    if (mood === "wondering" || mood === "afk") return wonderingImg;
+    if (mood === "afk") return deepAfkImg;
+    if (mood === "wondering") return wonderingImg;
     if (mood === "excited") return excitedImg;
     return companionImg;
   }, [mood, readingImage, readingClickedImage, readingRoomActive]);

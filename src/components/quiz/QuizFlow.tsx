@@ -1,4 +1,6 @@
 import { soloQuestionModel, soloFeedbackModel, soloSpeechText } from "../../quiz/soloViews";
+import { recommend, remainingQuestions, repairQuestions, reviewChoices, reviewBatch, reviewAddedCopy } from "../../quiz/recommend";
+import { PracticeHome } from "./PracticeHome";
 import { VOCAB_CATEGORY_META } from "../../vocab/vocabCategories";
 import { vocabularyId } from "../../quiz/content/vocabulary";
 import { createContextCandidates } from "../../quiz/content/context";
@@ -12,7 +14,7 @@ import { QUIZ_LENGTH_OPTIONS, quizBuildLength, quizKanaStages, type QuizPreferen
 import { seededRandom } from "../../quiz/random";
 import { summarize } from "../../quiz/summary";
 import { SESSION_LIMITS, type ActiveSession, type AnswerRecord, type BuildConfig, type Catalogs, type ChallengeTier,
-  type QuizHistory, type Response } from "../../quiz/types";
+  type QuizHistory, type Response, type DeckTarget } from "../../quiz/types";
 import { quizClock, quizDeviceId, type QuizSessionController } from "../../quiz/useQuizSession";
 import { QuizFeedback } from "./QuizFeedback";
 import { LeavePracticeSheet, QuizPlayer } from "./QuizPlayer";
@@ -26,6 +28,17 @@ type KanaMode = "practice" | "timed" | "survival";
 type KanaKind = QuizPreferences["quizKanaKind"];
 
 interface Props {
+  home?: boolean;
+  onEnterSession?: (subject: SoloSubject) => void;
+  onResume?: () => void;
+  onStudyRoom?: () => void;
+  onFriend?: () => void;
+  reviewDeck?: {title:string;detail:string;badge:string};
+  reviewDue?: number;
+  dailyNewCap?: number;
+  hasReviewCard?: (key:string,type:DeckTarget['type']) => boolean;
+  onAddReviewCard?: (key:string,type:DeckTarget['type']) => boolean;
+  onOpenReviewDeck?: () => void;
   subject?: SoloSubject;
   learnedWords?: readonly string[];
   studiedKanji?: readonly string[];
@@ -81,25 +94,25 @@ function answerFor(state: ActiveSession): AnswerRecord | undefined {
 }
 
 
-function resultsModel(state: ActiveSession, streak: number, cloudPending: boolean): QuizResultsView {
-  const summary = summarize(state);
+function resultsModel(state: ActiveSession, streak: number, cloudPending: boolean, original: ActiveSession | null = null, repairs: readonly ActiveSession[] = []): QuizResultsView {
+  const summary = original ? summarize(original,repairs) : summarize(state);
   const { firstPass, survival, xp } = summary;
-  const missed = summary.misses.flatMap(miss => {
-    const question = state.questions.find(row => row.skillKey === miss.skillKey);
-    const record = state.records.find((row): row is AnswerRecord => row.type === "answer" && row.questionId === miss.questionId);
-    if (!question || !record) return [];
-    return [{ id: miss.skillKey, prompt: miss.face, promptJa: question.kind !== "vocab-reverse" && question.kind !== "kana-pick", promptSize: question.subject === "vocab" || question.kind === "kanji-word" || question.kind === "kana-pick" ? "word" as const : "glyph" as const,
+  const missed = remainingQuestions(original ?? state, original ? repairs : []).map(question => {
+    const record = [...state.records,...(original?.records ?? [])].find((row): row is AnswerRecord => row.type === "answer" && row.skillKey === question.skillKey);
+    return { id: question.skillKey, prompt: question.face, promptJa: question.kind !== "vocab-reverse" && question.kind !== "kana-pick", promptSize: question.subject === "vocab" || question.kind === "kanji-word" || question.kind === "kana-pick" ? "word" as const : "glyph" as const,
       correctAnswer: question.reveal.answer,
-      yourAnswer: record.outcome === "timeout" ? "Time ran out" : record.typedValue ?? question.choices?.find(row => row.id === record.responseId)?.label ?? "No response" }];
+      yourAnswer: record?.outcome === "timeout" ? "Time ran out" : record?.typedValue ?? question.choices?.find(row => row.id === record?.responseId)?.label ?? "Not answered in this repair" };
   });
-  return { headline: survival ? `${survival.score} correct in Survival` : firstPass.attempted ? `${firstPass.correct} of ${firstPass.attempted} correct first try` : "No answers recorded",
-    percentLabel: firstPass.accuracy === null ? "Ready for another round when you are." : `${Math.round(firstPass.accuracy * 100)}% first-try accuracy`,
+  const standaloneRepair = state.config.origin === "repair" && !original;
+  return { headline: standaloneRepair ? "Repair round" : survival ? `${survival.score} correct in Survival` : firstPass.attempted ? `${firstPass.correct} of ${firstPass.attempted} correct first try` : "No answers recorded",
+    percentLabel: standaloneRepair ? "Your original first-try accuracy is unchanged." : firstPass.accuracy === null ? "Ready for another round when you are." : `${Math.round(firstPass.accuracy * 100)}% first-try accuracy`,
+    repairLine: state.config.origin === "repair" ? `${original ? summary.repair.correctedMisses : summary.repair.correct} corrected in ${original ? "repair rounds" : "the repair round"}.` : undefined,
     contextLabel: `${soloSubjectLabel(state.config.subject)} · ${modeName(state.config.origin)}`, detail: survival ? `Personal best · ${survival.best}` : summary.partial ? `Partial round · ${summary.unattempted} unanswered` : undefined,
     xpLines: [{ label: "Answer XP", value: `+${xp.base}` }, { label: "Challenge bonus", value: `+${xp.challenge}` }, { label: "Completion bonus", value: `+${xp.completion}` }],
     xpTotal: `+${xp.total} XP`, streakLine: streak && firstPass.attempted ? `${streak}-day study streak` : undefined,
     saveLabel: state.pending ? `${xp.durablyAcknowledged} XP saved on this device. Other progress is pending.` : summary.recordSaveStatus === "acknowledged"
       ? cloudPending ? "Saved on this device. Cloud sync is pending." : "Saved on this device." : undefined,
-    missed, primaryLabel: "Try another round",
+    missed, primaryLabel: missed.length ? "Practice your misses" : "Try another round",
     encouragement: firstPass.accuracy === 1 ? "Ready for a different question type?" : undefined };
 }
 
@@ -132,20 +145,21 @@ function useKeyboardViewport(input: RefObject<HTMLInputElement | null>, typed: b
   return typed ? frame : undefined;
 }
 
-export function QuizFlow({ subject: requestedSubject = "kana", learnedWords = NO_LEARNED, studiedKanji = NO_LEARNED, speechEnabled, onSpeechChange, owner, controller, ready, unavailable, launch, catalogs, history, preferences, onPreferenceChange, onReadCustom, onSaveCustom, previousBest,
+export function QuizFlow({ home = false, onEnterSession, onResume, onStudyRoom, onFriend, reviewDeck, reviewDue = 0, dailyNewCap = 0, hasReviewCard, onAddReviewCard, onOpenReviewDeck,
+  subject: requestedSubject = "kana", learnedWords = NO_LEARNED, studiedKanji = NO_LEARNED, speechEnabled, onSpeechChange, owner, controller, ready, unavailable, launch, catalogs, history, preferences, onPreferenceChange, onReadCustom, onSaveCustom, previousBest,
   streak, cloudPending, autoPronounce, exampleFor, speak, chime, onBack, onProfile }: Props) {
   const { state, dispatch, recoveryError, otherTab } = controller;
   const active = state.phase !== "idle" ? state : null;
-  const subject: SoloSubject = active?.config.subject ?? requestedSubject;
+  const subject: SoloSubject = home ? requestedSubject : active?.config.subject ?? requestedSubject;
   const words = subject === "vocab";
   const kanji = subject === "kanji";
   const kana = subject === "kana";
   const subjectLabel = soloSubjectLabel(subject);
   const [companionPause, setCompanionPause] = useState(0);
-  const companion = useQuizCompanion(owner, active, !ready || otherTab || unavailable || !!recoveryError || active?.pending?.status === "failed", !speechEnabled, companionPause);
+  const companion = useQuizCompanion(owner, home ? null : active, !ready || otherTab || unavailable || !!recoveryError || active?.pending?.status === "failed", !speechEnabled, companionPause);
   const [mode, setMode] = useState<KanaMode>(launch === "timed" ? "timed" : launch === "survival" ? "survival" : "practice");
   const [kindOverride, setKindOverride] = useState<string | null>(launch === "typed" ? "type" : null);
-  const [setup, setSetup] = useState(launch === "customize" || launch === "timed" || requestedSubject !== "kana");
+  const [setup, setSetup] = useState(!home && (launch === "customize" || launch === "timed" || requestedSubject !== "kana"));
   const [exit, setExit] = useState(false);
   const [whyFor, setWhyFor] = useState<string>();
   const [message, setMessage] = useState<string>();
@@ -162,11 +176,16 @@ export function QuizFlow({ subject: requestedSubject = "kana", learnedWords = NO
   const inputSource = useRef<string | undefined>(undefined);
   const latestAnswer = active ? answerFor(active) : undefined;
   const heard = useRef(latestAnswer?.questionId);
+  const repairBase = useRef<ActiveSession | null>(null);
+  const repairHistory = useRef<ActiveSession[]>([]);
+  const addedCards = useRef(new Set<string>());
+  const growthOwner = useRef(owner);
+  if(growthOwner.current!==owner){growthOwner.current=owner;repairBase.current=null;repairHistory.current=[];addedCards.current.clear();}
   const kind = words ? preferences.quizVocabKind : kanji ? preferences.quizKanjiKind : mode === "survival" && (kindOverride ?? preferences.quizKanaKind) === "type" ? "read" : kindOverride ?? preferences.quizKanaKind;
   const configFor = (prefs: QuizPreferences, m: KanaMode, k: string, ids: readonly string[] | undefined, id: string, now: number) => soloConfig(prefs, subject, m, k, ids, learnedWords, id, now, studiedKanji);
   const frame = useKeyboardViewport(inputRef, active?.current.responseType === "typed" && (active.phase === "asking" || active.phase === "feedback" || active.phase === "committing"));
-  const preflight = useMemo(() => state.phase === "idle" ? getEligibility(catalogs, configFor(preferences, mode, kind, custom ?? undefined, "kana-setup", 0)) : null,
-    [catalogs, state.phase, preferences, mode, kind, custom, subject, learnedWords, studiedKanji]);
+  const preflight = useMemo(() => state.phase === "idle" || home ? getEligibility(catalogs, configFor(preferences, mode, kind, custom ?? undefined, "kana-setup", 0)) : null,
+    [catalogs, state.phase, home, preferences, mode, kind, custom, subject, learnedWords, studiedKanji]);
   const curatedItems = useMemo(() => kanji ? createContextCandidates(catalogs).candidates.map(item => ({id:item.itemId,glyph:`${item.face} · ${item.reveal.reading} · ${item.reveal.meaning}`})) : [], [catalogs, kanji]);
   // Pool counts depend on kind/filters, not question quantity or auto-next settings.
   const kanjiPoolOptions = useMemo(() => {
@@ -180,7 +199,7 @@ export function QuizFlow({ subject: requestedSubject = "kana", learnedWords = NO
   }, [catalogs, kanji, state.phase, kind, studiedKanji, custom]);
 
   function start(acceptFallback: boolean, newMode = mode, newKind = kind, selected = custom) {
-    if (!ready || otherTab) return false;
+    if (!ready || otherTab || active && active.phase !== "results") return false;
     const clock = quizClock();
     const sessionId = quizDeviceId();
     const config = configFor(preferences, newMode, newKind, selected ?? undefined, sessionId, clock.epochMs);
@@ -189,39 +208,41 @@ export function QuizFlow({ subject: requestedSubject = "kana", learnedWords = NO
     const result = buildQuestions(catalogs, { ...config, acceptFourChoiceFallback: acceptFallback }, history, seededRandom(parseInt(sessionId.slice(0, 8), 16)));
     if (!result.questions.length) { setSetup(true); return false; }
     const started = dispatch({ type: "START", questions: result.questions, clock, config: { sessionId, subject, origin: newMode,
-      challenge: newMode === "timed" ? preferences.quizChallengeTier : "steady", autoNext: preferences.quizAutoNext,
+      challenge: newMode === "timed" ? !kana && preferences.quizChallengeTier === "lightning" ? "steady" : preferences.quizChallengeTier : "steady", autoNext: preferences.quizAutoNext,
       previousSurvivalBest: Number.isSafeInteger(previousBest) && previousBest >= 0 ? previousBest : 0, rewardVersion: 1 } });
-    if (started) { setSetup(false); setMessage(undefined); }
+    if (started) { repairBase.current=null;repairHistory.current=[];addedCards.current.clear();setSetup(false); setMessage(undefined); if(home) onEnterSession?.(subject); }
     return started;
   }
 
   useEffect(() => {
+    if (home) return;
     if (consumedLaunch.current || !ready) return;
     consumedLaunch.current = true;
     if (state.phase !== "idle" || otherTab || setup || launch === "resume") return;
     if (!preflight || (preferences.quizLength !== "all" && preflight.eligibleTargets < preferences.quizLength) || preflight.requiresFourChoiceAcknowledgement) setSetup(true);
     else start(false);
-  }, [ready, state.phase, otherTab, setup, launch, preflight, preferences.quizLength]);
+  }, [home, ready, state.phase, otherTab, setup, launch, preflight, preferences.quizLength]);
 
   const questionId = active?.current.id;
   useLayoutEffect(() => {
-    if (!questionId) return;
+    if (home || !questionId) return;
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
     const shouldFocusTypedInput = active?.current.responseType === "typed" && active.phase === "asking";
     if (focusNext.current || shouldFocusTypedInput) {
       focusNext.current = false;
       (inputRef.current ?? promptRef.current)?.focus({ preventScroll: true });
     }
-  }, [questionId, active?.phase === "paused", active?.current.responseType, active?.phase]);
+  }, [home, questionId, active?.phase === "paused", active?.current.responseType, active?.phase]);
 
   useEffect(() => {
+    if (home) return;
     if (!latestAnswer || heard.current === latestAnswer.questionId) return;
     heard.current = latestAnswer.questionId;
     if (document.visibilityState === "hidden" || !active || otherTab) return;
     chime(latestAnswer.outcome === "correct");
     const speech = soloSpeechText(active.current);
     if (autoPronounce && speech) speak(speech);
-  }, [latestAnswer, active, otherTab, chime, speak, autoPronounce]);
+  }, [home, latestAnswer, active, otherTab, chime, speak, autoPronounce]);
 
   const scope = () => active ? { sessionId: active.config.sessionId, questionId: active.current.id, clock: quizClock() } : null;
   const nextInput = () => `${inputSource.current ??= quizDeviceId()}:${++inputCounter.current}`;
@@ -257,7 +278,7 @@ export function QuizFlow({ subject: requestedSubject = "kana", learnedWords = NO
   };
 
   useEffect(() => {
-    if (!active || !ready || otherTab || setup || exit || active.phase === "results") return;
+    if (home || !active || !ready || otherTab || setup || exit || active.phase === "results") return;
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.repeat || event.isComposing || event.keyCode === 229 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
@@ -273,7 +294,7 @@ export function QuizFlow({ subject: requestedSubject = "kana", learnedWords = NO
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [active, ready, otherTab, setup, exit]);
+  }, [home, active, ready, otherTab, setup, exit]);
 
   const status = active?.pending ? (
     <div className="quiz-stack quiz-save-status">
@@ -296,67 +317,13 @@ export function QuizFlow({ subject: requestedSubject = "kana", learnedWords = NO
     onFinish={() => { if (simpleEvent("FINISH")) setExit(false); }}
     onDiscard={() => { if (controller.discard()) onBack(); else setMessage("This practice could not be discarded. Try again."); }} /> : undefined;
   const shell: StudioPresentation = { studyUnit: words || kanji && (active ? active.current.kind === "kanji-word" : kind === "word") ? "word" : "character", speechEnabled, onSpeechChange, companion, scrollRef, liveViewport: frame ?? {}, keyboardOpen: !!frame, overlay: leaveSheet, modalOpen: !!leaveSheet };
-  const header = <StudioHeader backLabel="Back to Practice" onBack={onBack}
+  const header = <StudioHeader backLabel={home ? "Back to Study Room" : "Back to Practice"} onBack={home ? onStudyRoom ?? onBack : onBack}
     trailing={<button className="quiz-icon-btn" type="button" aria-label="Open profile" onClick={() => {
       if (!active || otherTab || controller.saveForLater()) onProfile();
       else setMessage("This practice position could not be saved.");
     }}><UserRound aria-hidden="true" /></button>}>
-    <p className="quiz-header__progress">{subjectLabel} practice</p>
+    <p className="quiz-header__progress">{home ? "Practice" : `${subjectLabel} practice`}</p>
   </StudioHeader>;
-
-  if (!ready || otherTab || (active?.phase === "paused" && !leaveSheet)) {
-    return <StudioShell {...shell} label={`${subjectLabel} practice`} header={header} width="player"
-      companion={companion}>
-      <section className="quiz-card quiz-stack">
-        <h1 className="quiz-title">{otherTab ? "Practice is open in another tab" : unavailable ? "Device progress is unavailable" : active?.phase === "paused" ? "Practice paused" : "Getting your practice ready"}</h1>
-        {active?.phase === "paused" && !otherTab && ready ? <>
-          <p className="quiz-body">{subjectLabel} · {active.config.origin === "survival" ? `Question ${active.index + 1}` : `Question ${active.index + 1} of ${active.questions.length}`}</p>
-          {requestedSubject !== subject && <p className="quiz-notice">Your saved {subjectLabel} session comes first. Resume it, or leave and finish/discard before starting {soloSubjectLabel(requestedSubject)}.</p>}
-          <p className="quiz-body">Continue when you’re ready.</p>
-          {status}
-          <button type="button" className="quiz-btn quiz-btn--primary" onClick={() => { focusNext.current = true; simpleEvent("RESUME"); }}>Resume</button>
-          <button type="button" className="quiz-btn quiz-btn--secondary" onClick={openExit}>Leave, finish or discard</button>
-        </> : <p className="quiz-body">{otherTab ? "Return to that tab to continue." : recoveryError ?? (unavailable ? "Open Profile to check your account or restore a backup." : "Your device progress is loading.")}</p>}
-        {message && <p className="quiz-notice" role="status">{message}</p>}
-      </section>
-    </StudioShell>;
-  }
-
-  if (active?.phase === "results") {
-    const another = () => {
-      if (!controller.discard()) { setMessage("Save the remaining progress before starting another round."); return; }
-      const again = active.config.origin === "repair" ? "practice" : active.config.origin;
-      setMode(again);
-      start(false, again);
-    };
-    const back = () => { if (active.pending ? controller.saveForLater() : controller.discard()) onBack(); else setMessage("This practice still needs attention before leaving."); };
-    return <QuizResults shell={{ ...shell, modalOpen: false, overlay: undefined }} view={resultsModel(active, streak, cloudPending)}
-      status={<>{status}{message && <p className="quiz-notice" role="status">{message}</p>}</>}
-      actions={{ onPrimary: another, onBackToPractice: back }} />;
-  }
-
-  if (active) {
-    const question = soloQuestionModel(active);
-    const result = latestAnswer && soloFeedbackModel(active, latestAnswer, question, exampleFor);
-    const answered: QuizAnswerState = result && latestAnswer ? { status: "answered", outcome: result.outcome, selectedId: latestAnswer.responseId,
-      correctId: active.current.correctChoiceId, typedValue: latestAnswer.typedValue } : { status: "unanswered" };
-    const duration = active.config.origin === "survival" ? SESSION_LIMITS.survivalFeedbackMs : SESSION_LIMITS.autoNextMs;
-    const autoNext: AutoNextView | undefined = active.runtime.autoNextDeadlineMonoMs !== null ? { phase: "counting", label: `Next in ${duration / 1000}s`, durationMs: duration }
-      : result?.outcome === "correct" && active.config.autoNext && active.autoNextCanceled ? { phase: "paused", label: "Auto-next paused" } : undefined;
-    return <QuizPlayer shell={shell} question={question} answer={answered} typedValue={latestAnswer?.typedValue ?? active.draft}
-      announcement={result?.announcement ?? ""} status={status} blocked={active.phase === "committing" || active.phase === "paused"}
-      promptRef={promptRef} inputRef={inputRef} autoNextEnabled={active.config.autoNext}
-      feedback={result ? <QuizFeedback view={result} whyOpen={whyFor === question.id} onToggleWhy={() => { cancelAuto("expand"); setWhyFor(previous => previous === question.id ? undefined : question.id); }}
-        onListen={() => { cancelAuto("listen"); const speech = soloSpeechText(active.current); if (speech) speak(speech); }}
-        onInteract={() => cancelAuto("pointer")} autoNext={autoNext} onPauseAutoNext={() => cancelAuto("manual")} /> : undefined}
-      actions={{ onChoose: choiceId => respond({ type: "choice", choiceId }), onTypedChange: value => {
-        const event = scope(); if (event) dispatch({ ...event, type: "DRAFT", value });
-      }, onSubmitTyped: event => { event?.stopPropagation(); if (active.draft.trim()) respond({ type: "typed", value: active.draft }); },
-      onNext: next, onExit: openExit, onPause: () => { simpleEvent("PAUSE"); }, onFeedbackFocus: () => cancelAuto("focus"), onAutoNextChange: enabled => {
-        const event = scope();
-        if (event && dispatch({ ...event, type: "SET_AUTO_NEXT", enabled })) onPreferenceChange({ quizAutoNext: enabled });
-      } }} />;
-  }
 
   const selectedStages = quizKanaStages(preferences.quizKanaStagesMask);
   const customItems = setup && custom ? kanji
@@ -383,7 +350,7 @@ export function QuizFlow({ subject: requestedSubject = "kana", learnedWords = NO
   };
   const openSetup = (nextMode: KanaMode) => { setMode(nextMode); setSetup(true); setMessage(undefined); };
   const setupSheet = setup && preflight ? <QuizSetupSheet returnFocusRef={customizeRef}
-    view={{ subject: words ? "words" : subject, subjects: [{ id: words ? "words" : subject, label: subjectLabel }], poolId: custom ? "custom" : kanji ? preferences.quizKanjiPool : preferences.quizVocabPool, pools: poolOptions, kindId: kind,
+    view={{ subject: words ? "words" : subject, subjects: home ? [{id:"kana",label:"Kana"},{id:"words",label:"Words"},{id:"kanji",label:"Kanji"}] : [{ id: words ? "words" : subject, label: subjectLabel }], poolId: custom ? "custom" : kanji ? preferences.quizKanjiPool : preferences.quizVocabPool, pools: poolOptions, kindId: kind,
       kinds: (words ? VOCAB_KINDS : kanji ? KANJI_KINDS : KINDS).filter(option => mode !== "survival" || option.id !== "type").map(option => ({ ...option, ...(kanji && option.id === "word" ? {hint:preflight.curatedSetLabel} : {}) })),
       lengthHelp: preferences.quizLength === "all"
         ? mode === "survival" ? `All ${preflight.eligibleTargets} eligible ${targetName} in the bank. Survival repeats after one pass.`
@@ -397,7 +364,7 @@ export function QuizFlow({ subject: requestedSubject = "kana", learnedWords = NO
       notice: oversizedAll ? `All ${preflight.eligibleTargets} targets exceeds the 256-question recovery limit. Narrow the pool or choose 10, 20 or 30.` : preflight.requiresFourChoiceAcknowledgement ? preflight.notices[0] : undefined,
       kana: !kana ? undefined : { script: preferences.quizKanaScript, scripts: SCRIPTS, choices: preferences.quizChoiceCount,
         stages: STAGES.map(stage => ({ ...stage, on: selectedStages.includes(stage.id) })) } }}
-    actions={{ onSubjectChange: () => {}, onPoolChange: id => { if (id === "custom") setCustom(onReadCustom()); else { setCustom(null); const pool = poolOptions.find(option=>option.id===id); if (pool) onPreferenceChange(kanji ? {quizKanjiPool:pool.id as QuizPreferences["quizKanjiPool"]} : {quizVocabPool: pool.id as QuizPreferences["quizVocabPool"]}); } }, onClose: () => setSetup(false), onStart: () => start(preflight.requiresFourChoiceAcknowledgement),
+    actions={{ onSubjectChange: id => {setCustom(null);setCustomSearch("");if(mode === "survival" && id !== "kana")setMode("practice");onPreferenceChange({quizSubject:id === "words" ? "vocab" : id});}, onPoolChange: id => { if (id === "custom") setCustom(onReadCustom()); else { setCustom(null); const pool = poolOptions.find(option=>option.id===id); if (pool) onPreferenceChange(kanji ? {quizKanjiPool:pool.id as QuizPreferences["quizKanjiPool"]} : {quizVocabPool: pool.id as QuizPreferences["quizVocabPool"]}); } }, onClose: () => setSetup(false), onStart: () => start(preflight.requiresFourChoiceAcknowledgement),
       onUseAlternative: () => {setCustom(null); if (kanji) onPreferenceChange({quizKanjiPool:"all"}); else if (words) onPreferenceChange({quizVocabPool:"all"});},
       onKindChange: id => { if (kanji) { const option = KANJI_KINDS.find(row=>row.id===id); if(option) onPreferenceChange({quizKanjiKind:option.id as QuizPreferences["quizKanjiKind"]}); return; } if (words) { const option = VOCAB_KINDS.find(row=>row.id===id); if(option) onPreferenceChange({quizVocabKind:option.id as QuizPreferences["quizVocabKind"]}); return; } const chosen = KINDS.find(option => option.id === id); if (chosen) { setKindOverride(null); onPreferenceChange({ quizKanaKind: chosen.id }); } },
       onLengthChange: n => { const length = LENGTHS.find(candidate => candidate === n); if (length) onPreferenceChange({ quizLength: length }); },
@@ -406,12 +373,10 @@ export function QuizFlow({ subject: requestedSubject = "kana", learnedWords = NO
         const mask = preferences.quizKanaStagesMask ^ (1 << bit);
         if (bit >= 0 && mask) onPreferenceChange({ quizKanaStagesMask: mask });
       }, onChoicesChange: quizChoiceCount => onPreferenceChange({ quizChoiceCount }), onAutoNextChange: quizAutoNext => onPreferenceChange({ quizAutoNext }) }}
-    modeOptions={kana ? <div className="quiz-stack"><StudioSegmented<KanaMode> label="Practice mode" value={mode} onChange={setMode} columns={3}
-      options={[{ id: "practice", label: "Untimed" }, { id: "timed", label: "Timed" }, { id: "survival", label: "Survival" }]} />
-      {mode === "timed" && <StudioSegmented label="Time per question" value={preferences.quizChallengeTier} options={TIERS} columns={3}
-        onChange={quizChallengeTier => onPreferenceChange({ quizChallengeTier })} />}
-      {mode === "survival" && <p className="quiz-help">45 s to start. Correct answers add 5 s. Wrong answers cost 8 s.</p>}
-    </div> : undefined}
+    modeOptions={mode === "timed" ? <StudioSegmented label="Time per question" value={!kana && preferences.quizChallengeTier === "lightning" ? "steady" : preferences.quizChallengeTier}
+      options={kana ? TIERS : [{id:"steady" as const,label:"Steady · 20 s"},{id:"quick" as const,label:"Quick · 10 s"}]} columns={kana ? 3 : 2}
+      onChange={quizChallengeTier => onPreferenceChange({quizChallengeTier})} />
+      : mode === "survival" ? <p className="quiz-help">45 s to start. Correct answers add 5 s. Wrong answers cost 8 s.</p> : undefined}
     customSelection={<div className="quiz-field">
       <button type="button" className="quiz-btn quiz-btn--secondary" aria-pressed={custom !== null} onClick={() => {
         setCustom(custom ? null : onReadCustom());
@@ -426,6 +391,120 @@ export function QuizFlow({ subject: requestedSubject = "kana", learnedWords = NO
       </>}
       {message && <p className="quiz-help" role="status">{message}</p>}
     </div>} /> : undefined;
+
+
+
+  if (!ready || otherTab || (!home && active?.phase === "paused" && !leaveSheet)) {
+    return <StudioShell {...shell} label={`${subjectLabel} practice`} header={header} width="player"
+      companion={companion}>
+      <section className="quiz-card quiz-stack">
+        <h1 className="quiz-title">{otherTab ? "Practice is open in another tab" : unavailable ? "Device progress is unavailable" : active?.phase === "paused" ? "Practice paused" : "Getting your practice ready"}</h1>
+        {active?.phase === "paused" && !otherTab && ready ? <>
+          <p className="quiz-body">{subjectLabel} · {active.config.origin === "survival" ? `Question ${active.index + 1}` : `Question ${active.index + 1} of ${active.questions.length}`}</p>
+          {requestedSubject !== subject && <p className="quiz-notice">Your saved {subjectLabel} session comes first. Resume it, or leave and finish/discard before starting {soloSubjectLabel(requestedSubject)}.</p>}
+          <p className="quiz-body">Continue when you’re ready.</p>
+          {status}
+          <button type="button" className="quiz-btn quiz-btn--primary" onClick={() => { focusNext.current = true; simpleEvent("RESUME"); }}>Resume</button>
+          <button type="button" className="quiz-btn quiz-btn--secondary" onClick={openExit}>Leave, finish or discard</button>
+        </> : <p className="quiz-body">{otherTab ? "Return to that tab to continue." : recoveryError ?? (unavailable ? "Open Profile to check your account or restore a backup." : "Your device progress is loading.")}</p>}
+        {message && <p className="quiz-notice" role="status">{message}</p>}
+      </section>
+    </StudioShell>;
+  }
+
+  if (home) {
+    const homeKind = words ? preferences.quizVocabKind : kanji ? preferences.quizKanjiKind : preferences.quizKanaKind;
+    const next = recommend(catalogs,configFor(preferences,"practice",homeKind,custom ?? undefined,"home-recommendation",Date.now()),history);
+    const homeView = {
+      resume: active ? {subjectLabel:soloSubjectLabel(active.config.subject),positionLabel:active.phase === "results" ? "Saved results" : active.config.origin === "survival" ? `Survival question ${active.index+1}` : `Question ${active.index+1} of ${active.questions.length}`,actionLabel:active.phase === "results" ? "View results" : "Resume"} : undefined,
+      recommendation:{eyebrow:"Your next practice",summary:next.summary,note:active ? "Resume or discard your saved session before starting another." : next.note,cta:next.needsSetup ? "Adjust practice" : "Start practice",blocked:!!active},
+      subjects:[{id:"kana" as const,label:"Kana"},{id:"words" as const,label:"Words"},{id:"kanji" as const,label:"Kanji"}],subject:words ? "words" as const : kanji ? "kanji" as const : "kana" as const,
+      challenges:[{id:"timed" as const,title:"Timed practice",description:kana ? "12, 6 or 3 seconds per question" : "20 or 10 seconds per question"},
+        ...(kana ? [{id:"survival" as const,title:"Survival",description:"Kana choices · 45-second starting budget"}] : []),
+        ...(onFriend ? [{id:"friend" as const,title:"Play with a friend",description:"Open the existing online duel lobby"}] : [])],
+      reviewDeck:reviewDeck ?? {title:"Review Deck",detail:"Practice cards you have saved.",badge:"Open"}
+    };
+    return <StudioShell {...shell} label="Practice" width="home" header={header} overlay={setupSheet} modalOpen={!!setupSheet}>
+      {status}{message && <p className="quiz-notice" role="status">{message}</p>}
+      <PracticeHome view={homeView} customizeRef={customizeRef} actions={{
+        onStart:()=>{if(active)return;if(next.needsSetup)openSetup("practice");else start(false,"practice",homeKind);},
+        onCustomize:()=>{if(active)setMessage("Resume or discard your saved session before customizing a new one.");else openSetup("practice");},
+        onSelectSubject:id=>{setCustom(null);setCustomSearch("");setMode("practice");onPreferenceChange({quizSubject:id === "words" ? "vocab" : id});},
+        onChallenge:id=>{if(active){setMessage("Resume or discard your saved session first.");return;}if(id === "friend")onFriend?.();else openSetup(id === "survival" ? "survival" : "timed");},
+        onResume:()=>onResume?.(),onDiscardResume:()=>{if(!controller.discard())setMessage("Save pending progress before discarding this position.");else setMessage(undefined);},
+        onOpenReviewDeck:()=>{if(!active || controller.saveForLater())onOpenReviewDeck?.();else setMessage("Save the remaining progress before opening Review Deck.");}
+      }} />
+    </StudioShell>;
+  }
+
+  if (active?.phase === "results") {
+    const original = active.config.origin === "repair" && repairBase.current?.config.sessionId === active.config.repairOf ? repairBase.current : null;
+    const repairs = [...repairHistory.current.filter(s=>s.config.sessionId!==active.config.sessionId),active];
+    const remaining = remainingQuestions(original ?? active,original ? repairs : []);
+    const deckQuestions = original ? remainingQuestions(original) : active.config.origin === "repair" ? active.questions : remainingQuestions(active);
+    const cards = reviewChoices(deckQuestions,history,(key,type)=>hasReviewCard?.(key,type) ?? false).map(card=>({...card,present:card.present||addedCards.current.has(card.id)}));
+    const batch = reviewBatch(cards);
+    const addCards = (ids: readonly string[]) => {
+      if (!ready || otherTab || active.pending || !onAddReviewCard) return;
+      let added=0;
+      for(const card of cards.filter(c=>ids.includes(c.id)&&!c.present).slice(0,5)) {
+        if(addedCards.current.has(card.id)||hasReviewCard?.(card.target.itemKey,card.target.type))continue;
+        if(onAddReviewCard(card.target.itemKey,card.target.type)){addedCards.current.add(card.id);added++;}
+      }
+      setMessage(added ? reviewAddedCopy(added,dailyNewCap) : "These cards are already in your Review Deck, or could not be added.");
+    };
+    const repair = () => {
+      if(!ready || otherTab || active.pending)return;
+      const sessionId=quizDeviceId(),clock=quizClock();
+      const questions=repairQuestions(remaining,sessionId);
+      if(!questions.length)return;
+      if(!controller.discard()){setMessage("Save the remaining progress before starting repair.");return;}
+      if(active.config.origin!=="repair"){repairBase.current=active;repairHistory.current=[];}
+      else if(original) repairHistory.current=repairs;
+      const repairOf=original?.config.sessionId ?? active.config.repairOf ?? active.config.sessionId;
+      if(!dispatch({type:"START",questions,clock,config:{sessionId,subject:active.config.subject,origin:"repair",challenge:"steady",autoNext:preferences.quizAutoNext,previousSurvivalBest:0,rewardVersion:1,repairOf}}))setMessage("This repair could not be started. Your committed progress is kept.");
+      else {setMessage(undefined);setWhyFor(undefined);}
+    };
+    const another = () => {
+      if (!controller.discard()) { setMessage("Save the remaining progress before starting another round."); return; }
+      const again = active.config.origin === "repair" ? "practice" : active.config.origin;
+      setMode(again);
+      start(false, again);
+    };
+    const back = () => { if (active.pending ? controller.saveForLater() : controller.discard()) onBack(); else setMessage("This practice still needs attention before leaving."); };
+    return <QuizResults shell={{ ...shell, modalOpen: false, overlay: undefined }} view={{...resultsModel(active, streak, cloudPending,original,repairs),
+      reviewCards:onAddReviewCard ? cards.map(c=>({id:c.id,label:c.label,present:c.present})) : undefined,
+      reviewDeckLabel:batch.length&&onAddReviewCard ? `Add ${batch.length} to Review Deck` : undefined,
+      reviewDeckNote:!remaining.length&&reviewDue>0 ? "Your Review Deck has practice available today." : undefined}}
+      status={<>{status}{message && <p className="quiz-notice" role="status">{message}</p>}</>}
+      actions={{ onPrimary: remaining.length ? repair : another, onAnotherRound:remaining.length ? another : undefined,
+        onAddToReviewDeck:()=>addCards(batch.map(c=>c.id)),onAddCard:id=>addCards([id]),
+        onOpenReviewDeck:onOpenReviewDeck ? ()=>{if(active.pending ? controller.saveForLater() : controller.discard())onOpenReviewDeck();else setMessage("Save the remaining progress before opening Review Deck.");} : undefined,
+        onBackToPractice: back }} />;
+  }
+
+  if (active) {
+    const question = soloQuestionModel(active);
+    const result = latestAnswer && soloFeedbackModel(active, latestAnswer, question, exampleFor);
+    const answered: QuizAnswerState = result && latestAnswer ? { status: "answered", outcome: result.outcome, selectedId: latestAnswer.responseId,
+      correctId: active.current.correctChoiceId, typedValue: latestAnswer.typedValue } : { status: "unanswered" };
+    const duration = active.config.origin === "survival" ? SESSION_LIMITS.survivalFeedbackMs : SESSION_LIMITS.autoNextMs;
+    const autoNext: AutoNextView | undefined = active.runtime.autoNextDeadlineMonoMs !== null ? { phase: "counting", label: `Next in ${duration / 1000}s`, durationMs: duration }
+      : result?.outcome === "correct" && active.config.autoNext && active.autoNextCanceled ? { phase: "paused", label: "Auto-next paused" } : undefined;
+    return <QuizPlayer shell={shell} question={question} answer={answered} typedValue={latestAnswer?.typedValue ?? active.draft}
+      announcement={result?.announcement ?? ""} status={status} blocked={active.phase === "committing" || active.phase === "paused"}
+      promptRef={promptRef} inputRef={inputRef} autoNextEnabled={active.config.autoNext}
+      feedback={result ? <QuizFeedback view={result} whyOpen={whyFor === question.id} onToggleWhy={() => { cancelAuto("expand"); setWhyFor(previous => previous === question.id ? undefined : question.id); }}
+        onListen={() => { cancelAuto("listen"); const speech = soloSpeechText(active.current); if (speech) speak(speech); }}
+        onInteract={() => cancelAuto("pointer")} autoNext={autoNext} onPauseAutoNext={() => cancelAuto("manual")} /> : undefined}
+      actions={{ onChoose: choiceId => respond({ type: "choice", choiceId }), onTypedChange: value => {
+        const event = scope(); if (event) dispatch({ ...event, type: "DRAFT", value });
+      }, onSubmitTyped: event => { event?.stopPropagation(); if (active.draft.trim()) respond({ type: "typed", value: active.draft }); },
+      onNext: next, onExit: openExit, onPause: () => { simpleEvent("PAUSE"); }, onFeedbackFocus: () => cancelAuto("focus"), onAutoNextChange: enabled => {
+        const event = scope();
+        if (event && dispatch({ ...event, type: "SET_AUTO_NEXT", enabled })) onPreferenceChange({ quizAutoNext: enabled });
+      } }} />;
+  }
 
   return <StudioShell {...shell} label={`${subjectLabel} practice`} header={header} width="setup" overlay={setupSheet} modalOpen={!!setupSheet}>
     <section className="quiz-card quiz-stack">
