@@ -29,6 +29,27 @@ function vocabularyCandidates(catalogs: Catalogs): FactoryResult {
   return result;
 }
 
+// These factories build public reading/foil catalogs, independent of setup selections.
+// Include every source dependency in the signature, including in-place edits.
+const kanjiCache = new WeakMap<Catalogs['kanji'], { signature: string; result: FactoryResult }>();
+const contextCache = new WeakMap<Catalogs['kanji'], { signature: string; result: FactoryResult }>();
+function kanjiCandidates(catalogs: Catalogs): FactoryResult {
+  const signature = JSON.stringify([catalogs.kanji, catalogs.readingRecords]);
+  const cached = kanjiCache.get(catalogs.kanji);
+  if (cached?.signature === signature) return cached.result;
+  const result = createKanjiCandidates(catalogs);
+  kanjiCache.set(catalogs.kanji, { signature, result });
+  return result;
+}
+function contextCandidates(catalogs: Catalogs): FactoryResult {
+  const signature = JSON.stringify([catalogs.kanji, catalogs.vocabulary, catalogs.wordFamilies]);
+  const cached = contextCache.get(catalogs.kanji);
+  if (cached?.signature === signature) return cached.result;
+  const result = createContextCandidates(catalogs);
+  contextCache.set(catalogs.kanji, { signature, result });
+  return result;
+}
+
 
 function prepare(catalogs: Catalogs, config: BuildConfig): { candidates: Candidate[]; report: EligibilityReport } {
   if (!Number.isSafeInteger(config.length) || config.length < 1 || !Number.isFinite(config.now)) throw new RangeError('Invalid quiz length or clock');
@@ -44,8 +65,8 @@ function prepare(catalogs: Catalogs, config: BuildConfig): { candidates: Candida
   const empty = (sourceCount: number): FactoryResult => ({ sourceCount, candidates: [], exclusions: [], duplicateIdentities: [] });
   const kana = config.subject === 'kana' ? createKanaCandidates(catalogs) : empty(catalogs.hiragana.length + catalogs.katakana.length);
   const vocab = config.subject === 'vocab' ? vocabularyCandidates(catalogs) : empty(catalogs.vocabulary.length);
-  const kanji = config.subject === 'kanji' ? createKanjiCandidates(catalogs) : empty(catalogs.kanji.length);
-  const context = createContextCandidates(catalogs);
+  const kanji = config.subject === 'kanji' ? kanjiCandidates(catalogs) : empty(catalogs.kanji.length);
+  const context = contextCandidates(catalogs);
   const factories = [kana, vocab, kanji, context];
   const scoped = factories.flatMap(factory => factory.candidates).filter(candidate => {
     if (candidate.subject !== config.subject) return false;

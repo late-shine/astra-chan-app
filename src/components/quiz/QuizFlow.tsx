@@ -168,6 +168,16 @@ export function QuizFlow({ subject: requestedSubject = "kana", learnedWords = NO
   const preflight = useMemo(() => state.phase === "idle" ? getEligibility(catalogs, configFor(preferences, mode, kind, custom ?? undefined, "kana-setup", 0)) : null,
     [catalogs, state.phase, preferences, mode, kind, custom, subject, learnedWords, studiedKanji]);
   const curatedItems = useMemo(() => kanji ? createContextCandidates(catalogs).candidates.map(item => ({id:item.itemId,glyph:`${item.face} · ${item.reveal.reading} · ${item.reveal.meaning}`})) : [], [catalogs, kanji]);
+  // Pool counts depend on kind/filters, not question quantity or auto-next settings.
+  const kanjiPoolOptions = useMemo(() => {
+    if (!kanji || state.phase !== "idle") return [];
+    const count = (pool: "all" | "studied", ids?: readonly string[]) => getEligibility(catalogs,
+      configFor({...preferences,quizLength:10,quizKanjiPool:pool},"practice",kind,ids,"kanji-pool",0)).eligibleTargets;
+    const all = count("all");
+    return [{id:"recommended",label:"Recommended",count:all}, {id:"all",label:"All kanji",count:all},
+      {id:"studied",label:"Studied kanji",count:count("studied")},
+      {id:"custom",label:"Custom selection",count:custom ? count("all",custom) : 0}];
+  }, [catalogs, kanji, state.phase, kind, studiedKanji, custom]);
 
   function start(acceptFallback: boolean, newMode = mode, newKind = kind, selected = custom) {
     if (!ready || otherTab) return false;
@@ -364,9 +374,7 @@ export function QuizFlow({ subject: requestedSubject = "kana", learnedWords = NO
     {id:"recommended",label:"Recommended",count:catalogs.vocabulary.length}, {id:"all",label:"All words",count:catalogs.vocabulary.length},
     {id:"learned",label:"Learned words",count:learnedWords.length},
     ...VOCAB_CATEGORY_META.map(category=>({id:`theme:${category.id}`,label:category.label,count:catalogs.vocabulary.filter(item=>item.category===category.id).length})),
-    {id:"custom",label:"Custom selection",count:custom?.length ?? 0}] : kanji ? [
-      {id:"recommended",label:"Recommended"}, {id:"all",label:"All kanji"}, {id:"studied",label:"Studied kanji"}, {id:"custom",label:"Custom selection"}
-    ].map(pool => ({...pool,count:pool.id === "custom" && !custom ? 0 : getEligibility(catalogs,configFor({...preferences,quizKanjiPool:pool.id === "studied" ? "studied" : "all"},"practice",kind,pool.id === "custom" ? custom ?? [] : undefined,"kanji-pool",0)).eligibleTargets})) : [];
+    {id:"custom",label:"Custom selection",count:custom?.length ?? 0}] : kanjiPoolOptions;
   const targetName = words || kanji && kind === "word" ? "words" : kanji ? "kanji" : "characters";
   const updateCustom = (ids: string[]) => {
     setCustom(ids);
