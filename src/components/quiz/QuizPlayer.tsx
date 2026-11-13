@@ -17,7 +17,21 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Check, Ellipsis, Pause, X } from "lucide-react";
 import { StudioHeader, StudioShell, StudioSheet, StudioSwitch, type StudioPresentation } from "./StudioShell";
-import type { QuizAnswerState, QuizChoiceView, QuizPlayerActions, QuizQuestionView } from "./viewTypes";
+import type { QuizAnswerState, QuizChoiceView, QuizPlayerActions, QuizQuestionView, QuizPromptView } from "./viewTypes";
+
+function promptText(prompt: QuizPromptView): ReactNode {
+  if (!prompt.highlights?.length) return prompt.text;
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  for (const range of prompt.highlights) {
+    if (!Number.isInteger(range.start) || !Number.isInteger(range.end) || range.start < cursor || range.end <= range.start || range.end > prompt.text.length) continue;
+    parts.push(prompt.text.slice(cursor, range.start));
+    parts.push(<span key={range.start} className="quiz-target-kanji">{prompt.text.slice(range.start, range.end)}</span>);
+    cursor = range.end;
+  }
+  parts.push(prompt.text.slice(cursor));
+  return parts;
+}
 
 type ChoiceState = "idle" | "correct" | "wrong" | "locked";
 
@@ -245,7 +259,7 @@ export function QuizPlayer({ question, answer, typedValue, autoNextEnabled, feed
           <p className="quiz-instruction">{question.instruction}</p>
           <div ref={promptRef} className="quiz-prompt" tabIndex={-1}>
             <span className={question.prompt.ja === false ? "quiz-prompt__text" : "quiz-jp quiz-prompt__text"} lang={question.prompt.ja === false ? undefined : "ja"}>
-              {question.prompt.text}
+              {promptText(question.prompt)}
             </span>
             {question.prompt.reading && (
               <span className="quiz-jp quiz-prompt__reading" lang="ja">

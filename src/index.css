@@ -906,6 +906,8 @@ input, select, textarea, button {
 .quiz-stage[data-size="word"] .quiz-prompt__text { font-size: 2.25rem; line-height: 1.3; }
 .quiz-stage[data-mode="typed"][data-size="glyph"] .quiz-prompt__text { font-size: 4rem; }
 .quiz-prompt__reading { font-size: 1.125rem; line-height: 1.5rem; color: var(--quiz-ink-muted); }
+.quiz-studio .quiz-target-kanji { text-decoration: underline; text-decoration-color: var(--quiz-playful); text-decoration-thickness: 0.06em; text-underline-offset: 0.14em; }
+.quiz-studio .quiz-word-note { white-space: pre-line; }
 
 .quiz-choices { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.75rem; width: 100%; max-width: 680px; margin-inline: auto; }
 .quiz-choices[data-layout="short"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }

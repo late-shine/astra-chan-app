@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { mergeSoloCustomDraft } from "./quiz/soloSetup";
+import { isSoloCustomId, mergeSoloCustomDraft, soloSubjectLabel } from "./quiz/soloSetup";
 import { onAuthStateChanged, type User as FirebaseUser } from "firebase/auth";
 import { motion, AnimatePresence, useTransform, useReducedMotion } from "motion/react";
 import {
@@ -46,6 +46,7 @@ import {
 } from "lucide-react";
 
 import { HIRAGANA_DATA, KATAKANA_DATA, KANJI_DATA, VOCABULARY_DATA } from "./data";
+import { KANJI_READING_RECORDS_V2, KANJI_WORD_FAMILIES_V2 } from "./kanjiWordFamiliesV2";
 import {
   createRoom,
   joinRoom,
@@ -145,7 +146,6 @@ import {
   writeLocalProfile,
 } from "./profileSync";
 import MenuScreen from "./components/MenuScreen";
-import KanjiQuizScreen from "./components/KanjiQuizScreen";
 import { QuizFlow, type KanaLaunch } from "./components/quiz/QuizFlow";
 import type { Catalogs } from "./quiz/types";
 import KanjiScrollScreen from "./components/KanjiScrollScreen";
@@ -325,7 +325,7 @@ function readSavedBgScene(): number {
   return 0;
 }
 
-const SOLO_CATALOGS: Catalogs = { hiragana: HIRAGANA_DATA, katakana: KATAKANA_DATA, vocabulary: VOCABULARY_DATA, kanji: [] };
+const SOLO_CATALOGS: Catalogs = { hiragana: HIRAGANA_DATA, katakana: KATAKANA_DATA, vocabulary: VOCABULARY_DATA, kanji: KANJI_DATA, readingRecords: KANJI_READING_RECORDS_V2, wordFamilies: KANJI_WORD_FAMILIES_V2 };
 
 export default function App() {
   const { x: parallaxX, y: parallaxY } = useMouseParallax();
@@ -335,7 +335,7 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState<"menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "sandbox" | "grammar-dojo" | "reading-room">("menu");
   const [quizCompanionSpeech, setQuizCompanionSpeech] = useState(true);
   const [kanaLaunch, setKanaLaunch] = useState<KanaLaunch>("practice");
-  const studioQuiz = currentScreen === "quiz" || currentScreen === "results" || currentScreen === "vocab-quiz";
+  const studioQuiz = currentScreen === "quiz" || currentScreen === "results" || currentScreen === "vocab-quiz" || currentScreen === "kanji-quiz";
 
   /* ===== POLISH C4: REFERENCE CHARTS TOPIC AND SANDBOX ENTRY MODE (memory only) ===== */
   // The Charts topic lives here so Back from the Sandbox page returns to the SAME topic. It resets to
@@ -1101,24 +1101,6 @@ export default function App() {
     return { year: d.getFullYear(), month: d.getMonth() }; // month: 0-indexed
   });
 
-  // ── VOCAB QUIZ STATE ──────────────────────────────────────────────────────
-  // ── KANJI QUIZ STATE ──────────────────────────────────────────────────────
-  const [kanjiQuizMode, setKanjiQuizMode] = useState<"meaning" | "reading">("meaning");
-  const [kanjiQuizLength, setKanjiQuizLength] = useState<10 | 20 | "all">(10);
-  const [kanjiQuizScope, setKanjiQuizScope] = useState<"all" | "studied" | "custom">("all");
-  const [kanjiQuizCustomItems, setKanjiQuizCustomItems] = useState<Set<string>>(new Set());
-  const [kanjiQuizPool, setKanjiQuizPool] = useState<KanjiItem[]>([]);
-  const [kanjiQuizIndex, setKanjiQuizIndex] = useState(0);
-  const [kanjiQuizItem, setKanjiQuizItem] = useState<KanjiItem | null>(null);
-  const [kanjiQuizChoices, setKanjiQuizChoices] = useState<string[]>([]);
-  const [kanjiQuizAnswerStatus, setKanjiQuizAnswerStatus] = useState<"correct" | "incorrect" | null>(null);
-  const [kanjiQuizSelectedAnswer, setKanjiQuizSelectedAnswer] = useState<string | null>(null);
-  const [kanjiQuizCorrect, setKanjiQuizCorrect] = useState(0);
-  const [kanjiQuizXp, setKanjiQuizXp] = useState(0);
-  const [kanjiQuizWrong, setKanjiQuizWrong] = useState<KanjiItem[]>([]);
-  const [kanjiQuizPhase, setKanjiQuizPhase] = useState<"config" | "quiz" | "results">("config");
-  // ── END VOCAB / KANJI QUIZ STATE ──────────────────────────────────────────
-
   // Profile script toggle (hiragana / katakana)
   const [profileCharSet, setProfileCharSet] = useState<"hiragana" | "katakana">("hiragana");
 
@@ -1262,7 +1244,11 @@ export default function App() {
     setCurrentScreen("quiz");
   };
   const openVocabPractice = () => { setKanaLaunch("customize"); setShowProfilePanel(false); setCurrentScreen("vocab-quiz"); };
-  const openQuizResume = () => { setKanaLaunch("resume"); setShowProfilePanel(false); setCurrentScreen(quizSession.state.phase !== "idle" && quizSession.state.config.subject === "vocab" ? "vocab-quiz" : "quiz"); };
+  const openKanjiPractice = () => { setKanaLaunch("customize"); setShowProfilePanel(false); setCurrentScreen("kanji-quiz"); };
+  const soloRequestedSubject = currentScreen === "vocab-quiz" ? "vocab" : currentScreen === "kanji-quiz" ? "kanji" : "kana";
+  const soloDraftSubject = quizSession.state.phase !== "idle" ? quizSession.state.config.subject : soloRequestedSubject;
+  const openQuizResume = () => { setKanaLaunch("resume"); setShowProfilePanel(false); setCurrentScreen(quizSession.state.phase !== "idle" && quizSession.state.config.subject === "vocab" ? "vocab-quiz" : quizSession.state.phase !== "idle" && quizSession.state.config.subject === "kanji" ? "kanji-quiz" : "quiz"); };
+  const studiedQuizKanji = useMemo(() => KANJI_DATA.filter(item => (stats.characterProgress[item.kanji]?.total ?? 0) > 0).map(item => item.kanji), [stats.characterProgress]);
   const learnedQuizWords = useMemo(() => Object.keys(stats.vocabularyProgress).filter(word => stats.vocabularyProgress[word]), [stats.vocabularyProgress]);
   const leaveKanaPractice = () => {
     setShowStudyRoom(false);
@@ -1998,109 +1984,6 @@ export default function App() {
 
     return choices;
   };
-
-  // ── KANJI QUIZ HELPERS ──────────────────────────────────────────────────────
-  const generateKanjiChoices = (item: KanjiItem, mode: "meaning" | "reading"): string[] => {
-    const correct = mode === "meaning" ? item.meaning : item.onyomi;
-    const distractors: string[] = [];
-    const shuffled = [...KANJI_DATA].filter(k => k.kanji !== item.kanji).sort(() => Math.random() - 0.5);
-    for (const k of shuffled) {
-      const val = mode === "meaning" ? k.meaning : k.onyomi;
-      if (val !== correct && !distractors.includes(val)) distractors.push(val);
-      if (distractors.length >= 3) break;
-    }
-    // Fallback: pad with random items from KANJI_DATA if we have too few unique distractors
-    if (distractors.length < 3) {
-      const fallbacks = [...KANJI_DATA].filter(k => k.kanji !== item.kanji).sort(() => Math.random() - 0.5);
-      for (const k of fallbacks) {
-        const val = mode === "meaning" ? k.meaning : k.onyomi;
-        if (val !== correct && !distractors.includes(val)) distractors.push(val);
-        if (distractors.length >= 3) break;
-      }
-    }
-    return [correct, ...distractors].sort(() => Math.random() - 0.5);
-  };
-
-  const getKanjiQuizBasePool = () => {
-    if (kanjiQuizScope === "studied") {
-      return KANJI_DATA.filter(k => (stats.characterProgress[k.kanji]?.total || 0) > 0);
-    }
-    if (kanjiQuizScope === "custom") {
-      return KANJI_DATA.filter(k => kanjiQuizCustomItems.has(k.kanji));
-    }
-    return [...KANJI_DATA];
-  };
-
-  const getKanjiQuizScopeLabel = () => {
-    if (kanjiQuizScope === "studied") return "Studied kanji";
-    if (kanjiQuizScope === "custom") return `${kanjiQuizCustomItems.size} selected`;
-    return "All kanji";
-  };
-
-  const toggleKanjiQuizCustomItem = (item: KanjiItem) => {
-    setKanjiQuizCustomItems(prev => {
-      const next = new Set(prev);
-      if (next.has(item.kanji)) next.delete(item.kanji);
-      else next.add(item.kanji);
-      return next;
-    });
-  };
-
-  const startKanjiQuiz = () => {
-    const base = getKanjiQuizBasePool();
-    if (base.length === 0) {
-      const msg = kanjiQuizScope === "studied"
-        ? "No studied kanji yet. Study kanji first!"
-        : kanjiQuizScope === "custom"
-          ? "Select at least one kanji for a custom quiz!"
-          : "No kanji data available!";
-      showToast(msg);
-      return;
-    }
-    const shuffled = base.sort(() => Math.random() - 0.5);
-    const len = kanjiQuizLength === "all" ? shuffled.length : Math.min(kanjiQuizLength, shuffled.length);
-    const pool = shuffled.slice(0, len);
-
-    const first = pool[0];
-    setKanjiQuizPool(pool);
-    setKanjiQuizIndex(0);
-    setKanjiQuizCorrect(0);
-    setKanjiQuizXp(0);
-    setKanjiQuizWrong([]);
-    setKanjiQuizAnswerStatus(null);
-    setKanjiQuizSelectedAnswer(null);
-    setKanjiQuizItem(first);
-    setKanjiQuizChoices(generateKanjiChoices(first, kanjiQuizMode));
-    setKanjiQuizPhase("quiz");
-  };
-
-  const handleKanjiAnswer = (answer: string) => {
-    if (!kanjiQuizItem || kanjiQuizAnswerStatus !== null) return;
-    const correct = kanjiQuizMode === "meaning" ? kanjiQuizItem.meaning : kanjiQuizItem.onyomi;
-    const isCorrect = answer === correct;
-    setKanjiQuizSelectedAnswer(answer);
-    setKanjiQuizAnswerStatus(isCorrect ? "correct" : "incorrect");
-    const xp = isCorrect ? 10 : 0;
-    setKanjiQuizXp(prev => prev + xp);
-    if (isCorrect) { setKanjiQuizCorrect(prev => prev + 1); playChime(true); }
-    else { setKanjiQuizWrong(prev => [...prev, kanjiQuizItem!]); playChime(false); }
-    // C1: persist like the kana quiz and Study paths, so this XP survives an anonymous reload (amount unchanged).
-    if (xp > 0) setStats(prev => {
-      const updated = { ...prev, xp: prev.xp + xp };
-      return updated;
-    });
-    setTimeout(() => {
-      const nextIdx = kanjiQuizIndex + 1;
-      if (nextIdx >= kanjiQuizPool.length) { setKanjiQuizPhase("results"); return; }
-      const next = kanjiQuizPool[nextIdx];
-      setKanjiQuizItem(next);
-      setKanjiQuizChoices(generateKanjiChoices(next, kanjiQuizMode));
-      setKanjiQuizAnswerStatus(null);
-      setKanjiQuizSelectedAnswer(null);
-      setKanjiQuizIndex(nextIdx);
-    }, 1800);
-  };
-  // ── END KANJI QUIZ HELPERS ──────────────────────────────────────────────────
 
   // Controls study streak daily tick updates
   // FIX: All reads use functional prev to prevent stale-closure XP loss
@@ -3582,14 +3465,13 @@ export default function App() {
   const menuScreenProps = {
     setCurrentScreen,
     setCurrentKanjiIndex,
-    setKanjiQuizPhase,
     openOnlineMultiplayer,
-    openKanaPractice, openVocabPractice, openQuizResume,
+    openKanaPractice, openVocabPractice, openKanjiPractice, openQuizResume,
     kanaPreferences: quizPreferences,
     quizResume: quizSession.state.phase !== "idle" ? {
-      title: quizSession.state.phase === "results" ? "View saved results" : `Resume ${quizSession.state.config.subject === "vocab" ? "words" : "kana"} practice`,
-      description: quizSession.state.phase === "results" ? `Review your last ${quizSession.state.config.subject === "vocab" ? "words" : "kana"} round` : quizSession.state.config.origin === "survival"
-        ? `Kana · Survival question ${quizSession.state.index + 1}` : `${quizSession.state.config.subject === "vocab" ? "Words" : "Kana"} · Question ${quizSession.state.index + 1} of ${quizSession.state.questions.length}`,
+      title: quizSession.state.phase === "results" ? "View saved results" : `Resume ${soloSubjectLabel(quizSession.state.config.subject).toLowerCase()} practice`,
+      description: quizSession.state.phase === "results" ? `Review your last ${soloSubjectLabel(quizSession.state.config.subject).toLowerCase()} round` : quizSession.state.config.origin === "survival"
+        ? `Kana · Survival question ${quizSession.state.index + 1}` : `${soloSubjectLabel(quizSession.state.config.subject)} · Question ${quizSession.state.index + 1} of ${quizSession.state.questions.length}`,
     } : undefined,
     showStudyRoom,
     setShowStudyRoom,
@@ -3627,37 +3509,6 @@ export default function App() {
     availableJapaneseVoices,
     autoPronounce,
     setAutoPronounce,
-  };
-
-  // Props for the extracted KanjiQuizScreen component (Phase 4 of the App.tsx split).
-  const kanjiQuizScreenProps = {
-    kanjiQuizPhase,
-    kanjiQuizMode,
-    kanjiQuizScope,
-    kanjiQuizLength,
-    kanjiQuizCustomItems,
-    kanjiQuizPool,
-    kanjiQuizIndex,
-    kanjiQuizItem,
-    kanjiQuizChoices,
-    kanjiQuizSelectedAnswer,
-    kanjiQuizAnswerStatus,
-    kanjiQuizCorrect,
-    kanjiQuizWrong,
-    kanjiQuizXp,
-    kanjiData: KANJI_DATA,
-    stats,
-    speakJapanese,
-    setKanjiQuizPhase,
-    setKanjiQuizMode,
-    setKanjiQuizScope,
-    setKanjiQuizLength,
-    setKanjiQuizCustomItems,
-    getKanjiQuizScopeLabel,
-    toggleKanjiQuizCustomItem,
-    startKanjiQuiz,
-    returnToPracticeHub,
-    handleKanjiAnswer,
   };
 
   // Props for the extracted KanjiScrollScreen component (Phase 6 of the App.tsx split).
@@ -4500,22 +4351,22 @@ export default function App() {
           {currentScreen === "menu" && <MenuScreen {...menuScreenProps} />}
 
           {/* ================= SCREEN 2: ACTIVE QUIZ WORKSPACE ================= */}
-          {studioQuiz && <QuizFlow subject={currentScreen === "vocab-quiz" ? "vocab" : "kana"} learnedWords={learnedQuizWords} speechEnabled={quizCompanionSpeech} onSpeechChange={setQuizCompanionSpeech} owner={progressOwner} controller={quizSession} ready={quizReady}
+          {studioQuiz && <QuizFlow subject={soloRequestedSubject} learnedWords={learnedQuizWords} studiedKanji={studiedQuizKanji} speechEnabled={quizCompanionSpeech} onSpeechChange={setQuizCompanionSpeech} owner={progressOwner} controller={quizSession} ready={quizReady}
             unavailable={statsHydrated && cloudStatsHydrated && !progressChanging && !quizReady}
             launch={currentScreen === "results" ? "resume" : kanaLaunch} catalogs={SOLO_CATALOGS} history={quizHistory}
             preferences={quizPreferences} onPreferenceChange={patch => setQuizPreferences(previous => ({ ...previous, ...patch }))}
             onReadCustom={() => {
               if (!progressOwner || !isCurrentQuizOwner(progressOwner)) return [];
               const draft = quizBrowserStorage.readCustom(progressOwner);
-              if (draft.ok === true) return draft.value.filter(id => (quizSession.state.phase !== "idle" ? quizSession.state.config.subject === "vocab" : currentScreen === "vocab-quiz") ? id.startsWith("v_") : /^[hk]_/.test(id));
+              if (draft.ok === true) return draft.value.filter(id => isSoloCustomId(id, soloDraftSubject));
               showToast(draft.message);
               return [];
             }} onSaveCustom={ids => {
               if (!progressOwner || !isCurrentQuizOwner(progressOwner)) return;
               const prior = quizBrowserStorage.readCustom(progressOwner);
               if (prior.ok === false) { showToast(prior.message); return []; }
-              const isCurrent = (id: string) => (quizSession.state.phase !== "idle" ? quizSession.state.config.subject === "vocab" : currentScreen === "vocab-quiz") ? id.startsWith("v_") : /^[hk]_/.test(id);
-              const draftSubject = quizSession.state.phase !== "idle" ? quizSession.state.config.subject === "vocab" ? "vocab" : "kana" : currentScreen === "vocab-quiz" ? "vocab" : "kana";
+              const isCurrent = (id: string) => isSoloCustomId(id, soloDraftSubject);
+              const draftSubject = soloDraftSubject;
               const merged = mergeSoloCustomDraft(prior.value, ids, draftSubject);
               const saved = quizBrowserStorage.writeCustom(progressOwner, merged.ids);
               if (saved.ok === false) { showToast(saved.message); return prior.value.filter(isCurrent); }
@@ -4538,7 +4389,6 @@ export default function App() {
           {/* ================= SCREEN: VOCAB QUIZ ================= */}
 
           {/* ================= SCREEN: KANJI QUIZ ================= */}
-          {currentScreen === "kanji-quiz" && <KanjiQuizScreen {...kanjiQuizScreenProps} />}
 
           {/* ================= SCREEN 5: ONLINE SPEED DUEL ================= */}
           {currentScreen === "online-multiplayer" && <OnlineMultiplayerScreen {...onlineMultiplayerScreenProps} />}

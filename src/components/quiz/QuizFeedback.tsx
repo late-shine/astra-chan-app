@@ -85,6 +85,10 @@ export function QuizFeedback({ view, whyOpen, onToggleWhy, onListen, onInteract,
 
       {view.why && (
         <div id={whyId} className="quiz-why" hidden={!whyOpen}>
+          {view.why.sourceNote && <div className="quiz-why__block">
+            <p className="quiz-why__label">Word note</p>
+            <p className="quiz-why__body quiz-word-note">{view.why.sourceNote}</p>
+          </div>}
           {view.why.mnemonic && (
             <div className="quiz-why__block">
               <p className="quiz-why__label">Memory hook</p>

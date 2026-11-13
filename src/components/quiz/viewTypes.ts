@@ -161,6 +161,8 @@ export interface QuizChoiceView {
 export interface QuizPromptView {
   /** The big text. Japanese uses the learner's font toggle through var(--font-serif). */
   text: string;
+  /** Safe UTF-16 ranges for a curated word's target kanji; never a reading segmentation. */
+  highlights?: readonly { readonly start: number; readonly end: number }[];
   /** "glyph" = one character at 88 px (64 px in typed mode); "word" = 36 px with wrapping. */
   size: "glyph" | "word";
   ja?: boolean;
@@ -208,6 +210,7 @@ export type QuizAnswerState =
 export type QuizOutcome = "correct" | "wrong" | "timeout";
 
 export interface QuizWhyView {
+  sourceNote?: string;
   mnemonic?: string;
   example?: { ja: string; reading?: string; en: string };
   comparison?: {

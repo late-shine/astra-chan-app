@@ -161,7 +161,7 @@ interface MenuScreenProps {
   setCurrentKanjiIndex: React.Dispatch<React.SetStateAction<number>>;
   openVocabPractice: () => void;
   openQuizResume: () => void;
-  setKanjiQuizPhase: React.Dispatch<React.SetStateAction<"config" | "quiz" | "results">>;
+  openKanjiPractice: () => void;
   openOnlineMultiplayer: () => void;
   openKanaPractice: (launch: KanaLaunch) => void;
   kanaPreferences: QuizPreferences;
@@ -321,7 +321,7 @@ export default function MenuScreen(props: MenuScreenProps) {
     setCurrentScreen,
     setCurrentKanjiIndex,
     openVocabPractice, openQuizResume,
-    setKanjiQuizPhase,
+    openKanjiPractice,
     openOnlineMultiplayer,
     openKanaPractice,
     kanaPreferences,
@@ -1355,12 +1355,9 @@ export default function MenuScreen(props: MenuScreenProps) {
                       <PracticeLauncher
                         id="action-kanji-quiz"
                         title="Kanji Quiz"
-                        description="Test N5 kanji meanings or readings"
+                        description="Practice meanings, on’yomi, kun’yomi and curated words"
                         icon={<BookMarked className="w-5 h-5 text-natural-forest" />}
-                        onClick={() => {
-                          setKanjiQuizPhase("config");
-                          setCurrentScreen("kanji-quiz");
-                        }}
+                        onClick={openKanjiPractice}
                       />
                       <PracticeLauncher
                         id="action-online-duel"

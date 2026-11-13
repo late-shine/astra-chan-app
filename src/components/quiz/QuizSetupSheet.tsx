@@ -27,7 +27,7 @@ function plural(count: number, one: string, many: string): string {
 
 export function QuizSetupSheet({ view, actions, returnFocusRef, customSelection, modeOptions }: QuizSetupSheetProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  useEffect(() => { if (view.subject === "words" && view.poolId === "custom") setAdvancedOpen(true); }, [view.subject, view.poolId]);
+  useEffect(() => { if (view.subject !== "kana" && view.poolId === "custom") setAdvancedOpen(true); }, [view.subject, view.poolId]);
   const poolId = useId();
   const noticeId = useId();
   const advancedPanelId = useId();
