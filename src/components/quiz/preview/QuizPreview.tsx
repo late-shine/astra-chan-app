@@ -223,7 +223,7 @@ function timerView(mode: TimerMode): QuizTimerView | undefined {
 interface SetupSelection {
   poolId: string;
   kindId: string;
-  length: number;
+  length: number | "all";
   script: KanaScript;
   stages: Record<string, boolean>;
   choices: 4 | 6;
@@ -470,7 +470,8 @@ export default function QuizPreview() {
     kindId: KINDS[c.subject].some((k) => k.id === setup.kindId) ? setup.kindId : KINDS[c.subject][0].id,
     kinds: KINDS[c.subject],
     length: setup.length,
-    lengths: [5, 10, 20, 30],
+    lengthHelp: setup.length === "all" ? `All ${matchCount} eligible characters, once each.` : undefined,
+    lengths: [10, 20, 30, "all"],
     kana:
       c.subject === "kana"
         ? {

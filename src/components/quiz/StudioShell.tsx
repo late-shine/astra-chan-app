@@ -52,6 +52,7 @@ export interface StudioShellProps {
   /** Screen identity for responsive layout. Current atelier study area is bounded to 610px. */
   width?: StudioWidth;
   scrollRef?: RefObject<HTMLDivElement | null>;
+  studyUnit?: "character" | "word";
   companion?: QuizCompanionView;
   speechEnabled?: boolean;
   onSpeechChange?: (enabled: boolean) => void;
@@ -89,6 +90,7 @@ export function StudioShell({
   companion = { expression: "welcome", speech: "A little time for yourself. Let’s begin whenever you’re ready." },
   onCompanionInteract,
   artUnavailable = false,
+  studyUnit = "character",
 }: StudioShellProps) {
   return (
     <div
@@ -115,7 +117,7 @@ export function StudioShell({
                 <div className="quiz-page">{children}</div>
                 {footer}
               </div>
-              <p className="quiz-atelier-caption" aria-hidden="true">A quiet room. One character at a time.</p>
+              <p className="quiz-atelier-caption" aria-hidden="true">A quiet room. One {studyUnit} at a time.</p>
             </div>
             <QuizCompanion view={companion} unavailable={artUnavailable} onInteract={onCompanionInteract} />
           </div>
@@ -126,7 +128,7 @@ export function StudioShell({
     </div>
   );
 }
-export type StudioPresentation = Pick<StudioShellProps, "themeId" | "reducedMotion" | "keyboardOpen" | "liveViewport" | "modalOpen" | "overlay" | "scrollRef" | "companion" | "artUnavailable" | "onCompanionInteract" | "speechEnabled" | "onSpeechChange">;
+export type StudioPresentation = Pick<StudioShellProps, "themeId" | "reducedMotion" | "keyboardOpen" | "liveViewport" | "modalOpen" | "overlay" | "scrollRef" | "companion" | "artUnavailable" | "onCompanionInteract" | "speechEnabled" | "onSpeechChange" | "studyUnit">;
 
 /* ───────────────────────────── Header ───────────────────────────── */
 

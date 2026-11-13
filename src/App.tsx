@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { mergeSoloCustomDraft } from "./quiz/soloSetup";
 import { onAuthStateChanged, type User as FirebaseUser } from "firebase/auth";
 import { motion, AnimatePresence, useTransform, useReducedMotion } from "motion/react";
 import {
@@ -98,7 +99,7 @@ import {
   signInEmailAccount,
   signOutAccount,
 } from "./firebase";
-import { HiraganaItem, KatakanaItem, KanjiItem, VocabularyItem, StudentStats, SRSCard, SrsSettings, TipsState } from "./types";
+import { HiraganaItem, KatakanaItem, KanjiItem, StudentStats, SRSCard, SrsSettings, TipsState } from "./types";
 import type { ReadingToken } from "./reading/readingData";
 import MascotCompanion from "./components/MascotCompanion";
 import AtmosphereCanvas from "./components/AtmosphereCanvas";
@@ -144,7 +145,6 @@ import {
   writeLocalProfile,
 } from "./profileSync";
 import MenuScreen from "./components/MenuScreen";
-import VocabQuizScreen from "./components/VocabQuizScreen";
 import KanjiQuizScreen from "./components/KanjiQuizScreen";
 import { QuizFlow, type KanaLaunch } from "./components/quiz/QuizFlow";
 import type { Catalogs } from "./quiz/types";
@@ -325,7 +325,7 @@ function readSavedBgScene(): number {
   return 0;
 }
 
-const KANA_CATALOGS: Catalogs = { hiragana: HIRAGANA_DATA, katakana: KATAKANA_DATA, vocabulary: [], kanji: [] };
+const SOLO_CATALOGS: Catalogs = { hiragana: HIRAGANA_DATA, katakana: KATAKANA_DATA, vocabulary: VOCABULARY_DATA, kanji: [] };
 
 export default function App() {
   const { x: parallaxX, y: parallaxY } = useMouseParallax();
@@ -335,7 +335,7 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState<"menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "sandbox" | "grammar-dojo" | "reading-room">("menu");
   const [quizCompanionSpeech, setQuizCompanionSpeech] = useState(true);
   const [kanaLaunch, setKanaLaunch] = useState<KanaLaunch>("practice");
-  const studioQuiz = currentScreen === "quiz" || currentScreen === "results";
+  const studioQuiz = currentScreen === "quiz" || currentScreen === "results" || currentScreen === "vocab-quiz";
 
   /* ===== POLISH C4: REFERENCE CHARTS TOPIC AND SANDBOX ENTRY MODE (memory only) ===== */
   // The Charts topic lives here so Back from the Sandbox page returns to the SAME topic. It resets to
@@ -1102,21 +1102,6 @@ export default function App() {
   });
 
   // ── VOCAB QUIZ STATE ──────────────────────────────────────────────────────
-  const [vocabQuizMode, setVocabQuizMode] = useState<"meaning" | "reading">("meaning");
-  const [vocabQuizLength, setVocabQuizLength] = useState<10 | 20 | "all">(10);
-  const [vocabQuizScope, setVocabQuizScope] = useState<"all" | "category" | "learned" | "custom">("all");
-  const [vocabQuizCustomWords, setVocabQuizCustomWords] = useState<Set<string>>(new Set());
-  const [vocabQuizPool, setVocabQuizPool] = useState<VocabularyItem[]>([]);
-  const [vocabQuizIndex, setVocabQuizIndex] = useState(0);
-  const [vocabQuizItem, setVocabQuizItem] = useState<VocabularyItem | null>(null);
-  const [vocabQuizChoices, setVocabQuizChoices] = useState<string[]>([]);
-  const [vocabQuizAnswerStatus, setVocabQuizAnswerStatus] = useState<"correct" | "incorrect" | null>(null);
-  const [vocabQuizSelectedAnswer, setVocabQuizSelectedAnswer] = useState<string | null>(null);
-  const [vocabQuizCorrect, setVocabQuizCorrect] = useState(0);
-  const [vocabQuizXp, setVocabQuizXp] = useState(0);
-  const [vocabQuizWrong, setVocabQuizWrong] = useState<VocabularyItem[]>([]);
-  const [vocabQuizPhase, setVocabQuizPhase] = useState<"config" | "quiz" | "results">("config");
-
   // ── KANJI QUIZ STATE ──────────────────────────────────────────────────────
   const [kanjiQuizMode, setKanjiQuizMode] = useState<"meaning" | "reading">("meaning");
   const [kanjiQuizLength, setKanjiQuizLength] = useState<10 | 20 | "all">(10);
@@ -1276,6 +1261,9 @@ export default function App() {
     setShowProfilePanel(false);
     setCurrentScreen("quiz");
   };
+  const openVocabPractice = () => { setKanaLaunch("customize"); setShowProfilePanel(false); setCurrentScreen("vocab-quiz"); };
+  const openQuizResume = () => { setKanaLaunch("resume"); setShowProfilePanel(false); setCurrentScreen(quizSession.state.phase !== "idle" && quizSession.state.config.subject === "vocab" ? "vocab-quiz" : "quiz"); };
+  const learnedQuizWords = useMemo(() => Object.keys(stats.vocabularyProgress).filter(word => stats.vocabularyProgress[word]), [stats.vocabularyProgress]);
   const leaveKanaPractice = () => {
     setShowStudyRoom(false);
     setActiveHubTab("practice");
@@ -2010,118 +1998,6 @@ export default function App() {
 
     return choices;
   };
-
-  // ── VOCAB QUIZ HELPERS ──────────────────────────────────────────────────────
-  const generateVocabChoices = (item: VocabularyItem, pool: VocabularyItem[], mode: "meaning" | "reading"): string[] => {
-    const correct = mode === "meaning" ? item.english : item.hiragana;
-    const distractors: string[] = [];
-    const shuffled = [...pool].filter(v => v.word !== item.word).sort(() => Math.random() - 0.5);
-    for (const v of shuffled) {
-      const val = mode === "meaning" ? v.english : v.hiragana;
-      if (val !== correct && !distractors.includes(val)) distractors.push(val);
-      if (distractors.length >= 3) break;
-    }
-    // Pad with VOCABULARY_DATA if pool was tiny
-    if (distractors.length < 3) {
-      for (const v of VOCABULARY_DATA.sort(() => Math.random() - 0.5)) {
-        if (v.word === item.word) continue;
-        const val = mode === "meaning" ? v.english : v.hiragana;
-        if (val !== correct && !distractors.includes(val)) distractors.push(val);
-        if (distractors.length >= 3) break;
-      }
-    }
-    return [correct, ...distractors].sort(() => Math.random() - 0.5);
-  };
-
-  const getVocabQuizKey = (item: VocabularyItem) => `${item.category}:${item.word}:${item.hiragana}`;
-
-  const getVocabQuizBasePool = () => {
-    if (vocabQuizScope === "category") {
-      return vocabsCategory === "all"
-        ? [...VOCABULARY_DATA]
-        : VOCABULARY_DATA.filter(v => v.category === vocabsCategory);
-    }
-    if (vocabQuizScope === "learned") {
-      return VOCABULARY_DATA.filter(v => !!stats.vocabularyProgress[v.word]);
-    }
-    if (vocabQuizScope === "custom") {
-      return VOCABULARY_DATA.filter(v => vocabQuizCustomWords.has(getVocabQuizKey(v)));
-    }
-    return [...VOCABULARY_DATA];
-  };
-
-  const getVocabQuizScopeLabel = () => {
-    if (vocabQuizScope === "category") return vocabsCategory === "all" ? "All themes" : vocabsCategory;
-    if (vocabQuizScope === "learned") return "Learned words";
-    if (vocabQuizScope === "custom") return `${vocabQuizCustomWords.size} selected`;
-    return "All words";
-  };
-
-  const toggleVocabQuizCustomWord = (item: VocabularyItem) => {
-    const key = getVocabQuizKey(item);
-    setVocabQuizCustomWords(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
-  const startVocabQuiz = () => {
-    const base = getVocabQuizBasePool();
-    if (base.length === 0) {
-      const msg = vocabQuizScope === "learned"
-        ? "No learned vocabulary yet. Mark words as learned first!"
-        : vocabQuizScope === "custom"
-          ? "Select at least one word for a custom quiz!"
-          : "No vocabulary available for this pool!";
-      showToast(msg);
-      return;
-    }
-    const shuffled = base.sort(() => Math.random() - 0.5);
-    const len = vocabQuizLength === "all" ? shuffled.length : Math.min(vocabQuizLength, shuffled.length);
-    const pool = shuffled.slice(0, len);
-
-    const first = pool[0];
-    setVocabQuizPool(pool);
-    setVocabQuizIndex(0);
-    setVocabQuizCorrect(0);
-    setVocabQuizXp(0);
-    setVocabQuizWrong([]);
-    setVocabQuizAnswerStatus(null);
-    setVocabQuizSelectedAnswer(null);
-    setVocabQuizItem(first);
-    setVocabQuizChoices(generateVocabChoices(first, pool, vocabQuizMode));
-    setVocabQuizPhase("quiz");
-  };
-
-  const handleVocabAnswer = (answer: string) => {
-    if (!vocabQuizItem || vocabQuizAnswerStatus !== null) return;
-    const correct = vocabQuizMode === "meaning" ? vocabQuizItem.english : vocabQuizItem.hiragana;
-    const isCorrect = answer === correct;
-    setVocabQuizSelectedAnswer(answer);
-    setVocabQuizAnswerStatus(isCorrect ? "correct" : "incorrect");
-    const xp = isCorrect ? 8 : 2;
-    setVocabQuizXp(prev => prev + xp);
-    if (isCorrect) { setVocabQuizCorrect(prev => prev + 1); playChime(true); }
-    else { setVocabQuizWrong(prev => [...prev, vocabQuizItem!]); playChime(false); }
-    // C1: persist like the kana quiz and Study paths, so this XP survives an anonymous reload (amount unchanged).
-    setStats(prev => {
-      const updated = { ...prev, xp: prev.xp + xp };
-      return updated;
-    });
-    setTimeout(() => {
-      const nextIdx = vocabQuizIndex + 1;
-      if (nextIdx >= vocabQuizPool.length) { setVocabQuizPhase("results"); return; }
-      const next = vocabQuizPool[nextIdx];
-      setVocabQuizItem(next);
-      setVocabQuizChoices(generateVocabChoices(next, vocabQuizPool, vocabQuizMode));
-      setVocabQuizAnswerStatus(null);
-      setVocabQuizSelectedAnswer(null);
-      setVocabQuizIndex(nextIdx);
-    }, 1500);
-  };
-  // ── END VOCAB QUIZ HELPERS ──────────────────────────────────────────────────
 
   // ── KANJI QUIZ HELPERS ──────────────────────────────────────────────────────
   const generateKanjiChoices = (item: KanjiItem, mode: "meaning" | "reading"): string[] => {
@@ -3706,15 +3582,14 @@ export default function App() {
   const menuScreenProps = {
     setCurrentScreen,
     setCurrentKanjiIndex,
-    setVocabQuizPhase,
     setKanjiQuizPhase,
     openOnlineMultiplayer,
-    openKanaPractice,
+    openKanaPractice, openVocabPractice, openQuizResume,
     kanaPreferences: quizPreferences,
-    kanaResume: quizSession.state.phase !== "idle" && quizSession.state.config.subject === "kana" ? {
-      title: quizSession.state.phase === "results" ? "View saved results" : "Resume kana practice",
-      description: quizSession.state.phase === "results" ? "Review your last kana round" : quizSession.state.config.origin === "survival"
-        ? `Kana · Survival question ${quizSession.state.index + 1}` : `Kana · Question ${quizSession.state.index + 1} of ${quizSession.state.questions.length}`,
+    quizResume: quizSession.state.phase !== "idle" ? {
+      title: quizSession.state.phase === "results" ? "View saved results" : `Resume ${quizSession.state.config.subject === "vocab" ? "words" : "kana"} practice`,
+      description: quizSession.state.phase === "results" ? `Review your last ${quizSession.state.config.subject === "vocab" ? "words" : "kana"} round` : quizSession.state.config.origin === "survival"
+        ? `Kana · Survival question ${quizSession.state.index + 1}` : `${quizSession.state.config.subject === "vocab" ? "Words" : "Kana"} · Question ${quizSession.state.index + 1} of ${quizSession.state.questions.length}`,
     } : undefined,
     showStudyRoom,
     setShowStudyRoom,
@@ -3752,40 +3627,6 @@ export default function App() {
     availableJapaneseVoices,
     autoPronounce,
     setAutoPronounce,
-  };
-
-  // Props for the extracted VocabQuizScreen component (Phase 3 of the App.tsx split).
-  const vocabQuizScreenProps = {
-    vocabQuizPhase,
-    vocabQuizMode,
-    vocabQuizScope,
-    vocabQuizLength,
-    vocabQuizCustomWords,
-    vocabQuizPool,
-    vocabQuizIndex,
-    vocabQuizItem,
-    vocabQuizChoices,
-    vocabQuizSelectedAnswer,
-    vocabQuizAnswerStatus,
-    vocabQuizCorrect,
-    vocabQuizWrong,
-    vocabQuizXp,
-    vocabularyData: VOCABULARY_DATA,
-    vocabsCategory,
-    setVocabsCategory,
-    stats,
-    speakJapanese,
-    setVocabQuizPhase,
-    setVocabQuizMode,
-    setVocabQuizScope,
-    setVocabQuizLength,
-    setVocabQuizCustomWords,
-    getVocabQuizScopeLabel,
-    getVocabQuizKey,
-    toggleVocabQuizCustomWord,
-    startVocabQuiz,
-    returnToPracticeHub,
-    handleVocabAnswer,
   };
 
   // Props for the extracted KanjiQuizScreen component (Phase 4 of the App.tsx split).
@@ -4659,20 +4500,27 @@ export default function App() {
           {currentScreen === "menu" && <MenuScreen {...menuScreenProps} />}
 
           {/* ================= SCREEN 2: ACTIVE QUIZ WORKSPACE ================= */}
-          {studioQuiz && <QuizFlow speechEnabled={quizCompanionSpeech} onSpeechChange={setQuizCompanionSpeech} owner={progressOwner} controller={quizSession} ready={quizReady}
+          {studioQuiz && <QuizFlow subject={currentScreen === "vocab-quiz" ? "vocab" : "kana"} learnedWords={learnedQuizWords} speechEnabled={quizCompanionSpeech} onSpeechChange={setQuizCompanionSpeech} owner={progressOwner} controller={quizSession} ready={quizReady}
             unavailable={statsHydrated && cloudStatsHydrated && !progressChanging && !quizReady}
-            launch={currentScreen === "results" ? "resume" : kanaLaunch} catalogs={KANA_CATALOGS} history={quizHistory}
+            launch={currentScreen === "results" ? "resume" : kanaLaunch} catalogs={SOLO_CATALOGS} history={quizHistory}
             preferences={quizPreferences} onPreferenceChange={patch => setQuizPreferences(previous => ({ ...previous, ...patch }))}
             onReadCustom={() => {
               if (!progressOwner || !isCurrentQuizOwner(progressOwner)) return [];
               const draft = quizBrowserStorage.readCustom(progressOwner);
-              if (draft.ok === true) return draft.value;
+              if (draft.ok === true) return draft.value.filter(id => (quizSession.state.phase !== "idle" ? quizSession.state.config.subject === "vocab" : currentScreen === "vocab-quiz") ? id.startsWith("v_") : /^[hk]_/.test(id));
               showToast(draft.message);
               return [];
             }} onSaveCustom={ids => {
               if (!progressOwner || !isCurrentQuizOwner(progressOwner)) return;
-              const saved = quizBrowserStorage.writeCustom(progressOwner, ids);
-              if (saved.ok === false) showToast(saved.message);
+              const prior = quizBrowserStorage.readCustom(progressOwner);
+              if (prior.ok === false) { showToast(prior.message); return []; }
+              const isCurrent = (id: string) => (quizSession.state.phase !== "idle" ? quizSession.state.config.subject === "vocab" : currentScreen === "vocab-quiz") ? id.startsWith("v_") : /^[hk]_/.test(id);
+              const draftSubject = quizSession.state.phase !== "idle" ? quizSession.state.config.subject === "vocab" ? "vocab" : "kana" : currentScreen === "vocab-quiz" ? "vocab" : "kana";
+              const merged = mergeSoloCustomDraft(prior.value, ids, draftSubject);
+              const saved = quizBrowserStorage.writeCustom(progressOwner, merged.ids);
+              if (saved.ok === false) { showToast(saved.message); return prior.value.filter(isCurrent); }
+              if (merged.truncated) showToast("The shared custom draft holds 256 items. Your other subject's selection has been kept.");
+              return merged.selected;
             }}
             previousBest={stats.survivalBestScore ?? 0} streak={stats.streakCount}
             cloudPending={isAccountUser && (quizCloudPending || !cloudSyncReady)}
@@ -4688,7 +4536,6 @@ export default function App() {
           {currentScreen === "kanji-scroll" && <KanjiScrollScreen {...kanjiScrollScreenProps} />}
 
           {/* ================= SCREEN: VOCAB QUIZ ================= */}
-          {currentScreen === "vocab-quiz" && <VocabQuizScreen {...vocabQuizScreenProps} />}
 
           {/* ================= SCREEN: KANJI QUIZ ================= */}
           {currentScreen === "kanji-quiz" && <KanjiQuizScreen {...kanjiQuizScreenProps} />}

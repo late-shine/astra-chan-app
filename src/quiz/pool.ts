@@ -17,6 +17,18 @@ export const ELIGIBILITY_REASON_LABELS: Readonly<Record<ExclusionReason, string>
   'insufficient-choices': 'Not enough distinct answer choices',
 });
 const DEFAULT_KINDS = freeze({ kana: ['kana-read'], vocab: ['vocab-meaning'], kanji: ['kanji-meaning'] } as const);
+// Full vocabulary foil preparation is expensive. Reuse only an identical source snapshot;
+// a signature also invalidates in-place catalog edits by callers. Pool/history filters remain fresh.
+const vocabularyCache = new WeakMap<Catalogs['vocabulary'], { signature: string; result: FactoryResult }>();
+function vocabularyCandidates(catalogs: Catalogs): FactoryResult {
+  const signature = JSON.stringify(catalogs.vocabulary);
+  const cached = vocabularyCache.get(catalogs.vocabulary);
+  if (cached?.signature === signature) return cached.result;
+  const result = createVocabularyCandidates(catalogs);
+  vocabularyCache.set(catalogs.vocabulary, {signature, result});
+  return result;
+}
+
 
 function prepare(catalogs: Catalogs, config: BuildConfig): { candidates: Candidate[]; report: EligibilityReport } {
   if (!Number.isSafeInteger(config.length) || config.length < 1 || !Number.isFinite(config.now)) throw new RangeError('Invalid quiz length or clock');
@@ -31,7 +43,7 @@ function prepare(catalogs: Catalogs, config: BuildConfig): { candidates: Candida
   if ((filter === 'learned' && config.subject !== 'vocab') || (filter === 'studied' && config.subject !== 'kanji')) throw new RangeError('Manual flags apply only to their own subject');
   const empty = (sourceCount: number): FactoryResult => ({ sourceCount, candidates: [], exclusions: [], duplicateIdentities: [] });
   const kana = config.subject === 'kana' ? createKanaCandidates(catalogs) : empty(catalogs.hiragana.length + catalogs.katakana.length);
-  const vocab = config.subject === 'vocab' ? createVocabularyCandidates(catalogs) : empty(catalogs.vocabulary.length);
+  const vocab = config.subject === 'vocab' ? vocabularyCandidates(catalogs) : empty(catalogs.vocabulary.length);
   const kanji = config.subject === 'kanji' ? createKanjiCandidates(catalogs) : empty(catalogs.kanji.length);
   const context = createContextCandidates(catalogs);
   const factories = [kana, vocab, kanji, context];

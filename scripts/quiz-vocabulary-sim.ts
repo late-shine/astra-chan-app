@@ -1,0 +1,84 @@
+/** QZ6 live-adapter contracts, real vocabulary, frozen recovery and existing progress bridge records. */
+import assert from 'node:assert/strict';
+import { isDeepStrictEqual } from 'node:util';
+import { readFileSync } from 'node:fs';
+import { HIRAGANA_DATA, KATAKANA_DATA, VOCABULARY_DATA } from '../src/data';
+import type { StudentStats } from '../src/types';
+import { DEFAULT_QUIZ_PREFERENCES } from '../src/quiz/preferences';
+import { mergeSoloCustomDraft, soloConfig } from '../src/quiz/soloSetup';
+import { soloQuestionModel, soloFeedbackModel } from '../src/quiz/soloViews';
+import { buildQuestions, getEligibility } from '../src/quiz/pool';
+import { vocabularyId } from '../src/quiz/content/vocabulary';
+import { seededRandom } from '../src/quiz/random';
+import { applyQuizRecord, progressEntryForPending } from '../src/quiz/progress';
+import { createSession, reduceSession } from '../src/quiz/session';
+import { serializeSnapshot, validateSnapshot } from '../src/quiz/snapshot';
+import { SESSION_LIMITS, type ActiveSession, type Catalogs, type SessionState } from '../src/quiz/types';
+let passed=0;
+const check=(name:string,value:unknown)=>{assert.ok(value,name);passed++;};
+const active=(s:SessionState):ActiveSession=>{if(s.phase==='idle')throw Error('Expected active');return s;};
+const catalogs:Catalogs={hiragana:HIRAGANA_DATA,katakana:KATAKANA_DATA,vocabulary:VOCABULARY_DATA,kanji:[]};
+const order=JSON.stringify(VOCABULARY_DATA);
+const clock={monoMs:10,epochMs:Date.UTC(2026,10,13,6),localDate:'2026-11-13'};
+const base:StudentStats={xp:0,totalAttempts:0,correctCount:0,studyDates:[],streakCount:0,lastActiveDate:'',masteredChars:[],characterProgress:{},vocabularyProgress:{猫:true},favoriteCategory:'basic',srsCards:{},survivalBestScore:0,srsReviewedTotal:0};
+for(const kind of ['meaning','reading','reverse','mixed'] as const) {
+  const prefs={...DEFAULT_QUIZ_PREFERENCES,quizVocabKind:kind};
+  const config=soloConfig(prefs,'vocab','practice',kind,undefined,[],'vocab_'+kind,clock.epochMs);
+  const questions=buildQuestions(catalogs,config,{},seededRandom(71)).questions;
+  check('default length10; no repeated written targets',questions.length===10&&new Set(questions.map(q=>q.kind==='vocab-reverse'?q.reveal.answer:q.face)).size===10);
+  let state=active(reduceSession(createSession(),{type:'START',questions,clock,config:{sessionId:config.sessionId,subject:'vocab',origin:'practice',challenge:'steady',autoNext:true,previousSurvivalBest:0,rewardVersion:1}}));
+  const q=state.current;
+  for(const question of questions) {
+    const view=soloQuestionModel({...state,current:question});
+    check('word-sized prompt and subject',view.subjectLabel==='Words'&&view.prompt.size==='word');
+    check('no unanswered audio/reveal',!('speechText' in view)&&!('reveal' in view));
+    if(question.kind==='vocab-reading') check('true reading: written kanji, no subtitle/helper',/[\u3400-\u9fff]/u.test(view.prompt.text)&&!view.prompt.reading&&!view.prompt.helper&&view.choices.every(c=>c.ja));
+    if(question.kind==='vocab-meaning') check('English options stack on mobile',view.choiceLayout==='long'&&view.choices.every(c=>!c.ja));
+    if(question.kind==='vocab-reverse') check('reverse English prompt/Japanese choices',view.prompt.ja===false&&view.choices.every(c=>c.ja));
+  }
+  const wrong=q.responseType==='choice'?q.choices.find(c=>c.id!==q.correctChoiceId)!.id:'';
+  state=active(reduceSession(state,{type:'ANSWER',sessionId:config.sessionId,questionId:q.id,clock:{...clock,monoMs:20},inputId:'wrong',response:{type:'choice',choiceId:wrong}}));
+  const record=state.records.at(-1)!;
+  check('wrong gives0XP',record.xp===0);
+  const entry=progressEntryForPending(state);
+  const stats=applyQuizRecord(base,entry);
+  check('first wrong counts activity,attempt,skill but no consolationXP',stats.totalAttempts===1&&stats.correctCount===0&&stats.xp===0&&stats.studyDates.includes(clock.localDate)&&!!stats.quizSkills?.[q.skillKey]);
+  check('manual mastery,kanji/kana/SRS untouched',stats.vocabularyProgress===base.vocabularyProgress&&stats.characterProgress===base.characterProgress&&stats.masteredChars===base.masteredChars&&stats.srsCards===base.srsCards);
+  state=active(reduceSession(state,{type:'COMMIT_OK',sessionId:config.sessionId,seq:state.pending!.record.seq,attempt:state.pending!.attempt,clock:{...clock,monoMs:21}}));
+  check('wrong stays manual Next',state.phase==='feedback'&&state.runtime.autoNextDeadlineMonoMs===null);
+  const feedback=soloFeedbackModel(state,record.type==='answer'?record:(()=>{throw Error('answer');})(),soloQuestionModel(state),()=>undefined);
+  check('feedback keeps frozen correct answer/listen',feedback?.correctAnswer===q.reveal.answer&&feedback.canListen);
+  const restored=validateSnapshot(serializeSnapshot(state,'owner-qz6',{...clock,monoMs:22}),'owner-qz6',{...clock,monoMs:23});
+  check('reload validates with existing schema',restored.ok);
+  if(restored.ok) {check('reload explicit pause keeps frozen choices/outcome',restored.state.phase==='paused'&&isDeepStrictEqual(restored.state.current,q)&&restored.state.records.length===1);}
+  check('receipt replay adds no second attempt',isDeepStrictEqual(applyQuizRecord(stats,entry),stats));
+  const persisted=JSON.parse(JSON.stringify(stats)) as StudentStats;
+  check('totals/activity/skills survive JSON roundtrip',persisted.totalAttempts===1&&persisted.studyDates.includes(clock.localDate)&&persisted.quizSkills?.[q.skillKey].a===1);
+
+}
+const readingPrefs={...DEFAULT_QUIZ_PREFERENCES,quizVocabKind:'reading' as const,quizVocabPool:'learned' as const};
+check('empty Learned stays empty',getEligibility(catalogs,soloConfig(readingPrefs,'vocab','practice','reading',undefined,[],'empty',clock.epochMs)).eligibleTargets===0);
+const word=VOCABULARY_DATA.find(w=>w.word==='猫')!;
+const customCfg=soloConfig(DEFAULT_QUIZ_PREFERENCES,'vocab','practice','meaning',[vocabularyId(word)],[],'custom',clock.epochMs);
+const custom=buildQuestions(catalogs,customCfg,{},seededRandom(3));
+check('one-word custom shrinks honestly with full-catalog foils',custom.questions.length===1&&custom.questions[0].responseType==='choice'&&custom.questions[0].choices.length===4);
+const theme=soloConfig({...DEFAULT_QUIZ_PREFERENCES,quizVocabPool:'theme:food'},'vocab','practice','meaning',undefined,[],'theme',clock.epochMs);
+check('theme targets remain in theme',buildQuestions(catalogs,theme,{},seededRandom(4)).questions.every(q=>VOCABULARY_DATA.some(w=>vocabularyId(w)===q.itemId&&w.category==='food')));
+check('all vocabulary exceeds existing bank cap; UI must explain rather than truncate',getEligibility(catalogs,soloConfig({...DEFAULT_QUIZ_PREFERENCES,quizLength:'all'},'vocab','practice','meaning',undefined,[],'large',clock.epochMs)).eligibleTargets>SESSION_LIMITS.questions);
+check('quiz construction never sorts garden data in place',JSON.stringify(VOCABULARY_DATA)===order);
+const edited = VOCABULARY_DATA.slice(0,25).map(row=>({...row}));
+const editsCatalog={...catalogs,vocabulary:edited};
+const editConfig={...customCfg,sessionId:'cache_edit',pool:{filter:'all' as const},length:25};
+buildQuestions(editsCatalog,editConfig,{},seededRandom(5));
+edited[0].english='Unique edited fixture meaning';
+const fresh=buildQuestions(editsCatalog,editConfig,{},seededRandom(5));
+check('candidate cache invalidates in-place source changes',fresh.questions.some(q=>q.reveal.meaning==='Unique edited fixture meaning'));
+const draft = mergeSoloCustomDraft(['h_1234','k_1234','v_old'],Array.from({length:300},(_,i)=>`v_${i}`),'vocab');
+check('vocabulary draft preserves kana selections within existing cap',draft.ids.length===256&&draft.ids.includes('h_1234')&&draft.ids.includes('k_1234')&&draft.selected.length===254&&draft.truncated);
+check('kana draft preserves vocabulary selection',mergeSoloCustomDraft(['v_1234','h_old'],['h_new'],'kana').ids.join(',')==='v_1234,h_new');
+const allTheme=buildQuestions(catalogs,{...theme,length:SESSION_LIMITS.questions},{},seededRandom(12));
+check('All on bounded theme covers every eligible target once',allTheme.questions.length===allTheme.eligibility.eligibleTargets&&new Set(allTheme.questions.map(q=>q.itemId)).size===allTheme.questions.length);
+const app=readFileSync('src/App.tsx','utf8');
+check('one App controller hook', (app.match(/useQuizSession\(/g)??[]).length===1);
+check('legacy sort/handler/timer pipeline gone',!app.includes('handleVocabAnswer')&&!app.includes('VOCABULARY_DATA.sort')&&!app.includes('vocabQuizScreenProps'));
+console.log(`${passed} QZ6 checks passed, 0 failed.`);

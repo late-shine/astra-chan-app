@@ -159,12 +159,13 @@ interface MenuScreenProps {
   // Navigation
   setCurrentScreen: React.Dispatch<React.SetStateAction<ScreenType>>;
   setCurrentKanjiIndex: React.Dispatch<React.SetStateAction<number>>;
-  setVocabQuizPhase: React.Dispatch<React.SetStateAction<"config" | "quiz" | "results">>;
+  openVocabPractice: () => void;
+  openQuizResume: () => void;
   setKanjiQuizPhase: React.Dispatch<React.SetStateAction<"config" | "quiz" | "results">>;
   openOnlineMultiplayer: () => void;
   openKanaPractice: (launch: KanaLaunch) => void;
   kanaPreferences: QuizPreferences;
-  kanaResume?: { title: string; description: string };
+  quizResume?: { title: string; description: string };
 
   // Study room / hub tab state
   showStudyRoom: boolean;
@@ -319,12 +320,12 @@ export default function MenuScreen(props: MenuScreenProps) {
   const {
     setCurrentScreen,
     setCurrentKanjiIndex,
-    setVocabQuizPhase,
+    openVocabPractice, openQuizResume,
     setKanjiQuizPhase,
     openOnlineMultiplayer,
     openKanaPractice,
     kanaPreferences,
-    kanaResume,
+    quizResume,
     showStudyRoom,
     setShowStudyRoom,
     activeHubTab,
@@ -419,7 +420,7 @@ export default function MenuScreen(props: MenuScreenProps) {
   // ── C6: Practice hub. The disclosure is local UI state (closed on every visit); the settings themselves stay in App. ──
   const kanaSummary = [KANA_SCRIPT_LABELS[kanaPreferences.quizKanaScript],
     quizKanaStages(kanaPreferences.quizKanaStagesMask).map(stage => KANA_STAGE_LABELS[stage]).join(" + "),
-    KANA_KIND_LABELS[kanaPreferences.quizKanaKind], `${kanaPreferences.quizLength} questions`, "Untimed"].join(" / ");
+    KANA_KIND_LABELS[kanaPreferences.quizKanaKind], kanaPreferences.quizLength === "all" ? "All eligible characters" : `${kanaPreferences.quizLength} questions`, "Untimed"].join(" / ");
 
   return (
             // C3b: the Study Room and the Bookshelf / Writing Desk hub swap with the same soft fade
@@ -1296,6 +1297,10 @@ export default function MenuScreen(props: MenuScreenProps) {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
                   {/* Launchers: the first thing a learner sees, on phones and on desktop */}
                   <div className="flex flex-col gap-6 min-w-0">
+                      {quizResume && <PracticeLauncher id="action-quiz-resume" title={quizResume.title}
+                        description={quizResume.description} icon={<Play className="w-5 h-5 text-natural-forest" />}
+                        onClick={openQuizResume} />}
+
                     <section aria-labelledby="practice-kana-heading" className="flex flex-col gap-3">
                       <div>
                         <h3 id="practice-kana-heading" className="font-serif text-lg text-natural-forest font-bold tracking-wide">
@@ -1304,9 +1309,6 @@ export default function MenuScreen(props: MenuScreenProps) {
                         <p className="text-xs text-natural-charcoal/70 mt-0.5">Practice in the kana Studio.</p>
                       </div>
 
-                      {kanaResume && <PracticeLauncher id="action-quiz-resume" title={kanaResume.title}
-                        description={kanaResume.description} icon={<Play className="w-5 h-5 text-natural-forest" />}
-                        onClick={() => openKanaPractice("resume")} />}
                       <PracticeLauncher
                         id="action-quiz-choice"
                         title="Start kana practice"
@@ -1340,18 +1342,15 @@ export default function MenuScreen(props: MenuScreenProps) {
                         <h3 id="practice-also-heading" className="font-serif text-lg text-natural-forest font-bold tracking-wide">
                           Also practice
                         </h3>
-                        <p className="text-xs text-natural-charcoal/70 mt-0.5">These have their own setup and do not use the kana settings.</p>
+                        <p className="text-xs text-natural-charcoal/70 mt-0.5">Words and kanji have their own question types and pools.</p>
                       </div>
 
                       <PracticeLauncher
                         id="action-vocab-quiz"
                         title="Vocabulary Quiz"
-                        description="Practice N5 words by meaning or reading"
+                        description="Practice meanings, readings and reverse recognition"
                         icon={<Award className="w-5 h-5 text-natural-clay" />}
-                        onClick={() => {
-                          setVocabQuizPhase("config");
-                          setCurrentScreen("vocab-quiz");
-                        }}
+                        onClick={openVocabPractice}
                       />
                       <PracticeLauncher
                         id="action-kanji-quiz"
@@ -1407,7 +1406,7 @@ export default function MenuScreen(props: MenuScreenProps) {
                           <div className="min-w-0 flex flex-col gap-0.5">
                             <span className="text-sm font-semibold text-natural-forest"><span aria-hidden="true">🔊 </span>Auto-pronounce in quiz</span>
                             <span className="text-[11px] text-natural-forest-light leading-snug">
-                              Speaks the kana after you answer.
+                              Speaks Japanese after you answer.
                             </span>
                           </div>
                           <button

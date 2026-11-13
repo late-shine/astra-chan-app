@@ -118,14 +118,16 @@ export interface QuizSetupView {
   pools: PoolOptionView[];
   kindId: string;
   kinds: SegmentOption[];
-  length: number;
-  lengths: number[];
+  length: number | "all";
+  lengths: (number | "all")[];
+  lengthHelp?: string;
   /** Kana only. */
   kana?: KanaSetupView;
   autoNext: boolean;
   /** How many items match the current choices. Drives the shrink / empty messages. */
   matchCount: number;
   startLabel?: string;
+  startBlocked?: boolean;
   notice?: string;
   /** Offered when the pool is empty, e.g. "Include Voiced kana". */
   emptyAlternative?: { id: string; label: string; reason: string };
@@ -135,7 +137,7 @@ export interface QuizSetupActions {
   onSubjectChange: (subject: QuizSubject) => void;
   onPoolChange: (poolId: string) => void;
   onKindChange: (kindId: string) => void;
-  onLengthChange: (length: number) => void;
+  onLengthChange: (length: number | "all") => void;
   onScriptChange?: (script: KanaScript) => void;
   onToggleStage?: (stageId: string) => void;
   onChoicesChange?: (choices: 4 | 6) => void;
@@ -264,6 +266,7 @@ export interface XpLineView {
 
 export interface MissedItemView {
   id: string;
+  promptJa?: boolean;
   prompt: string;
   promptSize: "glyph" | "word";
   yourAnswer: string;

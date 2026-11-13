@@ -81,7 +81,7 @@ export function QuizResults({ view, actions, shell, status }: QuizResultsProps) 
             <ul className="quiz-missed__list">
               {view.missed.map((item) => (
                 <li className="quiz-missed__item" key={item.id}>
-                  <span className="quiz-jp quiz-missed__prompt" data-size={item.promptSize} lang="ja">
+                  <span className={item.promptJa === false ? "quiz-missed__prompt" : "quiz-jp quiz-missed__prompt"} data-size={item.promptSize} lang={item.promptJa === false ? undefined : "ja"}>
                     {item.prompt}
                   </span>
                   <span className="quiz-missed__text">

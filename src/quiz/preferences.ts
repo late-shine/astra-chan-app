@@ -1,10 +1,15 @@
 import type { VocabCategory } from '../types';
 import { VOCAB_CATEGORY_META } from '../vocab/vocabCategories';
-import type { ChallengeTier, KanaStage, Subject } from './types';
+import { SESSION_LIMITS, type ChallengeTier, type KanaStage, type Subject } from './types';
+
+export const QUIZ_LENGTH_OPTIONS = [10, 20, 30, 'all'] as const;
+export type QuizLength = typeof QUIZ_LENGTH_OPTIONS[number];
+// The bounded controller already caps saved question banks at256; kana fits inside it.
+export function quizBuildLength(length: QuizLength): number { return length === 'all' ? SESSION_LIMITS.questions : length; }
 
 export interface QuizPreferences {
   quizSubject: Subject;
-  quizLength: 5 | 10 | 20 | 30;
+  quizLength: QuizLength;
   quizAutoNext: boolean;
   quizKanaKind: 'read' | 'pick' | 'type' | 'mixed';
   quizVocabKind: 'meaning' | 'reading' | 'reverse' | 'mixed';
@@ -33,7 +38,7 @@ export const QUIZ_STORAGE_KEYS: Record<keyof QuizPreferences, string> = {
 };
 const options: Partial<Record<keyof QuizPreferences, readonly unknown[]>> = {
   quizSubject: ['kana', 'vocab', 'kanji'],
-  quizLength: [5, 10, 20, 30],
+  quizLength: QUIZ_LENGTH_OPTIONS,
   quizKanaKind: ['read', 'pick', 'type', 'mixed'],
   quizVocabKind: ['meaning', 'reading', 'reverse', 'mixed'],
   quizKanjiKind: ['meaning', 'on', 'kun', 'word', 'mixed'],
@@ -45,12 +50,14 @@ const options: Partial<Record<keyof QuizPreferences, readonly unknown[]>> = {
 };
 
 export function validateQuizPreference(key: keyof QuizPreferences, value: unknown): QuizPreferences[keyof QuizPreferences] | undefined {
+  if (key === 'quizLength' && value === 5) return 10; // Retired menu option; existing sessions remain frozen.
   if (key === 'quizAutoNext') return typeof value === 'boolean' ? value : undefined;
   if (key === 'quizKanaStagesMask') return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 15 ? value : undefined;
   return options[key]?.includes(value) ? value as QuizPreferences[keyof QuizPreferences] : undefined;
 }
 
 export function parseQuizPreferenceString(key: keyof QuizPreferences, raw: string): unknown {
+  if (key === 'quizLength' && raw === 'all') return 'all';
   if (key === 'quizAutoNext') return raw === 'true' ? true : raw === 'false' ? false : undefined;
   if (key === 'quizLength' || key === 'quizChoiceCount' || key === 'quizKanaStagesMask') {
     return /^\d{1,2}$/u.test(raw) ? Number(raw) : undefined;

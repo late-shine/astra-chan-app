@@ -7,7 +7,7 @@
 // offer one relevant alternative. There is no random padding and no silent pool widening.
 // Timers are NOT here: they are configured through Timed practice, never inside a normal Start.
 
-import { useId, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useState, type ReactNode, type RefObject } from "react";
 import { Check, ChevronDown, CircleAlert } from "lucide-react";
 import { StudioSegmented, StudioSheet, StudioSwitch } from "./StudioShell";
 import type { QuizSetupActions, QuizSetupView } from "./viewTypes";
@@ -27,20 +27,21 @@ function plural(count: number, one: string, many: string): string {
 
 export function QuizSetupSheet({ view, actions, returnFocusRef, customSelection, modeOptions }: QuizSetupSheetProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  useEffect(() => { if (view.subject === "words" && view.poolId === "custom") setAdvancedOpen(true); }, [view.subject, view.poolId]);
   const poolId = useId();
   const noticeId = useId();
   const advancedPanelId = useId();
 
   const { matchCount, length } = view;
   const isEmpty = matchCount <= 0;
-  const startCount = Math.min(length, Math.max(0, matchCount));
-  const shrinks = !isEmpty && matchCount < length;
+  const startCount = length === "all" ? Math.max(0, matchCount) : Math.min(length, Math.max(0, matchCount));
+  const shrinks = !isEmpty && length !== "all" && matchCount < length;
 
   const startLabel = view.startLabel ?? (isEmpty ? "Start practice" : `Start ${startCount} ${plural(startCount, "question", "questions")}`);
 
   const handleStart = () => {
     // aria-disabled keeps the button focusable (so its reason can be read), so the guard lives here.
-    if (isEmpty) return;
+    if (isEmpty || view.startBlocked) return;
     actions.onStart();
   };
 
@@ -49,7 +50,7 @@ export function QuizSetupSheet({ view, actions, returnFocusRef, customSelection,
       <button
         type="button"
         className="quiz-btn quiz-btn--primary quiz-btn--block"
-        aria-disabled={isEmpty ? true : undefined}
+        aria-disabled={isEmpty || view.startBlocked ? true : undefined}
         aria-describedby={isEmpty || shrinks || view.notice ? noticeId : undefined}
         onClick={handleStart}
       >
@@ -126,11 +127,12 @@ export function QuizSetupSheet({ view, actions, returnFocusRef, customSelection,
           <span className="quiz-field__label">Length</span>
           <StudioSegmented
             label="Length"
-            options={view.lengths.map((n) => ({ id: n, label: String(n) }))}
+            options={view.lengths.map((n) => ({ id: n, label: n === "all" ? "All" : String(n) }))}
             value={view.length}
             onChange={actions.onLengthChange}
             columns={4}
           />
+          {view.lengthHelp && <p className="quiz-help">{view.lengthHelp}</p>}
         </div>
 
         <div id={noticeId} className="quiz-notice-slot" aria-live="polite">

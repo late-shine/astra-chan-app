@@ -617,9 +617,11 @@ input, select, textarea, button {
     grid-column: 3; grid-row: 1; order: 3; display: flex; flex-direction: column-reverse; flex-wrap: nowrap;
     gap: 0; max-width: 420px; margin-top: 72px; padding: 0; border: 0; background: transparent;
   }
-  .quiz-companion__portrait { flex: none; width: 100%; height: auto; aspect-ratio: 3 / 4; }
+  /* Join the portrait to its speech card: conceal the waist edge behind the card, not above it. */
+  .quiz-companion__portrait { flex: none; width: 100%; height: auto; aspect-ratio: 3 / 4; margin-bottom: -28px; }
+  .quiz-companion__art { mask-image: linear-gradient(to bottom, black calc(100% - 32px), transparent); }
   .quiz-companion__speech {
-    flex: none; width: 100%; padding: 1rem 1.25rem; text-align: center;
+    position: relative; z-index: 1; flex: none; width: 100%; padding: 1rem 1.25rem; text-align: center;
     border: 1px solid var(--quiz-border); border-radius: 14px; background: var(--quiz-companion-surface);
   }
   .quiz-companion__line { font-size: 1rem; line-height: 1.5rem; }

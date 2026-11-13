@@ -1330,7 +1330,7 @@ export default function ProfileScreen({
         const badges = [
           {
             emoji: "🌸", name: language === "ja" ? "第一歩" : "First Steps",
-            desc: language === "ja" ? "最初のクイズを完了する" : "Complete your first quiz",
+            desc: language === "ja" ? "最初の学習問題に答える" : "Answer your first study question",
             earned: stats.totalAttempts > 0,
           },
           {
