@@ -121,7 +121,13 @@ function assertResponse(response:Response,q:Question):void {
 export function decodeDuelRoom(raw:unknown):DuelRoom {
   need(raw!==null&&raw!==undefined,'This duel room is no longer available.','missing');
   need(plain(raw)&&raw.protocolVersion===2,OLD_DUEL_MESSAGE,'version');wire(raw);need(bytes(raw)<=DUEL_LIMITS.roomBytes);
-  const r=raw as unknown as DuelRoom;
+  // RTDB removes null-valued children and empty arrays. Joining must claim
+  // guestId through its existing child rule before publishing the guest name.
+  const rawV2=raw.v2 as DuelPayload;
+  const rawSettings=raw.settings as DuelRoom['settings'];
+  const r={...raw,guestId:raw.guestId??null,guestName:raw.guestId ? raw.guestName??'Guest' : null,
+    questionStartedAt:raw.questionStartedAt??null,
+    settings:{...rawSettings,stages:rawSettings?.stages??[]},v2:rawV2} as unknown as DuelRoom;
   keys(r,['protocolVersion','status','hostId','guestId','hostName','guestName','hostAvatar','guestAvatar','seed','settings','currentQuestion','questionStartedAt','scores','answers','v2','presence','lastSeen']);
   need(['waiting','playing','finished'].includes(r.status)&&safe(r.hostId)&&(r.guestId===null||safe(r.guestId)&&r.guestId!==r.hostId)&&text(r.hostName,24)&&(r.guestName===null||text(r.guestName,24))&&integer(r.seed));
   need((r.guestId===null)===(r.guestName===null));need(r.hostAvatar===undefined||typeof r.hostAvatar==='string'&&r.hostAvatar.length<=DUEL_LIMITS.roomBytes);need(r.guestAvatar===undefined||r.guestAvatar===null||typeof r.guestAvatar==='string'&&r.guestAvatar.length<=DUEL_LIMITS.roomBytes);

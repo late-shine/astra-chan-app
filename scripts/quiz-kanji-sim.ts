@@ -112,7 +112,7 @@ check('no source ordering/data mutation',JSON.stringify(catalogs)===before);
 const app = readFileSync('src/App.tsx','utf8');
 check('one App controller and no legacy kanji pipeline',(app.match(/useQuizSession\(/g)??[]).length===1&&!app.includes('handleKanjiAnswer')&&!app.includes('generateKanjiChoices')&&!app.includes('kanjiQuizScreenProps')&&!existsSync('src/components/KanjiQuizScreen.tsx'));
 check('existing +40 guard remains independent',app.includes('const alreadyStudied = (statsRef.current.characterProgress?.[activeKanji]?.total || 0) > 0;')&&app.includes('if (prevProg.total > 0) return prev;')&&app.includes('xp: prev.xp + 40'));
-check('Grammar and duel helpers retained',app.includes('const awardXPAndIncrementAttempt')&&app.includes('const generateChoices'));
+check('Grammar retained and QZ10 replaces legacy duel generator',app.includes('const awardXPAndIncrementAttempt')&&!app.includes('const generateChoices')&&app.includes('useDuelSession'));
 
 // Performance fix: reuse only public factory output; source edits must invalidate it.
 const mutableKanji = KANJI_DATA.map(row=>({...row}));

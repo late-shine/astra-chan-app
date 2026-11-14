@@ -36,6 +36,14 @@ function answer(r:DuelRoom,role:DuelRole,index:number,correct=true,elapsed=100):
 console.log('Protocol validation / readiness / frozen manifests');
 rejected('null snapshots handled',startMatch(null,{uid:'H',matchId:'x',revision:0,now:NOW},{schemaVersion:1,settingsRevision:0,questions:[]},NOW),'missing');
 rejected('old rooms rejected explicitly',joinDuel({status:'waiting',hostId:'H'}, {uid:'G',matchId:'x',revision:0,now:NOW},'Guest'),'version');
+const firebaseEmpty=JSON.parse(JSON.stringify(room(createDuelRoom('H','Host',settings(),'firebase',NOW))));
+delete firebaseEmpty.guestId;delete firebaseEmpty.guestName;delete firebaseEmpty.questionStartedAt;
+check('Firebase omitted null membership and start normalized',decodeDuelRoom(firebaseEmpty).guestId===null&&decodeDuelRoom(firebaseEmpty).questionStartedAt===null);
+firebaseEmpty.guestId='G';
+check('child guest claim before display name is decodable',decodeDuelRoom(firebaseEmpty).guestName==='Guest');
+const firebaseWords=JSON.parse(JSON.stringify(room(createDuelRoom('H','Host',settings('parallel','vocab-meaning'),'firebasewords',NOW))));
+delete firebaseWords.settings.stages;
+check('Firebase omitted empty compatibility stages normalized',decodeDuelRoom(firebaseWords).settings.stages.length===0);
 let lobby=waiting();
 rejected('host cannot start before Ready',startMatch(lobby,scope(lobby),buildDuelManifest(catalogs,lobby.v2.settings,lobby.v2.matchId,1),NOW+1500),'not-ready');
 rejected('old guest has no protocol2 capability',acknowledgeReady(lobby,scope(lobby,'G'),1),'version');

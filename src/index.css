@@ -750,6 +750,11 @@ input, select, textarea, button {
 /* ── Practice home ───────────────────────────────────────────────────────── */
 .quiz-home { display: flex; flex-direction: column; gap: 1.5rem; }
 .quiz-results__deck { grid-column: 1 / -1; }
+.quiz-duel-players { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0.75rem; }
+.quiz-duel-player { display: flex; flex-direction: column; gap: 0.5rem; padding: 1rem; border: 1px solid var(--quiz-control-border); border-radius: var(--quiz-radius-option); overflow-wrap: anywhere; }
+.quiz-duel-score { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; font-size: 0.875rem; line-height: 1.5; }
+.quiz-studio[data-width="home"] .quiz-home { display: flex; }
+.quiz-home .quiz-seg__label { white-space: nowrap; }
 .quiz-home__side { display: flex; flex-direction: column; gap: 1.5rem; min-width: 0; }
 .quiz-home__group { display: flex; flex-direction: column; gap: 0.75rem; }
 .quiz-reco { position: relative; display: flex; flex-direction: column; gap: 0.5rem; }

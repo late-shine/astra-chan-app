@@ -15,7 +15,7 @@ export function QuizCompanion({ view, unavailable = false, onInteract }: QuizCom
   const desired = useRef(view.expression);
   desired.current = view.expression;
   const [shown, setShown] = useState<{ current: AtelierExpression | null; previous: AtelierExpression | null }>({ current: null, previous: null });
-  const [failed, setFailed] = useState<AtelierExpression | null>(null);
+  const [failed, setFailed] = useState<ReadonlySet<AtelierExpression>>(()=>new Set());
 
   useEffect(() => {
     if (unavailable) return;
@@ -63,15 +63,15 @@ export function QuizCompanion({ view, unavailable = false, onInteract }: QuizCom
           const image = event.currentTarget;
           void image.decode().then(() => {
             if (desired.current !== expression) return;
-            setFailed(null);
+            setFailed(previous=>{if(!previous.has(expression))return previous;const next=new Set(previous);next.delete(expression);return next;});
             setShown(previous => previous.current === expression ? previous : { current: expression, previous: previous.current });
-          }).catch(() => { if (desired.current === expression) setFailed(expression); });
+          }).catch(() => { if (desired.current === expression) setFailed(previous=>previous.has(expression)?previous:new Set([...previous,expression])); });
         } : undefined}
-        onError={() => setFailed(expression)} />
+        onError={() => setFailed(previous=>previous.has(expression)?previous:new Set([...previous,expression]))} />
     </picture>;
   };
 
-  const hasArt = !unavailable && shown.current !== null && shown.current !== failed;
+  const hasArt = !unavailable && shown.current !== null && !failed.has(shown.current);
   return <aside className="quiz-companion" aria-label="Astra, study companion" data-expression={view.expression}
     data-art={hasArt ? "ready" : "fallback"} onPointerDown={onInteract} onPointerEnter={onInteract} onFocusCapture={onInteract}>
     <div className="quiz-companion__speech">
@@ -82,9 +82,9 @@ export function QuizCompanion({ view, unavailable = false, onInteract }: QuizCom
     <div className="quiz-companion__portrait" aria-hidden="true">
       {!hasArt && <span className="quiz-companion__fallback">Astra{view.speech && <><br /><span>Right here with you.</span></>}</span>}
       {!unavailable && <>
-        {shown.previous && portrait(shown.previous, "previous")}
+        {shown.previous && !failed.has(shown.previous) && portrait(shown.previous, "previous")}
         {hasArt && portrait(shown.current!, "current")}
-        {shown.current !== view.expression && failed !== view.expression && portrait(view.expression, "pending")}
+        {shown.current !== view.expression && !failed.has(view.expression) && portrait(view.expression, "pending")}
       </>}
     </div>
   </aside>;

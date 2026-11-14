@@ -24,7 +24,9 @@ export function meaningMatcher(meanings: readonly string[]): (a: string, b: stri
     const left = parsed.get(a);
     const right = parsed.get(b);
     if (!left || !right) return meaningsOverlap(a, b);
-    return left.normalized === right.normalized || [...right.atoms].some(atom => left.atoms.has(atom));
+    if(left.normalized === right.normalized)return true;
+    for(const atom of right.atoms)if(left.atoms.has(atom))return true;
+    return false;
   };
 }
 export const readingKey = (value: string): string => normalizeLabel(value).replace(/-/gu, '')
@@ -33,17 +35,22 @@ export const isHiraganaReading = (value: string): boolean => /^[\u3041-\u3096ー
 export const isKanjiWord = (value: string): boolean => /[\u3400-\u9fff々]/u.test(value);
 
 export function uniqueFoils(foils: readonly Foil[], answers: readonly string[]): Foil[] {
-  const blocked = new Set(answers.map(normalizeLabel));
+  return indexedFoils(foils,answers,normalizeLabel,foil=>({...foil}));
+}
+function indexedFoils(foils:readonly Foil[],answers:readonly string[],keyFor:(label:string)=>string,copy:(foil:Foil)=>Foil):Foil[] {
+  const blocked = new Set(answers.map(keyFor));
   const labels = new Map<string, Foil>();
   for (const foil of foils) {
-    const key = normalizeLabel(foil.label);
+    const key = keyFor(foil.label);
     if (!key || blocked.has(key)) continue;
     const previous = labels.get(key);
     if (!previous || foil.score > previous.score || (foil.score === previous.score && compareText(foil.label, previous.label) < 0)) {
-      labels.set(key, { label: foil.label, score: foil.score });
+      labels.set(key, copy(foil));
     }
   }
-  return [...labels.values()].sort((a, b) => compareText(normalizeLabel(a.label), normalizeLabel(b.label)));
+  // The map already holds normalized labels. Re-parsing both labels on every
+  // comparison multiplied cold word preparation into millions of regex calls.
+  return [...labels.entries()].sort(([a],[b]) => compareText(a,b)).map(([,foil])=>foil);
 }
 /** At most two close foils, then a broader foil; ties are resolved by injected RNG. */
 export function chooseFoils(foils: readonly Foil[], count: number, rng: RandomInt): string[] {
@@ -61,6 +68,11 @@ export function chooseFoils(foils: readonly Foil[], count: number, rng: RandomIn
 }
 
 export function finishFactory(sourceCount: number, candidates: readonly Candidate[], exclusions: readonly Exclusion[], duplicates: readonly string[] = []): FactoryResult {
+  // One factory contains millions of repeated label/score pairs. Intern NEW output
+  // objects locally: identical semantics, no mutation/freezing of caller-owned data.
+  const keys=new Map<string,string>(),copies=new Map<string,Map<number,Foil>>();
+  const keyFor=(label:string)=>{let key=keys.get(label);if(key===undefined){key=normalizeLabel(label);keys.set(label,key);}return key;};
+  const copy=(foil:Foil)=>{let scores=copies.get(foil.label);if(!scores){scores=new Map();copies.set(foil.label,scores);}let result=scores.get(foil.score);if(!result){result={...foil};scores.set(foil.score,result);}return result;};
   const valid: Candidate[] = [];
   const rejected = [...exclusions];
   for (const candidate of candidates) {
@@ -68,7 +80,7 @@ export function finishFactory(sourceCount: number, candidates: readonly Candidat
       rejected.push({ source: candidate.face, kind: candidate.kind, reason: 'id-too-long', detail: 'Source identity or skill key exceeds 768 UTF-8 bytes.' });
       continue;
     }
-    const foils = uniqueFoils(candidate.foils, candidate.answers);
+    const foils = indexedFoils(candidate.foils,candidate.answers,keyFor,copy);
     if (!candidate.typed && foils.length < 3) {
       rejected.push({ source: candidate.face, kind: candidate.kind, reason: 'insufficient-choices', detail: 'Fewer than three distinct unambiguous catalog foils.' });
       continue;

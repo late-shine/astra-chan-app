@@ -48,16 +48,7 @@ import {
 import { HIRAGANA_DATA, KATAKANA_DATA, KANJI_DATA, VOCABULARY_DATA } from "./data";
 import { KANJI_READING_RECORDS_V2, KANJI_WORD_FAMILIES_V2 } from "./kanjiWordFamiliesV2";
 import {
-  createRoom,
-  joinRoom,
-  listenToRoom,
-  listenToRoomStatus,
-  submitOnlineAnswer,
-  advanceOnlineQuestion,
-  advanceParallelPlayerQuestion,
-  restartRoom,
-  leaveRoom,
-  DURATION_MS,
+  duelNetwork,
   addFriend,
   removeFriend,
   listenToFriends,
@@ -70,16 +61,11 @@ import {
   respondToRoomInvite,
   listenToInviteResponses,
   clearInviteResponse,
-  recordMatchHistory,
   listenToMatchHistory,
   saveUserProfile,
   getUserProfile,
   markProfileOnline,
   searchUserProfiles,
-  type RoomState,
-  type RoomSettings,
-  type OnlineDifficulty,
-  type QuizMode,
   type FriendRecord,
   type FriendRequest,
   type FriendSearchResult,
@@ -146,6 +132,7 @@ import {
   writeLocalProfile,
 } from "./profileSync";
 import MenuScreen from "./components/MenuScreen";
+import { useDuelSession } from "./quiz/useDuelSession";
 import { QuizFlow, type KanaLaunch } from "./components/quiz/QuizFlow";
 import type { Catalogs } from "./quiz/types";
 import KanjiScrollScreen from "./components/KanjiScrollScreen";
@@ -465,7 +452,7 @@ export default function App() {
   const [activeHubTab, setActiveHubTab] = useState<"learn" | "practice">("learn");
   const [showStudyRoom, setShowStudyRoom] = useState(true);
   const atelierHome = currentScreen === "menu" && !showStudyRoom && activeHubTab === "practice";
-  const atelierScreen = studioQuiz || atelierHome;
+  const atelierScreen = studioQuiz || atelierHome || currentScreen === "online-multiplayer";
   const [subLearnTab, setSubLearnTab] = useState<"hiragana" | "katakana" | "kanji" | "vocabulary">("hiragana");
   const [selectedLearnChar, setSelectedLearnChar] = useState<HiraganaItem | KatakanaItem | null>(null);
 
@@ -1109,7 +1096,6 @@ export default function App() {
 
   // Input refs for romaji typing inputs — used to restore focus after each question
   // advance so the virtual keyboard never dismisses on mobile.
-  const onlineRomajiInputRef = useRef<HTMLInputElement>(null);
 
   // Kanji board index variables
   const [currentKanjiIndex, setCurrentKanjiIndex] = useState(0);
@@ -1124,51 +1110,6 @@ export default function App() {
 
   // Filter selection inside archives
   const [archiveFilter, setArchiveFilter] = useState<string>("all");
-
-  // ── ONLINE MULTIPLAYER STATE ───────────────────────────────────────────────
-  const [onlinePhase, setOnlinePhase] = useState<"menu" | "config" | "join" | "lobby" | "playing" | "finished">("menu");
-  const [onlineRoomCode, setOnlineRoomCode] = useState("");
-  const [onlineRoomState, setOnlineRoomState] = useState<RoomState | null>(null);
-  const [onlineRole, setOnlineRole] = useState<"host" | "guest" | null>(null);
-  const [onlineHostNameInput, setOnlineHostNameInput] = useState("");
-  const [onlineJoinCode, setOnlineJoinCode] = useState("");
-  const [onlineJoinName, setOnlineJoinName] = useState("");
-  const [onlineAnswerLocked, setOnlineAnswerLocked] = useState(false);
-  const [onlineQuestionChoices, setOnlineQuestionChoices] = useState<string[]>([]);
-  const [onlineSelectedAnswer, setOnlineSelectedAnswer] = useState<string | null>(null);
-  const [onlineAnswerStatus, setOnlineAnswerStatus] = useState<"correct" | "incorrect" | null>(null);
-  const [onlineIsConnecting, setOnlineIsConnecting] = useState(false);
-  const [onlineConnectionError, setOnlineConnectionError] = useState<string | null>(null);
-  const [onlineScores, setOnlineScores] = useState<{ host: number; guest: number }>({ host: 0, guest: 0 });
-  const [onlineDifficulty, setOnlineDifficulty] = useState<OnlineDifficulty>("medium");
-  const [onlineQuizMode, setOnlineQuizMode] = useState<QuizMode>("choice");
-  const [onlineTypedAnswer, setOnlineTypedAnswer] = useState("");
-  const [onlineTimeLeft, setOnlineTimeLeft] = useState(0);
-  const [onlineMultiplayerMode, setOnlineMultiplayerMode] = useState<"competitive" | "parallel">("competitive");
-  const [onlineTimerMax, setOnlineTimerMax] = useState(10);
-  const [onlineWinnerName, setOnlineWinnerName] = useState<string | null>(null);
-  const [onlineShowResult, setOnlineShowResult] = useState(false);
-  const unsubscribeRoomRef = useRef<(() => void) | null>(null);
-  const onlineQuestionPoolRef = useRef<(HiraganaItem | KatakanaItem)[]>([]);
-  const onlineTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const onlineAutoAdvanceRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Parallel mode's own per-player "show the result, then move on" pause —
-  // separate from onlineAutoAdvanceRef because parallel mode advances each
-  // player independently rather than waiting on a shared host-driven clock.
-  const onlineParallelAdvanceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const unsubscribeRoomStatusRef = useRef<(() => void) | null>(null);
-  const questionStartedAtRef = useRef<number | null>(null);
-  // ── END ONLINE MULTIPLAYER STATE ───────────────────────────────────────────
-
-  // ── ONLINE CHARACTER PICKER STATE ─────────────────────────────────────────
-  // Separate from offline picker so the two configs don't interfere.
-  const [onlineAlphabet, setOnlineAlphabet] = useState<"hiragana" | "katakana" | "mixed">("hiragana");
-  const [onlinePickerDeck, setOnlinePickerDeck] = useState<(HiraganaItem | KatakanaItem)[]>(HIRAGANA_DATA);
-  const [onlinePickerSelectedChars, setOnlinePickerSelectedChars] = useState<Set<string>>(
-    () => new Set(HIRAGANA_DATA.map((c) => c.kana))
-  );
-  const [onlineQuestionCount, setOnlineQuestionCount] = useState(10);
-  // ── END ONLINE CHARACTER PICKER STATE ──────────────────────────────────────
 
   // ── FRIEND SYSTEM STATE ────────────────────────────────────────────────────
   const [friends, setFriends] = useState<FriendRecord[]>([]);
@@ -1411,9 +1352,10 @@ export default function App() {
   const unsubscribeMatchHistoryRef = useRef<(() => void) | null>(null);
   const seenFriendRequestIdsRef = useRef<Set<string>>(new Set());
   const friendRequestsLoadedRef = useRef(false);
-  const recordedMatchHistoryRef = useRef<Set<string>>(new Set());
-  const [onlineIsStarting, setOnlineIsStarting] = useState(false);
   // ── END FRIEND SYSTEM STATE ────────────────────────────────────────────────
+  const duel = useDuelSession({uid:myUid,network:duelNetwork,catalogs:SOLO_CATALOGS,autoNext:quizPreferences.quizAutoNext,
+    onRestore:()=>{setShowProfilePanel(false);setCurrentScreen("online-multiplayer");}});
+
 
   // 1. Initial State Load & Study Streak evaluation
   useEffect(() => {
@@ -1948,43 +1890,6 @@ export default function App() {
     }
   };
 
-  // Multi-choice generator with smart foils/distractors
-  const generateChoices = (correctItem: HiraganaItem | KatakanaItem, generalDeck: (HiraganaItem | KatakanaItem)[], choiceCount: number = 4) => {
-    const potentialFoils = generalDeck.filter((it) => it.romaji !== correctItem.romaji);
-
-    // Score each foil by phonetic similarity (higher = more confusable)
-    const scored = potentialFoils.map(f => {
-      let score = 0;
-      if (f.romaji.slice(-1) === correctItem.romaji.slice(-1)) score += 2; // same ending vowel
-      if (f.romaji[0] === correctItem.romaji[0]) score += 2;               // same initial consonant
-      score += Math.random() * 0.5;                                         // tiny random tiebreaker
-      return { item: f, score };
-    });
-    scored.sort((a, b) => b.score - a.score);
-
-    // Pick the most-confusable foils to fill slots
-    const choices = [correctItem.romaji];
-    for (const { item } of scored) {
-      if (choices.length >= choiceCount) break;
-      if (!choices.includes(item.romaji)) choices.push(item.romaji);
-    }
-
-    // Fallback fillers if deck was too small
-    const fallbacks = ["a", "ka", "sa", "ta", "na", "ha", "ma", "ya", "ra", "wa", "ki", "mi", "ni", "ri", "shi"];
-    for (const dummy of fallbacks) {
-      if (choices.length >= choiceCount) break;
-      if (!choices.includes(dummy)) choices.push(dummy);
-    }
-
-    // Fisher-Yates shuffle (stable, unbiased)
-    for (let i = choices.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [choices[i], choices[j]] = [choices[j], choices[i]];
-    }
-
-    return choices;
-  };
-
   // Controls study streak daily tick updates
   // FIX: All reads use functional prev to prevent stale-closure XP loss
   const awardXPAndIncrementAttempt = (wasCorrect: boolean, xpEarned: number) => {
@@ -2422,570 +2327,8 @@ export default function App() {
     }, isReadingRoom ? 15000 : 8500);
   };
 
-  // ── ONLINE MULTIPLAYER FUNCTIONS ───────────────────────────────────────────
-
-  /** Deterministic seeded PRNG for consistent cross-player question generation */
-  const seededRandom = (seed: number): number => {
-    const x = Math.sin(seed * 9999) * 10000;
-    return x - Math.floor(x);
-  };
-
-  /** Build a deterministic question pool from the room seed and settings */
-  const generateOnlineQuestionPool = (seed: number, alphabet: string, stages: string[], selectedChars?: string[], questionCount = 10): (HiraganaItem | KatakanaItem)[] => {
-    let pool: (HiraganaItem | KatakanaItem)[] = [];
-    if (alphabet === "hiragana") pool = HIRAGANA_DATA;
-    else if (alphabet === "katakana") pool = KATAKANA_DATA;
-    else pool = [...HIRAGANA_DATA, ...KATAKANA_DATA];
-
-    // If selectedChars is provided and non-empty, use it directly (bypasses stages filter).
-    // Otherwise fall back to the stages filter — preserves existing behaviour for old rooms.
-    let matchedDeck: (HiraganaItem | KatakanaItem)[];
-    if (selectedChars && selectedChars.length > 0) {
-      const charSet = new Set(selectedChars);
-      matchedDeck = pool.filter((k) => charSet.has(k.kana));
-    } else {
-      matchedDeck = pool.filter((k) => stages.includes(k.category));
-    }
-    if (matchedDeck.length === 0) return [];
-
-    // Deterministic shuffle using seed
-    const shuffled = [...matchedDeck];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const rand = seededRandom(seed + i);
-      const j = Math.floor(rand * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-
-    const targetCount = Math.min(questionCount, matchedDeck.length);
-
-    // Pick the requested number of unique questions
-    const seen = new Set<string>();
-    const result: (HiraganaItem | KatakanaItem)[] = [];
-    for (const char of shuffled) {
-      if (!seen.has(char.kana)) { seen.add(char.kana); result.push(char); }
-      if (result.length >= targetCount) break;
-    }
-    for (const char of matchedDeck) {
-      if (result.length >= targetCount) break;
-      if (!seen.has(char.kana)) { seen.add(char.kana); result.push(char); }
-    }
-    return result;
-  };
-
-  /** Clean up Firebase room listener */
-  const cleanupOnlineTimers = () => {
-    if (onlineTimerRef.current) {
-      clearInterval(onlineTimerRef.current);
-      onlineTimerRef.current = null;
-    }
-    if (onlineAutoAdvanceRef.current) {
-      clearTimeout(onlineAutoAdvanceRef.current);
-      onlineAutoAdvanceRef.current = null;
-    }
-    if (onlineParallelAdvanceRef.current) {
-      clearTimeout(onlineParallelAdvanceRef.current);
-      onlineParallelAdvanceRef.current = null;
-    }
-    setOnlineIsStarting(false);
-  };
-
-  const cleanupOnlineRoom = () => {
-    cleanupOnlineTimers();
-    if (unsubscribeRoomRef.current) {
-      unsubscribeRoomRef.current();
-      unsubscribeRoomRef.current = null;
-    }
-    if (unsubscribeRoomStatusRef.current) {
-      unsubscribeRoomStatusRef.current();
-      unsubscribeRoomStatusRef.current = null;
-    }
-  };
-
-  const attachOnlineRoomListeners = (code: string) => {
-    cleanupOnlineRoom();
-
-    unsubscribeRoomRef.current = listenToRoom(code, (room) => {
-      setOnlineRoomState(room);
-      if (room?.status === "playing") {
-        setOnlineIsStarting(true);
-      }
-    });
-
-    unsubscribeRoomStatusRef.current = listenToRoomStatus(code, (status) => {
-      if (status === "playing") {
-        setOnlineIsStarting(true);
-      }
-    });
-  };
-
-  /** Navigate to the online multiplayer menu */
-  const openOnlineMultiplayer = () => {
-    setOnlinePhase("menu");
-    setOnlineRoomCode("");
-    setOnlineRoomState(null);
-    setOnlineRole(null);
-    setOnlineConnectionError(null);
-    setOnlineAnswerLocked(false);
-    setOnlineWinnerName(null);
-    setOnlineShowResult(false);
-    setCurrentScreen("online-multiplayer");
-  };
-
-  /** Host: create room with selected difficulty & quiz mode */
-  const getOnlinePlayerQuestionIndex = (room: RoomState, role: "host" | "guest") => {
-    if ((room.settings.multiplayerMode ?? "competitive") !== "parallel") return room.currentQuestion;
-    return role === "host"
-      ? room.parallelProgress?.hostIndex ?? 0
-      : room.parallelProgress?.guestIndex ?? 0;
-  };
-
-  const getOnlinePlayerStartedAt = (room: RoomState, role: "host" | "guest") => {
-    if ((room.settings.multiplayerMode ?? "competitive") !== "parallel") return room.questionStartedAt;
-    return role === "host"
-      ? room.parallelProgress?.hostStartedAt ?? room.questionStartedAt
-      : room.parallelProgress?.guestStartedAt ?? room.questionStartedAt;
-  };
-
-  const getOnlinePlayerFinished = (room: RoomState, role: "host" | "guest") => {
-    if ((room.settings.multiplayerMode ?? "competitive") !== "parallel") return false;
-    return role === "host"
-      ? !!room.parallelProgress?.hostFinished
-      : !!room.parallelProgress?.guestFinished;
-  };
-
-  const handleCreateOnlineRoom = async () => {
-    setOnlineIsConnecting(true);
-    setOnlineConnectionError(null);
-    try {
-      await ensureSignedIn();
-      const settings: RoomSettings = {
-        alphabet: onlineAlphabet,
-        difficulty: onlineDifficulty,
-        questionCount: Math.min(onlineQuestionCount, onlinePickerSelectedChars.size),
-        quizMode: onlineQuizMode,
-        questionDuration: DURATION_MS[onlineDifficulty],
-        stages: ["basic", "dakuon", "handakuon", "yoon"],
-        multiplayerMode: onlineMultiplayerMode,
-        selectedChars: onlinePickerSelectedChars.size > 0
-          ? Array.from(onlinePickerSelectedChars)
-          : undefined,
-      };
-      const name = onlineHostNameInput.trim() || profileName || "Witch Host";
-      const code = await createRoom(name, settings, profileAvatar);
-      setOnlineRoomCode(code);
-      setOnlineRole("host");
-      setOnlinePhase("lobby");
-
-      attachOnlineRoomListeners(code);
-    } catch (err: any) {
-      setOnlineConnectionError(err.message || "Failed to create room");
-    } finally {
-      setOnlineIsConnecting(false);
-    }
-  };
-
-  /** Guest: join room via 6-char code */
-  const handleJoinOnlineRoom = async () => {
-    setOnlineIsConnecting(true);
-    setOnlineConnectionError(null);
-    try {
-      await ensureSignedIn();
-      const code = onlineJoinCode.trim().toUpperCase();
-      if (code.length !== 6) {
-        throw new Error("Enter a valid 6-character room code.");
-      }
-      const name = onlineJoinName.trim() || profileName || "Shadow Guest";
-      await joinRoom(code, name, profileAvatar);
-      setOnlineRoomCode(code);
-      setOnlineRole("guest");
-      setOnlinePhase("lobby");
-
-      attachOnlineRoomListeners(code);
-    } catch (err: any) {
-      setOnlineConnectionError(err.message || "Failed to join room");
-    } finally {
-      setOnlineIsConnecting(false);
-    }
-  };
-
-  /** Host starts the duel */
-  const handleStartOnlineGame = async () => {
-    if (!onlineRoomCode || onlineRole !== "host") return;
-    setOnlineIsStarting(true);
-    try {
-      await advanceOnlineQuestion(onlineRoomCode, 0, onlineRoomState?.settings.questionCount || onlineQuestionCount);
-    } catch (err: any) {
-      setOnlineIsStarting(false);
-      setOnlineConnectionError(err.message || "Failed to start game");
-    }
-  };
-
-  const handlePlayAgainOnlineRoom = async () => {
-    if (!onlineRoomCode || onlineRole !== "host") return;
-    setOnlineIsStarting(true);
-    setOnlineConnectionError(null);
-    try {
-      await restartRoom(onlineRoomCode);
-      await advanceOnlineQuestion(onlineRoomCode, 0, onlineRoomState?.settings.questionCount || onlineQuestionCount);
-      setOnlineAnswerLocked(false);
-      setOnlineSelectedAnswer(null);
-      setOnlineAnswerStatus(null);
-      setOnlineWinnerName(null);
-      setOnlineShowResult(false);
-      setOnlineTypedAnswer("");
-    } catch (err: any) {
-      setOnlineConnectionError(err.message || "Failed to start another round");
-    } finally {
-      setOnlineIsStarting(false);
-    }
-  };
-
-  /** Submit answer — first correct wins the race */
-  const handleOnlineSubmitAnswer = async (answer: string) => {
-    if (!onlineRoomCode || !onlineRole || onlineAnswerLocked || !onlineRoomState) return;
-
-    setOnlineAnswerLocked(true);
-
-    const currentQIdx = getOnlinePlayerQuestionIndex(onlineRoomState, onlineRole);
-    const question = onlineQuestionPoolRef.current[currentQIdx];
-    if (!question) return;
-
-    const isCorrect = answer.trim().toLowerCase() === question.romaji.toLowerCase();
-    setOnlineAnswerStatus(isCorrect ? "correct" : "incorrect");
-    playChime(isCorrect);
-
-    try {
-      await submitOnlineAnswer(onlineRoomCode, currentQIdx, isCorrect, questionStartedAtRef.current);
-    } catch (err: any) {
-      console.error("Submit answer failed:", err);
-    }
-
-    const isParallel = (onlineRoomState.settings.multiplayerMode ?? "competitive") === "parallel";
-    if (isParallel) {
-      scheduleParallelAdvance(currentQIdx, onlineRoomState.settings.questionCount || 10);
-    }
-  };
-
-  /**
-   * Parallel mode: give the player a moment to see "Correct!" / "Incorrect"
-   * before moving them to their next question, instead of advancing the
-   * instant the answer transaction resolves.
-   */
-  const scheduleParallelAdvance = (fromIndex: number, totalQuestions: number) => {
-    if (!onlineRoomCode || !onlineRole) return;
-    if (onlineParallelAdvanceRef.current) clearTimeout(onlineParallelAdvanceRef.current);
-    onlineParallelAdvanceRef.current = setTimeout(() => {
-      advanceParallelPlayerQuestion(onlineRoomCode, onlineRole, fromIndex, totalQuestions).catch((err) => {
-        console.error("Parallel advance failed:", err);
-      });
-    }, 1500);
-  };
-
-  /** Advance to next question — only host calls this */
-  const goToNextOnlineQuestion = async () => {
-    if (!onlineRoomCode || onlineRole !== "host" || !onlineRoomState) return;
-    const nextIdx = onlineRoomState.currentQuestion + 1;
-    try {
-      await advanceOnlineQuestion(onlineRoomCode, nextIdx, onlineRoomState.settings.questionCount || 10);
-    } catch (err: any) {
-      console.error("Advance failed:", err);
-    }
-  };
-
-  /** Leave room and cleanup */
-  const handleLeaveOnlineRoom = async () => {
-    if (onlineRoomCode && onlineRole) {
-      try { await leaveRoom(onlineRoomCode, onlineRole); } catch (e) { /* silent */ }
-    }
-    cleanupOnlineRoom();
-    setOnlinePhase("menu");
-    setOnlineRoomCode("");
-    setOnlineRoomState(null);
-    setOnlineRole(null);
-    setOnlineConnectionError(null);
-    setOnlineAnswerLocked(false);
-    setOnlineSelectedAnswer(null);
-    setOnlineAnswerStatus(null);
-    setOnlineWinnerName(null);
-    setOnlineShowResult(false);
-    setOnlineTypedAnswer("");
-    setCurrentScreen("menu");
-  };
-
-  const returnToPracticeHub = () => {
-    setShowStudyRoom(false);
-    setActiveHubTab("practice");
-    setCurrentScreen("menu");
-  };
-
-  /** Get source deck for choice generation based on alphabet */
-  const getOnlineSourceDeck = (alphabet: string): (HiraganaItem | KatakanaItem)[] => {
-    if (alphabet === "katakana") return KATAKANA_DATA;
-    if (alphabet === "hiragana") return HIRAGANA_DATA;
-    return [...HIRAGANA_DATA, ...KATAKANA_DATA];
-  };
-
-  /** Reset UI for a new question */
-  const resetOnlineQuestionUI = (qIdx: number, pool: (HiraganaItem | KatakanaItem)[], settings: RoomState["settings"]) => {
-    setOnlineAnswerLocked(false);
-    setOnlineSelectedAnswer(null);
-    setOnlineAnswerStatus(null);
-    setOnlineWinnerName(null);
-    setOnlineShowResult(false);
-    setOnlineTypedAnswer("");
-
-    if (pool.length > qIdx) {
-      const sourceDeck = getOnlineSourceDeck(settings.alphabet);
-      if (settings.quizMode === "choice") {
-        setOnlineQuestionChoices(generateChoices(pool[qIdx], sourceDeck, quizPreferences.quizChoiceCount));
-      }
-    }
-
-    // Start MY countdown the instant I actually see this question, rather than
-    // from a timestamp broadcast by whoever wrote it (previously the host, in
-    // competitive mode). Firebase applies a player's own writes to their own
-    // client instantly, so deriving the timer from a shared write always gave
-    // that writer a head start — and the other player's visible countdown
-    // could already be a few hundred ms into elapsing before it ever appeared.
-    // Timing locally from "when I rendered this question" is symmetric for
-    // both players and removes that structural advantage.
-    questionStartedAtRef.current = Date.now();
-
-    // Start local timer synced from Firebase
-    const durationMs = settings.questionDuration || 10000;
-    setOnlineTimerMax(Math.ceil(durationMs / 1000));
-    setOnlineTimeLeft(Math.ceil(durationMs / 1000));
-  };
-
-  /** Auto-advance after a brief delay */
-  const scheduleOnlineAutoAdvance = () => {
-    if (onlineAutoAdvanceRef.current) clearTimeout(onlineAutoAdvanceRef.current);
-    onlineAutoAdvanceRef.current = setTimeout(() => {
-      goToNextOnlineQuestion();
-    }, 2000);
-  };
-
-  // ── Rebuild the online character picker deck whenever the alphabet changes ──
-  useEffect(() => {
-    let deck: (HiraganaItem | KatakanaItem)[] = [];
-    if (onlineAlphabet === "hiragana") deck = HIRAGANA_DATA;
-    else if (onlineAlphabet === "katakana") deck = KATAKANA_DATA;
-    else deck = [...HIRAGANA_DATA, ...KATAKANA_DATA];
-    setOnlinePickerDeck(deck);
-    setOnlinePickerSelectedChars(new Set(deck.map((c) => c.kana)));
-  }, [onlineAlphabet]);
-
-  // ── Online romaji input focus: mirrors the solo-quiz focus fix above but
-  // keyed to the Firebase question index so both players stay in flow.
-  useEffect(() => {
-    if (onlinePhase !== "playing") return;
-    const settings = onlineRoomState?.settings;
-    if (!settings || settings.quizMode !== "romaji") return;
-    const t = setTimeout(() => {
-      onlineRomajiInputRef.current?.focus({ preventScroll: true });
-    }, 80);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onlineRoomState?.currentQuestion, onlineRoomState?.parallelProgress?.hostIndex, onlineRoomState?.parallelProgress?.guestIndex, onlinePhase]);
-
-  // ── Room state watcher: drives the entire game loop ──
-  // FIX: Use a ref to track previous room state to avoid stale closures
-  const prevRoomRef = useRef<RoomState | null>(null);
-
-  useEffect(() => {
-    if (!onlineRoomState || !onlineRoomCode) return;
-
-    // Always sync scores
-    setOnlineScores(onlineRoomState.scores);
-
-    const prev = prevRoomRef.current;
-    const wasWaiting = prev?.status === "waiting";
-    const nowWaiting = onlineRoomState.status === "waiting";
-    const nowPlaying = onlineRoomState.status === "playing";
-    const nowFinished = onlineRoomState.status === "finished";
-
-    if (nowWaiting && onlinePhase === "finished") {
-      setOnlinePhase("lobby");
-      setOnlineAnswerLocked(false);
-      setOnlineSelectedAnswer(null);
-      setOnlineAnswerStatus(null);
-      setOnlineWinnerName(null);
-      setOnlineShowResult(false);
-      setOnlineTypedAnswer("");
-    }
-
-    // waiting → playing: game started
-    if (nowPlaying && onlinePhase !== "playing") {
-      setOnlineIsStarting(true);
-      const pool = generateOnlineQuestionPool(
-        onlineRoomState.seed,
-        onlineRoomState.settings.alphabet,
-        onlineRoomState.settings.stages || ["basic", "dakuon", "handakuon", "yoon"],
-        onlineRoomState.settings.selectedChars,
-        onlineRoomState.settings.questionCount || 10
-      );
-      onlineQuestionPoolRef.current = pool;
-      setOnlinePhase("playing");
-      resetOnlineQuestionUI(0, pool, onlineRoomState.settings);
-      setOnlineIsStarting(false);
-    }
-
-    // playing → finished
-    if (nowFinished && onlinePhase === "playing") {
-      const historyKey = `${onlineRoomCode}:${myUid || currentUid() || ""}:${onlineRoomState.seed}`;
-      if (!recordedMatchHistoryRef.current.has(historyKey)) {
-        recordedMatchHistoryRef.current.add(historyKey);
-        recordMatchHistory(onlineRoomCode, onlineRoomState).catch((err) => {
-          console.error("Match history save failed:", err);
-        });
-      }
-      setOnlinePhase("finished");
-      cleanupOnlineTimers();
-    }
-
-    // During play: handle question changes and answer results
-    if (onlinePhase === "playing") {
-      const isParallel = (onlineRoomState.settings.multiplayerMode ?? "competitive") === "parallel";
-      if (isParallel) {
-        prevRoomRef.current = onlineRoomState;
-        return;
-      }
-      const qIdx = onlineRoomState.currentQuestion;
-      const answers = onlineRoomState.answers?.[qIdx];
-      const myRole = onlineRole;
-      if (!myRole) return;
-
-      const myTimeKey = myRole === "host" ? "hostTime" : "guestTime";
-      const hasAnswered = answers?.[myTimeKey] !== undefined;
-
-      // Handle winner display
-      if (answers?.questionLocked && !onlineShowResult) {
-        setOnlineShowResult(true);
-        setOnlineWinnerName(answers.winnerName || null);
-
-        // Lock my UI if I haven't answered yet
-        if (!hasAnswered) {
-          setOnlineAnswerLocked(true);
-        }
-
-        // Host schedules auto-advance
-        if (onlineRole === "host") {
-          scheduleOnlineAutoAdvance();
-        }
-      }
-
-      // If question was locked with no winner (both wrong) and not yet showing result
-      if (answers?.questionLocked && !answers.winnerName && !onlineShowResult) {
-        setOnlineShowResult(true);
-        setOnlineWinnerName(null); // signals "time up / both wrong"
-        if (!hasAnswered) setOnlineAnswerLocked(true);
-        if (onlineRole === "host") scheduleOnlineAutoAdvance();
-      }
-    }
-
-    // Update prev ref
-    prevRoomRef.current = onlineRoomState;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onlineRoomState, onlinePhase, onlineRole, onlineRoomCode]);
-
-  // ── Countdown safety net ──
-  // questionStartedAtRef is now set locally inside resetOnlineQuestionUI, the
-  // moment each player's own screen shows a question (see the comment there
-  // for why). This effect just guards against a stale ref lingering if the
-  // room disappears from under us (opponent left, connection dropped, etc.).
-  useEffect(() => {
-    if (!onlineRoomState || !onlineRole) {
-      questionStartedAtRef.current = null;
-    }
-  }, [onlineRoomState, onlineRole]);
-
-  useEffect(() => {
-    if (onlinePhase !== "playing" || !questionStartedAtRef.current) return;
-
-    const durationMs = onlineRoomState?.settings?.questionDuration || 10000;
-
-    // Clear old timer
-    if (onlineTimerRef.current) {
-      clearInterval(onlineTimerRef.current);
-    }
-
-    onlineTimerRef.current = setInterval(() => {
-      // FIX #4: Read from ref to avoid stale closure
-      const startedAt = questionStartedAtRef.current;
-      if (!startedAt) return;
-
-      const elapsed = Date.now() - startedAt;
-      const remaining = Math.max(0, Math.ceil((durationMs - elapsed) / 1000));
-      setOnlineTimeLeft(remaining);
-
-      if (remaining <= 0) {
-        // Time's up!
-        if (onlineTimerRef.current) clearInterval(onlineTimerRef.current);
-
-        // If I haven't answered, lock me out
-        const isParallel = (onlineRoomState?.settings.multiplayerMode ?? "competitive") === "parallel";
-        const qIdx = onlineRoomState && onlineRole ? getOnlinePlayerQuestionIndex(onlineRoomState, onlineRole) : 0;
-        const answers = onlineRoomState?.answers?.[qIdx];
-        const myTimeKey = onlineRole === "host" ? "hostTime" : "guestTime";
-
-        if (!answers || answers[myTimeKey] === undefined) {
-          setOnlineAnswerLocked(true);
-          if (isParallel) setOnlineAnswerStatus("incorrect");
-          // Submit a wrong answer to signal timeout
-          submitOnlineAnswer(onlineRoomCode, qIdx, false, questionStartedAtRef.current).catch(() => { });
-
-          // Parallel mode: this player moves on independently, on their own
-          // short pause, same as when they answer manually.
-          if (isParallel && onlineRoomState) {
-            scheduleParallelAdvance(qIdx, onlineRoomState.settings.questionCount || 10);
-          }
-        }
-
-        // Competitive mode still uses host-driven shared auto-advance.
-        if (!isParallel && onlineRole === "host") {
-          scheduleOnlineAutoAdvance();
-        }
-      }
-    }, 100);
-
-    return () => {
-      if (onlineTimerRef.current) clearInterval(onlineTimerRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    onlinePhase,
-    onlineRoomState?.questionStartedAt,
-    onlineRoomState?.currentQuestion,
-    onlineRoomState?.parallelProgress?.hostIndex,
-    onlineRoomState?.parallelProgress?.guestIndex,
-    onlineRoomState?.parallelProgress?.hostStartedAt,
-    onlineRoomState?.parallelProgress?.guestStartedAt,
-  ]);
-
-  // ── Watch for question index changes to reset UI ──
-  useEffect(() => {
-    if (onlinePhase !== "playing" || !onlineRoomState || !onlineRole) return;
-    const qIdx = getOnlinePlayerQuestionIndex(onlineRoomState, onlineRole);
-    const pool = onlineQuestionPoolRef.current;
-    if (pool.length > qIdx) {
-      resetOnlineQuestionUI(qIdx, pool, onlineRoomState.settings);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    onlineRoomState?.currentQuestion,
-    onlineRoomState?.parallelProgress?.hostIndex,
-    onlineRoomState?.parallelProgress?.guestIndex,
-    onlineRole,
-  ]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      cleanupOnlineRoom();
-    };
-  }, []);
-
-  // ── END ONLINE MULTIPLAYER FUNCTIONS ───────────────────────────────────────
+  const openOnlineMultiplayer = () => {setShowProfilePanel(false);setCurrentScreen("online-multiplayer");};
+  const returnToPracticeHub = () => {setShowStudyRoom(false);setActiveHubTab("practice");setCurrentScreen("menu");};
 
   // ── FRIEND SYSTEM FUNCTIONS ────────────────────────────────────────────────
 
@@ -3019,8 +2362,6 @@ export default function App() {
     writeLocalProfile(decision.name, avatar);
     setProfileName(decision.name);
     setProfileNameInput(decision.name);
-    setOnlineHostNameInput(decision.name);
-    setOnlineJoinName(decision.name);
     setProfileAvatar(avatar);
 
     if (publish) {
@@ -3070,8 +2411,6 @@ export default function App() {
         setMyUid(user.uid);
         setProfileName(savedName);
         setProfileNameInput(savedName);
-        setOnlineHostNameInput((current) => current || savedName);
-        setOnlineJoinName((current) => current || savedName);
         // ACC-1: read the account's cloud profile first; do not blindly publish local defaults.
         await syncOwnProfileSafe(user.uid, () => cancelled);
       })
@@ -3156,8 +2495,6 @@ export default function App() {
       clearProfilePending();
       setProfileName(profile.name);
       setProfileNameInput(profile.name);
-      setOnlineHostNameInput(profile.name);
-      setOnlineJoinName(profile.name);
       setMyUid(profile.uid);
       showToast("Profile saved");
     } catch (err: any) {
@@ -3342,16 +2679,14 @@ export default function App() {
   };
 
   const handleInviteFriend = async (friendUid: string) => {
-    if (!onlineRoomCode) {
+    if (!duel.code || duel.room?.guestId) {
       showToast("Create a room first to invite friends!");
       return;
     }
     try {
-      const myName = onlineRole === "host"
-        ? (onlineRoomState?.hostName || "Host")
-        : (onlineRoomState?.guestName || "Guest");
+      const myName = profileName || "Astra Scholar";
       setPendingInviteUids((current) => new Set(current).add(friendUid));
-      await sendRoomInvite(friendUid, onlineRoomCode, myName);
+      await sendRoomInvite(friendUid, duel.code, myName);
       showToast("Invite sent!");
     } catch (err: any) {
       setPendingInviteUids((current) => {
@@ -3366,18 +2701,12 @@ export default function App() {
   const handleAcceptInvite = async (invite: RoomInvite) => {
     try {
       await ensureSignedIn();
-      await clearInvite(invite.id);
-      const name = profileName || profileNameInput || "Shadow Guest";
-      await joinRoom(invite.roomCode, name, profileAvatar);
-      await respondToRoomInvite(invite, "accepted");
-      attachOnlineRoomListeners(invite.roomCode);
-      setOnlineJoinCode(invite.roomCode);
-      setOnlineJoinName(name);
-      setOnlineRoomCode(invite.roomCode);
-      setOnlineRole("guest");
+      if(duel.room&&duel.room.status!=="finished"){showToast("Leave your current duel before accepting another invite.");return;}
+      const name = profileName || profileNameInput || "Guest";
       setCurrentScreen("online-multiplayer");
-      setOnlinePhase("lobby");
-      setOnlineConnectionError(null);
+      if(!await duel.join(invite.roomCode,name)){showToast("Could not join. Open Friendly duels for the connection details.");return;}
+      await respondToRoomInvite(invite, "accepted");
+      await clearInvite(invite.id);
       showToast(`Joined room ${invite.roomCode}!`);
     } catch (err: any) {
       showToast(err.message || "Failed to accept invite");
@@ -3659,66 +2988,12 @@ export default function App() {
     forecast,
   };
 
-  // Props for the extracted OnlineMultiplayerScreen component (Phase 9 of the App.tsx split).
   const onlineMultiplayerScreenProps = {
-    onlinePhase,
-    setOnlinePhase,
-    onlineRoomCode,
-    onlineRoomState,
-    onlineRole,
-    onlineHostNameInput,
-    setOnlineHostNameInput,
-    onlineJoinCode,
-    setOnlineJoinCode,
-    onlineJoinName,
-    setOnlineJoinName,
-    onlineAnswerLocked,
-    onlineQuestionChoices,
-    onlineAnswerStatus,
-    onlineIsConnecting,
-    onlineConnectionError,
-    setOnlineConnectionError,
-    onlineDifficulty,
-    setOnlineDifficulty,
-    onlineQuizMode,
-    setOnlineQuizMode,
-    onlineTypedAnswer,
-    setOnlineTypedAnswer,
-    onlineTimeLeft,
-    onlineMultiplayerMode,
-    setOnlineMultiplayerMode,
-    onlineTimerMax,
-    onlineShowResult,
-    onlineIsStarting,
-    onlineRomajiInputRef,
-    onlineQuestionPoolRef,
-    onlineAlphabet,
-    setOnlineAlphabet,
-    onlinePickerDeck,
-    onlinePickerSelectedChars,
-    setOnlinePickerSelectedChars,
-    onlineQuestionCount,
-    setOnlineQuestionCount,
-    quizMode: "choice" as const,
-    friends,
-    inviteResponses,
-    pendingInviteUids,
-    pendingFriendRequestUids,
-    myUid,
-    showToast,
-    speakJapanese,
-    setCurrentScreen,
-    handleCreateOnlineRoom,
-    handleJoinOnlineRoom,
-    handleStartOnlineGame,
-    handlePlayAgainOnlineRoom,
-    handleOnlineSubmitAnswer,
-    handleLeaveOnlineRoom,
-    handleInviteFriend,
-    handleClearInviteResponse,
-    handleSendFriendRequestToPlayer,
-    getOnlinePlayerQuestionIndex,
-    getOnlinePlayerFinished,
+    controller:duel,catalogs:SOLO_CATALOGS,profileName,friends,inviteResponses,pendingInviteUids,
+    onInvite:handleInviteFriend,onClearInvite:handleClearInviteResponse,onFriendRequest:handleSendFriendRequestToPlayer,
+    onBack:returnToPracticeHub,autoNext:quizPreferences.quizAutoNext,
+    onAutoNext:(quizAutoNext:boolean)=>setQuizPreferences(previous=>({...previous,quizAutoNext})),
+    speechEnabled:quizCompanionSpeech,onSpeechChange:setQuizCompanionSpeech,
   };
   // ──── RENDER ───────────────────────────────────────────────────────────────
   return (
@@ -4273,7 +3548,7 @@ export default function App() {
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                      {onlineRoomCode && (
+                                      {duel.code && (
                                         <button
                                           type="button"
                                           onClick={() => handleInviteFriend(friend.uid)}
@@ -4309,7 +3584,7 @@ export default function App() {
 
 
         {/* COMPANION STATUS BOARD */}
-        {(currentScreen === "menu" || currentScreen === "kanji-scroll" || currentScreen === "reading-room") && (
+        {!atelierScreen && (currentScreen === "menu" || currentScreen === "kanji-scroll" || currentScreen === "reading-room") && (
         <div id="companion-section-wrapper" className="mb-4">
           <MascotCompanion
             mood={mascotMood}
@@ -4361,7 +3636,7 @@ export default function App() {
           {currentScreen === "menu" && !atelierHome && <MenuScreen {...menuScreenProps} />}
 
           {/* ================= SCREEN 2: ACTIVE QUIZ WORKSPACE ================= */}
-          {atelierScreen && <QuizFlow home={atelierHome} onEnterSession={enterQuiz} onResume={openQuizResume}
+          {(studioQuiz || atelierHome) && <QuizFlow home={atelierHome} onEnterSession={enterQuiz} onResume={openQuizResume}
             onStudyRoom={() => {setShowStudyRoom(true);setCurrentScreen("menu");}}
             onFriend={openOnlineMultiplayer}
             reviewDeck={{title:"Review Deck",detail:totalCount === 0 ? "No cards yet — add missed items after practice." : [formatSessionLine(sessionSummary) ?? "Done for today",formatWaitingLine(sessionSummary)].filter(Boolean).join(" · "),badge:sessionSummary.total ? `${sessionSummary.total} today` : totalCount ? "Done" : "0"}}

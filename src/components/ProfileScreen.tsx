@@ -1693,12 +1693,12 @@ export default function ProfileScreen({
                       </div>
                     </div>
                     <span className={`px-2 py-1 rounded-lg border text-[9px] font-mono font-black uppercase tracking-wider ${resultStyle}`}>
-                      {match.result}
+                      {match.result === "aborted" ? "partial" : match.result}
                     </span>
                   </div>
                   <div className="mt-3 flex items-center justify-between text-[10px] font-mono font-black text-natural-forest/60 uppercase tracking-wider">
                     <span>{match.myScore} - {match.opponentScore}</span>
-                    <span>{match.multiplayerMode} · {match.questionCount} rounds</span>
+                    <span>{match.protocolVersion === 2 ? `${match.subject ?? "kana"} · ` : ""}{match.multiplayerMode} · {match.questionCount} rounds{match.endedReason && match.endedReason !== "complete" ? ` · ${match.endedReason}` : ""}</span>
                   </div>
                 </div>
               );

@@ -17,6 +17,12 @@ export const ELIGIBILITY_REASON_LABELS: Readonly<Record<ExclusionReason, string>
   'insufficient-choices': 'Not enough distinct answer choices',
 });
 const DEFAULT_KINDS = freeze({ kana: ['kana-read'], vocab: ['vocab-meaning'], kanji: ['kanji-meaning'] } as const);
+const kanaCache = new WeakMap<Catalogs['hiragana'], { signature:string;result:FactoryResult }>();
+function kanaCandidates(catalogs:Catalogs):FactoryResult {
+  const signature=JSON.stringify([catalogs.hiragana,catalogs.katakana]);
+  const cached=kanaCache.get(catalogs.hiragana);if(cached?.signature===signature)return cached.result;
+  const result=createKanaCandidates(catalogs);kanaCache.set(catalogs.hiragana,{signature,result});return result;
+}
 // Full vocabulary foil preparation is expensive. Reuse only an identical source snapshot;
 // a signature also invalidates in-place catalog edits by callers. Pool/history filters remain fresh.
 const vocabularyCache = new WeakMap<Catalogs['vocabulary'], { signature: string; result: FactoryResult }>();
@@ -63,7 +69,7 @@ function prepare(catalogs: Catalogs, config: BuildConfig): { candidates: Candida
   const filter = config.pool?.filter ?? 'all';
   if ((filter === 'learned' && config.subject !== 'vocab') || (filter === 'studied' && config.subject !== 'kanji')) throw new RangeError('Manual flags apply only to their own subject');
   const empty = (sourceCount: number): FactoryResult => ({ sourceCount, candidates: [], exclusions: [], duplicateIdentities: [] });
-  const kana = config.subject === 'kana' ? createKanaCandidates(catalogs) : empty(catalogs.hiragana.length + catalogs.katakana.length);
+  const kana = config.subject === 'kana' ? kanaCandidates(catalogs) : empty(catalogs.hiragana.length + catalogs.katakana.length);
   const vocab = config.subject === 'vocab' ? vocabularyCandidates(catalogs) : empty(catalogs.vocabulary.length);
   const kanji = config.subject === 'kanji' ? kanjiCandidates(catalogs) : empty(catalogs.kanji.length);
   const context = contextCandidates(catalogs);

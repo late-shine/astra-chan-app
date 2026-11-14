@@ -44,7 +44,7 @@ function choiceState(choice: QuizChoiceView, answer: QuizAnswerState): ChoiceSta
 
 /* ───────────────────────────── More menu ───────────────────────────── */
 
-function QuizMoreMenu({ speechEnabled = true, onSpeechChange, autoNext, onAutoNextChange, onPause, onOpen }: { speechEnabled?: boolean; onSpeechChange?: (enabled: boolean) => void; autoNext: boolean; onAutoNextChange: (on: boolean) => void; onPause?: () => void; onOpen?: () => void }) {
+export function QuizMoreMenu({ competitive = false, speechEnabled = true, onSpeechChange, autoNext, onAutoNextChange, onPause, onOpen }: { competitive?: boolean; speechEnabled?: boolean; onSpeechChange?: (enabled: boolean) => void; autoNext: boolean; onAutoNextChange: (on: boolean) => void; onPause?: () => void; onOpen?: () => void }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -84,12 +84,13 @@ function QuizMoreMenu({ speechEnabled = true, onSpeechChange, autoNext, onAutoNe
       </button>
       {open && (
         <div id={panelId} className="quiz-popover" role="group" aria-label="More options">
-          <StudioSwitch
+          {!competitive && <StudioSwitch
             checked={autoNext}
             onChange={onAutoNextChange}
             label="Auto-next after correct answers"
             description="Wrong answers always wait for Next."
-          />
+          />}
+          {competitive && <p className="quiz-help">Both players share the round deadline. Resolved rounds advance together.</p>}
           {onSpeechChange && <StudioSwitch checked={speechEnabled} onChange={onSpeechChange} label="Companion speech" description="Quiet company, for this visit only." />}
           {onPause && <button type="button" className="quiz-btn quiz-btn--quiet" onClick={onPause}><Pause aria-hidden="true" /> Pause practice</button>}
         </div>
@@ -151,6 +152,8 @@ export function LeavePracticeSheet({ answeredCount, onKeepPracticing, onSaveAndL
 /* ───────────────────────────── Player ───────────────────────────── */
 
 export interface QuizPlayerProps {
+  headerActions?: ReactNode;
+  footerOverride?: ReactNode;
   question: QuizQuestionView;
   answer: QuizAnswerState;
   /** The typed field's current text (typed mode). */
@@ -172,7 +175,7 @@ export interface QuizPlayerProps {
   shell?: StudioPresentation;
 }
 
-export function QuizPlayer({ question, answer, typedValue, autoNextEnabled, feedback, status, blocked = false, announcement, actions, promptRef, inputRef, shell }: QuizPlayerProps) {
+export function QuizPlayer({ headerActions, footerOverride, question, answer, typedValue, autoNextEnabled, feedback, status, blocked = false, announcement, actions, promptRef, inputRef, shell }: QuizPlayerProps) {
   const inputId = useId();
   const answered = answer.status === "answered";
   const isLast = question.finalQuestion ?? question.index >= question.total - 1;
@@ -186,7 +189,7 @@ export function QuizPlayer({ question, answer, typedValue, autoNextEnabled, feed
       backIcon="close"
       onBack={actions.onExit}
       progress={question.positionLabel ? undefined : (question.index + (answered ? 1 : 0)) / Math.max(1, question.total)}
-      trailing={<QuizMoreMenu speechEnabled={shell?.speechEnabled} onSpeechChange={shell?.onSpeechChange} autoNext={autoNextEnabled} onAutoNextChange={actions.onAutoNextChange} onPause={actions.onPause} onOpen={actions.onFeedbackFocus} />}
+      trailing={headerActions ?? <QuizMoreMenu speechEnabled={shell?.speechEnabled} onSpeechChange={shell?.onSpeechChange} autoNext={autoNextEnabled} onAutoNextChange={actions.onAutoNextChange} onPause={actions.onPause} onOpen={actions.onFeedbackFocus} />}
     >
       <p className="quiz-header__progress">
         {question.positionLabel ?? `${question.index + 1} / ${question.total}`}
@@ -230,7 +233,7 @@ export function QuizPlayer({ question, answer, typedValue, autoNextEnabled, feed
 
   const footer = (
     <div className="quiz-footer">
-      <div className="quiz-footer__inner">{footerAction}</div>
+      <div className="quiz-footer__inner">{footerOverride ?? footerAction}</div>
     </div>
   );
 
