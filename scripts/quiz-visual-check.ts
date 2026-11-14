@@ -15,9 +15,9 @@
  *   3. WCAG contrast for the actual token values it parses out of the CSS, per theme id:
  *      normal text >= 4.5:1, meaningful control boundaries and icons >= 3:1.
  *   4. Size floors: no font-size under 12 px; buttons 48 px, answer buttons 56 px, icon controls 44 px.
- *   5. Reduced motion exists in both forms (OS setting and the preview's forced attribute).
+ *   5. Reduced motion exists for OS settings and the reusable shell attribute.
  *   6. Quiz components contain no colour literals and no storage / network / stats access.
- *   7. main.tsx only reaches the preview behind import.meta.env.DEV and ?quiz-preview=1.
+ *   7. main.tsx mounts the real App; retired preview/legacy screens and CSS stay absent.
  *
  * It does NOT prove layout, focus order, screen-reader output or the production bundle. Those are Shine's
  * screenshots and `scripts/quiz-bundle-check.ts` after a build.
@@ -25,7 +25,7 @@
  * Run with: npx tsx scripts/quiz-visual-check.ts   (from the project root)
  */
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { ATELIER_PORTRAITS, ATELIER_SCENES } from "../src/quiz/atelierAssets";
@@ -44,14 +44,11 @@ function check(name: string, condition: boolean, detail = ""): void {
 
 const css = readFileSync("src/index.css", "utf8");
 const START_MARKER = "QUIZ STUDIO  (Quiz Remake QZ1)";
-const PREVIEW_MARKER = "DEV PREVIEW CHROME";
 const startAt = css.indexOf(START_MARKER);
 check("index.css has the QZ1 block marker", startAt >= 0);
 const block = startAt >= 0 ? css.slice(css.lastIndexOf("/*", startAt)) : "";
-const previewAt = block.indexOf(PREVIEW_MARKER);
-check("index.css has the dev-preview chrome marker", previewAt >= 0);
-const studioPart = previewAt >= 0 ? block.slice(0, block.lastIndexOf("/*", previewAt)) : block;
-const previewPart = previewAt >= 0 ? block.slice(block.lastIndexOf("/*", previewAt)) : "";
+const studioPart = block;
+check("development preview CSS stays removed", !/quiz-preview-|DEV PREVIEW CHROME/.test(css));
 
 // ─── a small CSS reader (rules, nested @media, @keyframes) ───────────────────
 
@@ -89,7 +86,6 @@ function parseRules(text: string): Rule[] {
 }
 
 const studioRules = parseRules(studioPart);
-const previewRules = parseRules(previewPart);
 
 // ─── 1. scope ────────────────────────────────────────────────────────────────
 
@@ -116,12 +112,6 @@ for (const rule of studioRules) {
   if (rule.atRule && rule.atRule.startsWith("@keyframes")) continue; // from / to / 0% steps
   for (const selector of splitSelectors(rule.prelude)) {
     check(`scope: "${selector.slice(0, 70)}" is .quiz-scoped`, SCOPED.test(selector));
-  }
-}
-for (const rule of previewRules) {
-  if (rule.atRule && rule.atRule.startsWith("@keyframes")) continue;
-  for (const selector of splitSelectors(rule.prelude)) {
-    check(`scope: preview "${selector.slice(0, 60)}" is .quiz-preview-*`, /^\.quiz-preview-/.test(selector));
   }
 }
 check("no .quiz-preview-* selector in the studio part", !/\.quiz-preview-/.test(stripComments(studioPart)));
@@ -189,7 +179,7 @@ console.log(`Atelier composite bounds: text ${minimumText.toFixed(2)}:1, meaning
 // ─── 4. size floors ──────────────────────────────────────────────────────────
 
 const toPx = (value: string): number => (value.endsWith("rem") ? parseFloat(value) * 16 : parseFloat(value));
-for (const rule of [...studioRules, ...previewRules]) {
+for (const rule of studioRules) {
   for (const match of rule.body.matchAll(/font-size\s*:\s*([\d.]+(?:rem|px))/g)) {
     check(`font-size ${match[1]} in "${rule.prelude.slice(0, 40)}" is >= 12px`, toPx(match[1]) >= 12);
   }
@@ -309,10 +299,9 @@ for (const file of quizFiles.filter(file => !file.includes("preview"))) {
 // ─── 7. main.tsx gating ──────────────────────────────────────────────────────
 
 const main = readFileSync("src/main.tsx", "utf8");
-check("main.tsx: preview import is behind import.meta.env.DEV", /if\s*\(\s*import\.meta\.env\.DEV\s*&&/.test(main));
-check("main.tsx: preview needs ?quiz-preview=1", /get\('quiz-preview'\)\s*===\s*'1'/.test(main));
-check("main.tsx: exactly one dynamic import of the preview", (main.match(/import\(/g) ?? []).length === 1 && /import\('\.\/components\/quiz\/preview\/QuizPreview\.tsx'\)/.test(main));
-check("main.tsx: no static import of the preview", !/^import .*preview/m.test(main));
+check("main.tsx: always mounts the real App in StrictMode", /import App from '\.\/App\.tsx'/.test(main) && /<StrictMode>\s*<App \/>\s*<\/StrictMode>/.test(main));
+check("main.tsx: no retired query hook or preview import", !/quiz-preview|QuizPreview|components\/quiz\/preview|import\(/.test(main));
+for(const file of ['src/components/quiz/preview/QuizPreview.tsx','src/components/quiz/preview/fixtures.tsx','src/components/quiz/preview/CompanionFixture.tsx','src/components/QuizScreen.tsx','src/components/ResultsScreen.tsx'])check(`retired source stays removed: ${file}`, !existsSync(file));
 check("main.tsx: does not write storage", !/localStorage|sessionStorage/.test(main));
 
 // ─── report ──────────────────────────────────────────────────────────────────

@@ -450,10 +450,10 @@ input, select, textarea, button {
 
 /* ═══════════════════════════════════════════════════════════════════════════
    QUIZ STUDIO  (Quiz Remake QZ1)  Rainlit Atelier r2 / QZ5A
-   Scope: everything below is under .quiz-studio (or the .quiz-preview-* dev chrome). It does not touch
+   Scope: live quiz styles below are quiz-scoped. This block does not touch
    the global natural-* tokens, backgrounds, resets or any other screen. The only hex / rgb values in
    this block are the token declarations at the top. Measured contrast: docs/quiz-visual-spec.md.
-   The prototype is reached only in development with ?quiz-preview=1 (see src/main.tsx).
+   QZ12 removed the development preview; src/main.tsx always mounts the real app.
 ═══════════════════════════════════════════════════════════════════════════ */
 
 /* Rainlit Atelier. Every saved theme ID shares this scoped night palette. */
@@ -1054,60 +1054,4 @@ input, select, textarea, button {
   .quiz-companion { min-height: 44px; padding: 0.75rem; }
   .quiz-companion__speech { padding: 0; }
   .quiz-choice, .quiz-input, .quiz-btn, .quiz-seg__btn { background: ButtonFace; color: ButtonText; border-color: ButtonText; }
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   DEV PREVIEW CHROME  (.quiz-preview-*)  - development only, removed in QZ12.
-   Uses system colours on purpose, so it never looks like part of the studio under test.
-═══════════════════════════════════════════════════════════════════════════ */
-.quiz-preview-toggle, .quiz-preview-panel, .quiz-preview-readout, .quiz-preview-dock, .quiz-preview-guide, .quiz-preview-keyboard {
-  font-family: system-ui, sans-serif; color-scheme: light dark;
-}
-.quiz-preview-toggle {
-  position: fixed; z-index: 60; left: 0.75rem; bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
-  min-height: 2.25rem; padding: 0 0.75rem; border: 1px solid CanvasText; border-radius: 999px;
-  background: Canvas; color: CanvasText; font-size: 0.8125rem; font-weight: 700; cursor: pointer;
-}
-.quiz-preview-panel {
-  position: fixed; z-index: 60; left: 0.75rem; bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
-  width: min(23rem, calc(100vw - 1.5rem)); max-height: 72dvh; overflow-y: auto; padding: 0.75rem;
-  background: Canvas; color: CanvasText; border: 1px solid CanvasText; border-radius: 12px; font-size: 0.8125rem; line-height: 1.25rem;
-}
-.quiz-preview-panel fieldset { margin: 0 0 0.75rem; padding: 0.5rem 0.625rem; border: 1px solid color-mix(in srgb, CanvasText 30%, transparent); border-radius: 8px; }
-.quiz-preview-panel legend { padding: 0 0.25rem; font-weight: 700; }
-.quiz-preview-panel label { display: inline-flex; align-items: center; gap: 0.25rem; margin: 0.125rem 0.75rem 0.125rem 0; cursor: pointer; }
-.quiz-preview-panel select { max-width: 100%; font-size: 0.8125rem; }
-.quiz-preview-panel h2 { margin: 0 0 0.5rem; font-size: 0.9375rem; }
-.quiz-preview-panel p { margin: 0 0 0.5rem; }
-.quiz-preview-readout {
-  position: fixed; z-index: 60; left: 0.75rem; top: 0.25rem; padding: 0 0.375rem; border-radius: 6px;
-  background: color-mix(in srgb, Canvas 85%, transparent); color: CanvasText; font-size: 0.75rem; line-height: 1.125rem; pointer-events: none;
-}
-/* A stand-in for SoundAtmosphereDock: same corner, same 2.75rem boxes, same z-30. Dashed on purpose. */
-.quiz-preview-dock {
-  position: fixed; z-index: 30; right: max(0.75rem, env(safe-area-inset-right, 0px)); bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
-  display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; pointer-events: none;
-}
-.quiz-preview-dock__row { display: flex; align-items: center; gap: 0.5rem; }
-.quiz-preview-dock__btn {
-  display: inline-flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; border-radius: 999px;
-  border: 2px dashed CanvasText; background: color-mix(in srgb, Canvas 80%, transparent); color: CanvasText;
-}
-.quiz-preview-dock__btn[data-quiet="true"] { opacity: 0.6; }
-.quiz-preview-dock__btn svg { width: 1.25rem; height: 1.25rem; }
-.quiz-preview-dock__panel {
-  width: min(20rem, calc(100vw - 1.5rem)); height: 16rem; max-height: 70dvh; display: flex; align-items: center; justify-content: center;
-  border: 2px dashed CanvasText; border-radius: 16px; background: color-mix(in srgb, Canvas 90%, transparent); color: CanvasText; font-size: 0.8125rem; text-align: center;
-}
-/* Same formula as --quiz-footer-clearance: the top of the zone the footer action must stay above. */
-.quiz-preview-guide {
-  position: fixed; z-index: 29; left: 0; right: 0; pointer-events: none;
-  bottom: calc(max(5.5rem, 3.5rem + 1rem) + env(safe-area-inset-bottom, 0px));
-  border-top: 2px dashed color-mix(in srgb, CanvasText 70%, transparent);
-}
-.quiz-preview-guide span { position: absolute; right: 0.5rem; top: -1.25rem; padding: 0 0.25rem; font-size: 0.75rem; background: color-mix(in srgb, Canvas 85%, transparent); color: CanvasText; }
-.quiz-preview-keyboard {
-  position: fixed; z-index: 35; left: 0; right: 0; bottom: 0; height: min(42dvh, 21rem);
-  display: flex; align-items: center; justify-content: center; text-align: center; padding: 1rem;
-  background: color-mix(in srgb, CanvasText 18%, Canvas); color: CanvasText; border-top: 1px solid CanvasText; font-size: 0.8125rem;
 }

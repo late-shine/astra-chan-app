@@ -4,7 +4,7 @@
  */
 
 /**
- * Quiz Remake QZ1 check script: a standalone dev tool, NOT a UI feature. Run it AFTER `npm run build`.
+ * Quiz Remake QZ12 release check: a standalone dev tool, NOT a UI feature. Run it AFTER `npm run build`.
  * It reads the built files in dist/ and fails if the development-only quiz preview leaked into the
  * production bundle (the packet requires: "Production normal launch does not show preview").
  *
@@ -64,10 +64,11 @@ for (const file of scripts) {
 check("no chunk file named like the preview", !files.some((f) => /preview/i.test(f)), files.filter((f) => /preview/i.test(f)).join(", "));
 
 // Live kana uses the scoped studio CSS. The preview-only JavaScript still must be absent.
-// The dev-only preview CHROME classes are tiny and live in the same stylesheet; they are allowed too, but are listed.
+// Fixture chrome was removed in QZ12; the live studio styles must remain.
 const cssFiles = files.filter((f) => f.endsWith(".css"));
 const hasStudioCss = cssFiles.some((f) => readFileSync(f, "utf8").includes("quiz-studio"));
 check("production bundle includes the live studio styles", hasStudioCss);
+for(const file of cssFiles)check(`${file}: no retired preview controls`, !/quiz-preview-/.test(readFileSync(file,"utf8")));
 
 console.log(`\n${passed} checks passed, ${failures.length} failed.`);
 if (failures.length > 0) {
@@ -75,4 +76,4 @@ if (failures.length > 0) {
   failures.forEach((failure) => console.log(`  ✗ ${failure}`));
   process.exit(1);
 }
-console.log("QZ1 bundle check: no preview in the production build.");
+console.log("QZ12 bundle check: no preview in the production build.");

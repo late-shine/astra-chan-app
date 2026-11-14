@@ -55,12 +55,14 @@ Some moments worth mentioning:
 - Different models kept different parts of the project honest. One would propose a design, another would find the confusing part, and I would test the result before deciding whether either suggestion belonged in the app.
 - The multiplayer system took the longest. I checked Firebase guidance with more than one model and researched API-key security before trusting the deployment. Nothing important was accepted just because one model sounded confident.
 - The Study Room redesign changed everything. Instead of menus and tabs, the home screen became Astra-chan's room — a Bookshelf, a Writing Desk, a Star Window. Navigation as a place to be, not a list to scroll through.
-- Astra-chan now reacts when you go AFK. She wonders about you after 15 seconds of silence, and lights up when you return. Small thing. Feels alive.
+- Astra-chan now reacts when you go AFK. She starts wondering after 15 seconds of silence, shifts into deep AFK after 35 seconds total, and lights up when you return. She also reacts while you practise: focused during a question, pleased after a correct answer, encouraging after a mistake or timeout, and supportive after repeated misses when you pause.
 - The kanji drawing feedback went through two model generations. The original used Cloudflare Workers AI with LLaVA 1.5 7B — a vision model that technically worked, but gave vague or inaccurate structural feedback. I switched it to **Google Gemini**, now using a fallback chain beginning with Gemini 3.8 Flash and stepping through 3.6 Flash, 3.5 Flash-Lite, 3.1 Flash-Lite, and the 2.5 Flash models when a model is unavailable, rate-limited, or too slow (each attempt has its own time limit, so the checker answers within about 35 seconds). The feedback stays specific enough to explain what looked off, alongside a separate KanjiVG-based stroke demonstration.
 
 This is still being built. It probably always will be.
 
 ### Splitting App.tsx — a case study in AI-directed refactoring
+
+This section describes an earlier refactor. The current quiz screens share QuizFlow/Duel views; superseded screens and the development-only prototype are no longer part of the app.
 
 By the time the feature list above was mostly done, `App.tsx` had grown to
 **7,625 lines** — one giant component holding ~90 pieces of state and every
@@ -139,6 +141,8 @@ Building a Japanese learning app while learning Japanese felt like the most hone
 
 ## Features
 
+The current app combines the original learning tools with the Rainlit Atelier practice room, personal-miss repair, and friendly kana, word, and kanji duels. Feature descriptions below describe the product itself; setup and usage still depend on the services listed later in this README.
+
 ### 🏠 Study Room Navigation
 The home screen is Astra-chan's room — each object is a destination:
 - **Bookshelf** — Learn hiragana, katakana, kanji, and vocabulary
@@ -162,24 +166,43 @@ The home screen is Astra-chan's room — each object is a destination:
 </p>
 
 ### 🎯 Practice & Quiz
-- **Practice Hub** — a focused Kana quiz area with clear launchers, a "Start here" path, separate challenge modes, a persistent settings summary, and advanced options kept behind a disclosure
-- **Multiple quiz modes** — multiple choice, romaji typing, survival timer
-- **Custom character picker** — select exactly which characters to quiz on, with per-row select/deselect
-- **Quiz length selector** — 10 / 20 / 30 / All selected
-- **Vocab Quiz** — meaning mode and reading mode with 4-choice answers
-- **Kanji Quiz** — meaning mode and reading mode, no category hints (so it actually tests knowledge)
-- **Kanji Practice Station** — one card, four modes: **Watch** the strokes, **Trace** over a ghost character, **Write** from memory, then **Review** — optional AI-assisted feedback on your drawing's visual structure, proportion, and balance (it does not claim to judge exact stroke order). An optional practice grid is off by default
-- **Stroke Watch** — watch the real, ordered stroke paths for all 145 kanji, with controls for play/pause, stepping, speed, numbering, single-stroke focus, loop, and reduced motion
-- **Kanji Word Family** — a deep-dive panel for 13 curated kanji, grouping 64 real vocabulary words by which reading each kanji uses (e.g. 生 across せい in 先生, い in 生きる, なま in 生, and う in 生まれる), with notes for sound changes where useful, pronunciation, and SRS actions. These families are curated learning aids, not exhaustive dictionary entries.
+
+Practice opens **Rainlit Atelier**: Astra's rainy nighttime study room, with one recommended session and secondary Customize/challenge controls. The visual scope covers Practice, quiz setup/player/recovery/results and friendly duels. Study Room, Learn, Grammar, Reading and SRS retain their existing interfaces. Every saved theme ID uses the same night palette inside the atelier. Phone artwork and speech share one bounded companion panel; no portrait-position/size editor ships.
+
+- **Untimed normal practice**, correct-only auto-next ON by default after1.6s. Wrong answers/timeouts wait for Next; interaction can pause auto-next. Timed and Survival have explicit clocks rather than hidden adaptive difficulty.
+- **Kana:** read, pick kana, type romaji or Mixed; Hiragana/Katakana/Both and Core/Dakuten/Handakuten/Yōon groups. Four choices, with an acknowledged six-choice option for eligible kana pools. Typed aliases are item-specific, not fuzzy matching.
+- **Words:** Meaning, Reading, Reverse or Mixed; public themes, manually Learned words and custom selections. Reading does not reveal its reading/audio before grading.
+- **Kanji:** Meaning, On’yomi, Kun’yomi, isolated Mixed, and explicit **In words · Curated set**. The current audited context pool supports60 distinct whole words from13 families/64 source entries. In words teaches the complete reading, not invented per-kanji segmentation.
+- **Length:**10 /20 /30 /All eligible targets. Ordinary sessions use each selected target once, including Mixed. All is blocked if the eligible pool exceeds the existing256-question recovery bound; it is not silently truncated. Survival repeats its frozen bank.
+- **Challenges:** solo timed Kana12/6/3s, Words/Kanji20/10s; Survival is kana choice with45s initial budget,60s cap, correct+5s and wrong−8s. Survival correct feedback uses0.9s; mistakes remain manual.
+- **Growth:** first-try accuracy stays separate from repair. Practice remaining misses in batches of up to5 frozen same-kind questions. Add missed items to Review Deck explicitly, with dedupe and existing daily introduction limits; adding a card does not schedule an immediate introduction.
+- **Astra's dialogue:** locally authored English and decorative expressions, not AI chat/TTS. During solo quizzes she responds to the current question, correct answers, mistakes, timeouts, results, and repeated misses. A third consecutive solo mistake can offer gentle support within a cooldown/cap; timed/Survival support waits for explicit pause. Her reactions do not change questions, difficulty, rewards or clocks, and duels use generic entry/results only.
+- **Manual mastery stays manual:** word quiz answers never tick garden learned flags; kanji quiz answers never consume the separate once-per-kanji Study+40 reward or change manual mastery. Kana first-pass practice still updates its glyph accuracy.
+
+#### Quiz XP
+
+| Accepted record | XP |
+|---|---|
+| Ordinary/timed correct choice |15; Quick+5, kana Lightning+10 |
+| Ordinary/timed correct typed kana |25; same timed bonuses |
+| Survival correct choice |15 |
+| Correct repair |5; repair counters only |
+| Completed ordinary/timed practice with≥10 unique first-pass targets |20 once |
+| Duel own accepted correct choice / typed kana |15 /25; Hard+5, kana Superhard+10 |
+| Wrong, timeout, unattempted |0 |
+
+No response-speed multiplier or win bonus. Partial/repair/Survival/duel sessions have no completion bonus. First-pass wrong/timeout still counts as an attempt and study activity; opponent-claimed/unshown duel rounds do not. Repair does not inflate global first-try attempts/accuracy.
+
+#### Saving and recovery
+
+A confirmed local save writes progress and its receipt together. **Saved on this device** is separate from **cloud sync pending**. Account records queue for the existing cloud writer; refresh/reconnect uses ordered receipts rather than paying the same answer twice. Recovery is owner-scoped, with a24h/512KiB solo snapshot and a separate bounded current-duel learning journal, so a duel does not overwrite saved solo practice. Backup import replaces current-owner recovery/outbox state before adopting imported totals; browsing old history does not replay rewards.
+
+Storage-denied/full browsers show Retry and an explicit Continue without recovery choice. In-memory progress can be lost when the page closes. No fresh offline-install cache or service worker is promised: locally loaded quiz content can work without network, while a first uncached page load still needs its assets. Existing aggregate cross-device merging does not guarantee an exact history when multiple devices study concurrently.
+
+The separate **Kanji Practice Station** still provides Watch /Trace /Write /Review with optional AI-assisted drawing feedback, real stroke paths and the existing reduced-motion controls. It is outside the quiz engine. The learning Word Family panel remains a curated reference, not an exhaustive dictionary.
 
 <p align="center">
-  <img src="docs/quiz-settings.png" alt="Quiz Settings — script, timer, and mode selector including Survival Mode and Speed Duel" width="49%" />
-  <img src="docs/kanji-practice-review.png" alt="Kanji Practice Station — Write and Review modes with AI feedback on structure and proportion" width="49%" />
-</p>
-
-<p align="center">
-  <img src="docs/kanji-stroke-watch.png" alt="Stroke Watch — ordered stroke paths with numbers, speed, and step controls" width="49%" />
-  <img src="docs/kanji-word-family.png" alt="Kanji Word Family — reading-grouped vocabulary panel for 月 (Moon/Month)" width="49%" />
+  <img src="docs/practice-room.png" alt="Rainlit Atelier Practice home with one recommended session and the contained Astra companion" width="100%" />
 </p>
 
 ### 📖 Reading Room
@@ -242,19 +265,17 @@ The home screen is Astra-chan's room — each object is a destination:
 - XP is awarded for every first-time answer in a session, and total reviews count toward badges like *Deck Master*
 
 ### 🌐 Online Multiplayer
-- Create or join rooms with a 6-character room code
-- **Competitive mode** — same question for both players; first correct answer steals the point
-- **Parallel mode** — each player answers independently; winner decided by accuracy % and average speed
-- Custom character picker for online rooms
-- Configurable question count (10 / 20 / 30 / All)
-- Configurable difficulty (Easy 15s / Medium 10s / Hard 5s / Super Hard 3s)
-- Two-way friend request system with accept/decline flow
-- Friend request notifications from the profile button
-- Room invites with response tracking
-- Recent duel history saved after completed online matches
-- Play Again / rematch flow using the same room and players
-- Live lobby with player avatars and online/offline status dots
-- **Authenticated answer attribution** — submitted answers derive the host/guest role and display name from the Firebase UID and room state instead of trusting browser-supplied role data
+
+Friendly two-player **protocol2** rooms use a6-character code and the atelier. Both players agree on the current public set and press Ready; changing subject, type, timer or set clears both readiness states. Both clients should update/refresh; old-protocol rooms are rejected before joining.
+
+- **Supported:** Kana read/type; Words meaning/reading/reverse; Kanji meaning/on. Four choices; no mixed, audio, kun or context questions in duels. Public all/theme/explicit sets only; no shared knowledge or learned/studied comparison.
+- **Counts:**5 /10 /20, shrinking to the actual eligible unique targets; minimum5. The host freezes every question and option/order once, and the guest plays that snapshot.
+- **Competitive:** first accepted correct claims one match point; a round already claimed before you answer is unattempted. Two wrong answers or expiry can resolve without a point. Shared starts/deadlines keep running through hidden tabs/disconnections.
+- **Parallel:** independently answer the complete set. Correct count wins, then lower total response time across all answers, including full-duration timeouts; exact equality ties. Words/Kanji default to Parallel.
+- **Timers:** Kana15/10/5/3s; Words/Kanji20/15/10s, no Superhard. Both modes are available.
+- **Recovery/results:** per-connection presence and persisted index/deadline; explicit leave or qualifying connection loss gives partial counts with no invented winner. Rematch keeps members but clears the old manifest/answers/Ready and creates a fresh match ID. History uses that ID, records actual totals/partial status, and leaves older entries readable.
+- **Personal learning:** only confirmed own correct/wrong/timeout records affect your study progress. Match points and study XP are separate. No win/completion bonus; Practice my misses uses actual own misses and is disabled with an explanation when local catalog mapping is unavailable.
+- Existing friend requests, notifications, room invites and response tracking remain. No learning history is published for set selection.
 
 ### 👤 Profile, Voice Control & Bilingual Support
 - **Optional Cloud Account** — create an account with email/password or Google from the visible account shortcut or Profile; the existing anonymous Firebase identity is upgraded without changing the user's friend code when possible
@@ -289,8 +310,9 @@ The home screen is Astra-chan's room — each object is a destination:
 
 - **Astra-chan** — animated mascot with mood system, speech bubbles, and AFK reactions:
   - Goes wondering after 15 seconds of no interaction
-  - Goes into deep AFK mode after 3 minutes
+  - Goes into deep AFK mode after 35 seconds total (20 seconds after wondering)
   - Lights up with excitement when you return
+  - Reacts to solo quiz questions, answers, timeouts, results, and repeated misses
   - Five artwork states with smooth crossfade transitions: default, wondering while you are away, excited when you return, reading, and reading-clicked
 
 ---
@@ -339,8 +361,8 @@ This project was built through AI collaboration, but not through blind automatio
 
 | Collaborator | How it contributed |
 |---|---|
-| **Claude** | Architecture, implementation, visual experiments, and phase verification |
-| **Codex** | Scoped edits, independent review, regression checks, and handoff documents |
+| **Claude** | Architecture, implementation, visual experiments, and independent review |
+| **Codex** | Scoped edits, code review, regression checks, and implementation support |
 | **Google AI Studio + Gemini** | Early builds, kanji/vocabulary work, Astra-chan artwork, visual experiments, and optional kanji feedback |
 | **Kimi** | Additional debugging and bug-finding passes |
 | **ChatGPT, DeepSeek, Grok, Perplexity, Netlify, Copilot, Openclaw, Codeium, OneCompiler** | Research, comparison, deployment guidance, technical references, isolated checks, and alternative perspectives |
@@ -417,6 +439,8 @@ npx tsx scripts/srs-sim.ts backup.json   # optional: read-only report on an expo
 npx tsx scripts/acc-sim.ts       # account/profile/preferences sync checks
 ```
 
+The ordinary app mounts the regular experience in both development and production builds.
+
 ### Firebase Realtime Database Paths
 
 Online multiplayer and account sync use Firebase Authentication and these Realtime Database paths:
@@ -430,11 +454,13 @@ Online multiplayer and account sync use Firebase Authentication and these Realti
 - `userProfiles`
 - `userProgress` — private study-progress record for each signed-in account
 
-`matchHistory` starts recording only after a completed online duel. Older matches will not appear retroactively.
+`matchHistory` records finalized protocol2 matches by fresh match ID, including partial endings with a manifest. Older entries remain readable; missing historical matches/rewards are not reconstructed retroactively.
 
 ### Multiplayer security boundary
 
-V1 protects authentication, room membership IDs, invite ownership, profiles, and private progress records. Answer attribution is derived from `auth.uid` rather than a client-provided role. The quiz result and timing are still reported by the client, and room updates use client transactions, so a determined user with a modified browser can cheat. That boundary is acceptable for friendly matches; a tournament-grade anti-cheat system would need server-authoritative scoring.
+Authentication/rules protect membership IDs, invite ownership, profiles and private progress paths. The client derives answer role from the authenticated UID. However, participants have parent-level room write grants: manifests, grading and timing remain friendly **client-scored** data, not a server referee or tournament anti-cheat guarantee. Signed-in users with a waiting-room code can read its public setup; rematch removes old question/answer payloads before waiting. Public set agreement never compares private learning histories.
+
+The app adds no new database path or rules change in the current release. Existing installations do not need a Firebase console re-paste; fresh Firebase projects still need the checked-in rules during initial setup. If a future change edits `database.rules.json`, update the Firebase console as part of that change. Pending sync and existing concurrent-device aggregate merge limits still apply.
 
 ---
 
@@ -452,7 +478,7 @@ V1 protects authentication, room membership IDs, invite ownership, profiles, and
 - [x] Online multiplayer — competitive and parallel modes
 - [x] Optional email/password and Google accounts with Firebase cloud progress sync and password recovery
 - [x] Hybrid Japanese voice system with fixed Gemini TTS voices and browser fallback
-- [x] Kana Practice Hub, Vocab Quiz, and Kanji Quiz with custom settings and character selection
+- [x] Rainlit Atelier Practice/solo/duels, three-subject quiz settings, authored companion and personal-misses repair
 - [x] Streak calendar and achievement badges
 - [x] Progress backup and restore
 - [x] Astra-chan mascot states: default, wondering/AFK waiting, excited return, reading, and reading-clicked artwork
@@ -471,7 +497,7 @@ V1 protects authentication, room membership IDs, invite ownership, profiles, and
 - [x] Online duel match history
 - [x] Same-room rematch / Play Again flow
 - [x] Auth-derived multiplayer answer attribution
-- [ ] Kanji Word Family reading drill quiz
+- [x] Curated solo In words reading quiz (60 eligible whole words; independent Japanese semantic review remains pending)
 - [ ] N4 vocabulary expansion
 - [ ] Mobile app version
 
