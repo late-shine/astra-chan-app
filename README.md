@@ -165,6 +165,10 @@ The home screen is Astra-chan's room — each object is a destination:
   <img src="docs/vocab-garden.png" alt="N5 Vocabulary — searchable word list with categories and SRS add buttons" width="100%" />
 </p>
 
+<p align="center">
+  <img src="docs/kanji-panel.png" alt="Kanji study panel — digital and written forms of 生, readings, example words, memory hints, and tracing practice" width="100%" />
+</p>
+
 ### 🎯 Practice & Quiz
 
 Practice opens **Rainlit Atelier**: Astra's rainy nighttime study room, with one recommended session and secondary Customize/challenge controls. The visual scope covers Practice, quiz setup/player/recovery/results and friendly duels. Study Room, Learn, Grammar, Reading and SRS retain their existing interfaces. Every saved theme ID uses the same night palette inside the atelier. Phone artwork and speech share one bounded companion panel; no portrait-position/size editor ships.
@@ -178,6 +182,10 @@ Practice opens **Rainlit Atelier**: Astra's rainy nighttime study room, with one
 - **Growth:** first-try accuracy stays separate from repair. Practice remaining misses in batches of up to5 frozen same-kind questions. Add missed items to Review Deck explicitly, with dedupe and existing daily introduction limits; adding a card does not schedule an immediate introduction.
 - **Astra's dialogue:** locally authored English and decorative expressions, not AI chat/TTS. During solo quizzes she responds to the current question, correct answers, mistakes, timeouts, results, and repeated misses. A third consecutive solo mistake can offer gentle support within a cooldown/cap; timed/Survival support waits for explicit pause. Her reactions do not change questions, difficulty, rewards or clocks, and duels use generic entry/results only.
 - **Manual mastery stays manual:** word quiz answers never tick garden learned flags; kanji quiz answers never consume the separate once-per-kanji Study+40 reward or change manual mastery. Kana first-pass practice still updates its glyph accuracy.
+
+<p align="center">
+  <img src="docs/quiz-playing.png" alt="Kanji kun’yomi quiz in Astra’s Rainlit Atelier, with four answer choices and Astra alongside the question" width="100%" />
+</p>
 
 #### Quiz XP
 
@@ -193,6 +201,10 @@ Practice opens **Rainlit Atelier**: Astra's rainy nighttime study room, with one
 
 No response-speed multiplier or win bonus. Partial/repair/Survival/duel sessions have no completion bonus. First-pass wrong/timeout still counts as an attempt and study activity; opponent-claimed/unshown duel rounds do not. Repair does not inflate global first-try attempts/accuracy.
 
+<p align="center">
+  <img src="docs/quiz-results.png" alt="Completed kana practice — 10 of 10 correct first try, an XP breakdown, and Astra celebrating the result" width="100%" />
+</p>
+
 #### Saving and recovery
 
 A confirmed local save writes progress and its receipt together. **Saved on this device** is separate from **cloud sync pending**. Account records queue for the existing cloud writer; refresh/reconnect uses ordered receipts rather than paying the same answer twice. Recovery is owner-scoped, with a24h/512KiB solo snapshot and a separate bounded current-duel learning journal, so a duel does not overwrite saved solo practice. Backup import replaces current-owner recovery/outbox state before adopting imported totals; browsing old history does not replay rewards.
@@ -200,10 +212,6 @@ A confirmed local save writes progress and its receipt together. **Saved on this
 Storage-denied/full browsers show Retry and an explicit Continue without recovery choice. In-memory progress can be lost when the page closes. No fresh offline-install cache or service worker is promised: locally loaded quiz content can work without network, while a first uncached page load still needs its assets. Existing aggregate cross-device merging does not guarantee an exact history when multiple devices study concurrently.
 
 The separate **Kanji Practice Station** still provides Watch /Trace /Write /Review with optional AI-assisted drawing feedback, real stroke paths and the existing reduced-motion controls. It is outside the quiz engine. The learning Word Family panel remains a curated reference, not an exhaustive dictionary.
-
-<p align="center">
-  <img src="docs/practice-room.png" alt="Rainlit Atelier Practice home with one recommended session and the contained Astra companion" width="100%" />
-</p>
 
 ### 📖 Reading Room
 - **N5 Reading Passages** — gentle multi-sentence stories built from the app's Japanese vocabulary and grammar
@@ -313,7 +321,7 @@ Friendly two-player **protocol2** rooms use a6-character code and the atelier. B
   - Goes into deep AFK mode after 35 seconds total (20 seconds after wondering)
   - Lights up with excitement when you return
   - Reacts to solo quiz questions, answers, timeouts, results, and repeated misses
-  - Five artwork states with smooth crossfade transitions: default, wondering while you are away, excited when you return, reading, and reading-clicked
+  - Smooth artwork transitions between default, wondering, deep AFK, excited return, reading, and reading-clicked moods, plus dedicated expressions in the quiz room
 
 ---
 
