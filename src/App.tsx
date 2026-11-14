@@ -613,7 +613,7 @@ export default function App() {
         if (!isNaN(n) && n >= 0 && n <= 20) return n;
       }
     } catch (e) { }
-    return 7;
+    return 0;
   });
   const [bgOpacity, setBgOpacity] = useState<"very-dim" | "low" | "medium" | "vivid">(() => {
     try {

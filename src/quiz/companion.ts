@@ -80,6 +80,10 @@ export function advanceCompanion(previous: CompanionState, input: CompanionInput
   } else if (changed && previous.scene.startsWith('paused:') && !fresh) { category = 'resume'; expression = 'focused'; }
   if (input.phase === 'feedback' && !category && !changed) support = state.support;
   if (category === 'support' && !input.challenge && input.phase === 'feedback') support = true;
+  // Once support activates in this miss run, hold its art until a correct answer.
+  // Speech cooldown/cap and pause/results/challenge precedence remain independent.
+  const holdingTrying = !input.challenge && state.run >= 3 && state.lastSupport > state.answered - state.run;
+  if (holdingTrying && ['asking', 'feedback', 'committing'].includes(input.phase)) expression = 'trying';
   const ordinary = category === 'correct' || category === 'wrong' || category === 'timeout';
   if (category && !input.blocked && !input.hidden && !input.quiet && (!ordinary || input.now - state.ordinaryAt >= 4000)) {
     state = drawCompanion(state, category);

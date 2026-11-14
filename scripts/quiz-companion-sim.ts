@@ -22,9 +22,12 @@ function answer(outcome: CompanionRecord['outcome'], now = input.now + 5000) { r
 answer('wrong');answer('timeout');check('two misses no support', state.run === 2 && state.triggers === 0);
 answer('wrong');check('third miss support', state.run === 3 && state.triggers === 1 && state.expression === 'trying' && state.lineId.startsWith('support-'));
 const third = JSON.stringify(state);step();check('rerender/duplicate delivery is stable', JSON.stringify(state) === third);
-step({phase:'asking'});check('new question focuses and retains line', state.expression === 'focused' && state.lineId.startsWith('support-'));
-for (let i = 0; i < 5; i++) answer('wrong');check('misses4–8 never retrigger', state.run === 8 && state.triggers === 1);
-answer('correct');check('first correct recovers', state.run === 0 && state.lineId.startsWith('recovery-'));
+step({phase:'asking'});check('next question retains trying art and support line', state.expression === 'trying' && state.lineId.startsWith('support-'));
+answer('wrong');check('fourth miss retains trying without retrigger',state.expression==='trying'&&state.triggers===1);
+answer('timeout');check('later timeout retains trying',state.expression==='trying'&&state.triggers===1);
+step({phase:'committing'});check('pending commit retains trying art',state.expression==='trying');
+for (let i = 0; i < 3; i++) answer('wrong');check('misses4–8 never retrigger', state.run === 8 && state.triggers === 1);
+answer('correct');check('first correct recovers', state.run === 0 && state.expression==='pleased' && state.lineId.startsWith('recovery-'));
 answer('wrong');answer('wrong');answer('timeout');check('later run triggers second support', state.triggers === 2);
 answer('correct');answer('wrong');answer('wrong');answer('wrong');check('support capped at two', state.triggers === 2 && state.expression !== 'trying');
 // Earliest possible second run reaches3 only four answered records after support; cooldown prevents it.
@@ -35,6 +38,10 @@ const beforeInvalid=JSON.stringify(state);records=[...records,{seq:-1,outcome:'w
 const restored=advanceCompanion(createCompanion(3),{...input,records,phase:'paused'});
 check('refresh reconstructs history',restored.triggers===1&&restored.run===3);
 check('refresh starts resume and no trying replay',restored.lineId.startsWith('resume-')&&restored.expression==='intro'&&!restored.pending);
+const tryingHistory:CompanionRecord[]=[{seq:1,outcome:'wrong'},{seq:2,outcome:'timeout'},{seq:3,outcome:'wrong'}];
+const tryingRestore=advanceCompanion(createCompanion(3),{...input,records:tryingHistory,phase:'paused'});
+const resumed=advanceCompanion(tryingRestore,{...input,records:tryingHistory,phase:'asking'});check('resuming restores active trying without historic support speech',resumed.expression==='trying'&&!resumed.lineId.startsWith('support-'));
+const blockedTrying=advanceCompanion(resumed,{...input,records:tryingHistory,phase:'feedback',blocked:true});check('blocking error still overrides trying',blockedTrying.expression==='intro');
 records=[];state=createCompanion(7);step({scope:'timed',phase:'asking',challenge:true});answer('wrong');answer('wrong');answer('timeout');check('timed support deferred',state.pending&&state.expression!=='trying'&&!state.lineId.startsWith('support-'));
 step({phase:'paused',explicitPause:false});check('automatic pause retains pending without intervention',state.pending&&state.expression==='intro');step({explicitPause:true});check('explicit pause shows deferred support',state.expression==='trying'&&state.lineId.startsWith('support-')&&!state.pending);
 records=[];state=createCompanion(7);step({scope:'survival',phase:'asking',challenge:true});answer('wrong');answer('wrong');answer('wrong');answer('correct');check('correct clears timed pending',!state.pending&&state.lineId.startsWith('recovery-'));

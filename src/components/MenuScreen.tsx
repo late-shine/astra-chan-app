@@ -706,7 +706,7 @@ export default function MenuScreen(props: MenuScreenProps) {
                         </div>
 
                         {/* Interactive Grid Map */}
-                        <div className="grid grid-cols-5 sm:grid-cols-7 gap-2.5 max-h-[360px] overflow-y-auto pr-1">
+                        <div className="grid grid-cols-[repeat(auto-fit,minmax(4.25rem,1fr))] gap-2.5 max-h-[360px] overflow-y-auto pr-1">
                           {HIRAGANA_DATA.filter((item) => archiveFilter === "all" || item.category === archiveFilter).map((item) => {
                             const isSelected = selectedLearnChar?.kana === item.kana;
                             return (
@@ -717,12 +717,12 @@ export default function MenuScreen(props: MenuScreenProps) {
                                   setSelectedLearnChar(item);
                                   speakJapanese(item.kana);
                                 }}
-                                className={`p-2.5 rounded-xl border flex flex-col items-center justify-center transition cursor-pointer relative group ${isSelected
+                                className={`min-w-0 px-1.5 py-2.5 rounded-xl border flex flex-col items-center justify-center transition cursor-pointer relative group ${isSelected
                                   ? "bg-natural-forest border-natural-forest text-natural-bg shadow"
                                   : "bg-natural-bg/50 border-natural-border/50 hover:bg-natural-card hover:border-natural-forest"
                                   }`}
                               >
-                                <span className={`text-2xl font-serif font-bold ${isSelected ? "text-natural-bg" : "text-natural-forest"}`}>
+                                <span lang="ja" className={`whitespace-nowrap text-2xl font-serif font-bold ${isSelected ? "text-natural-bg" : "text-natural-forest"}`}>
                                   {item.kana}
                                 </span>
                                 <span className={`text-[9px] font-mono font-bold mt-1 uppercase ${isSelected ? "text-natural-bg/80" : "text-natural-forest-light"}`}>
@@ -837,7 +837,7 @@ export default function MenuScreen(props: MenuScreenProps) {
                         </div>
 
                         {/* Interactive Grid Map */}
-                        <div className="grid grid-cols-5 sm:grid-cols-7 gap-2.5 max-h-[360px] overflow-y-auto pr-1">
+                        <div className="grid grid-cols-[repeat(auto-fit,minmax(4.25rem,1fr))] gap-2.5 max-h-[360px] overflow-y-auto pr-1">
                           {KATAKANA_DATA.filter((item) => archiveFilter === "all" || item.category === archiveFilter).map((item) => {
                             const isSelected = selectedLearnChar?.kana === item.kana;
                             return (
@@ -849,12 +849,12 @@ export default function MenuScreen(props: MenuScreenProps) {
                                   setSelectedLearnChar(item);
                                   speakJapanese(item.kana);
                                 }}
-                                className={`p-2.5 rounded-xl border flex flex-col items-center justify-center transition cursor-pointer relative group ${isSelected
+                                className={`min-w-0 px-1.5 py-2.5 rounded-xl border flex flex-col items-center justify-center transition cursor-pointer relative group ${isSelected
                                   ? "bg-natural-forest border-natural-forest text-natural-bg shadow animate-pulse"
                                   : "bg-natural-bg/50 border-natural-border/50 hover:bg-natural-card hover:border-natural-forest"
                                   }`}
                               >
-                                <span className={`text-2xl font-serif font-bold ${isSelected ? "text-natural-bg" : "text-natural-forest"}`}>
+                                <span lang="ja" className={`whitespace-nowrap text-2xl font-serif font-bold ${isSelected ? "text-natural-bg" : "text-natural-forest"}`}>
                                   {item.kana}
                                 </span>
                                 <span className={`text-[9px] font-mono font-bold mt-1 uppercase ${isSelected ? "text-natural-bg/80" : "text-natural-forest-light"}`}>

@@ -204,7 +204,7 @@ section("Preferences: localStorage mapping");
   const data = installFakeStorage({ hira_theme_mode: "banana", hira_theme_bg_blur_v2: "abc", astra_cloud_voice_id: "retired-voice" });
   const read = readLocalPreferences();
   check("invalid stored values fall back to defaults",
-    read.theme === "light" && read.bgBlur === 7 && read.cloudVoiceId === DEFAULT_PREFERENCES.cloudVoiceId);
+    read.theme === "light" && read.bgBlur === 0 && read.cloudVoiceId === DEFAULT_PREFERENCES.cloudVoiceId);
   check("reading never writes to storage", data.size === 3);
 }
 {

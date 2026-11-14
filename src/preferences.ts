@@ -90,7 +90,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   cloudVoiceId: DEFAULT_CLOUD_JAPANESE_VOICE,
   bgAnimationType: "auto",
   bgIntensity: "medium",
-  bgBlur: 7,
+  bgBlur: 0,
   bgOpacity: "medium",
   autoCycleBg: true,
   ...DEFAULT_QUIZ_PREFERENCES,
