@@ -16,6 +16,7 @@ type QuizMaps = Pick<StudentStats, 'quizSkills' | 'quizReceipts'>;
 export interface ProgressEntry {
   readonly record: Omit<AnswerRecord, 'responseId' | 'typedValue'> | CompletionRecord;
   readonly challenge: ChallengeTier;
+  readonly difficulty?: import("./types").DuelDifficulty;
   readonly survivalScore?: number;
 }
 
@@ -165,13 +166,15 @@ export function parseProgressEntry(raw: unknown): ProgressEntry | null {
     rawTarget.subject !== target.subject || rawTarget.kanaGlyph !== target.kanaGlyph) return null;
   const origin = r.origin;
   const outcome = r.outcome;
-  if (origin !== 'practice' && origin !== 'timed' && origin !== 'survival' && origin !== 'repair') return null;
+  if (origin !== 'practice' && origin !== 'timed' && origin !== 'survival' && origin !== 'repair' && origin !== 'duel') return null;
   if (outcome !== 'correct' && outcome !== 'wrong' && outcome !== 'timeout' && outcome !== 'unattempted') return null;
+  const difficulty=input?.difficulty;
+  if (origin==='duel' ? !['easy','medium','hard','superhard'].includes(difficulty as string) || !['kana-read','kana-type','vocab-meaning','vocab-reading','vocab-reverse','kanji-meaning','kanji-on'].includes(target.kind) : difficulty!==undefined) return null;
   if (origin !== 'timed' && tier !== 'steady') return null;
   if (origin === 'repair' && r.seq > 5) return null;
   try {
     if (r.questionId !== occurrenceId(r.sessionId, r.seq - 1)) return null;
-    const xp = rewardFor({ type: 'answer', origin, subject: target.subject, kind: target.kind, outcome, challenge: tier }).total;
+    const xp = rewardFor({ type: 'answer', origin, subject: target.subject, kind: target.kind, outcome, challenge: tier, ...(origin==='duel'?{difficulty:difficulty as import("./types").DuelDifficulty}:{}) }).total;
     if (xp !== r.xp) return null;
     const survivalScore = input?.survivalScore;
     if (origin === 'survival') {
@@ -179,6 +182,7 @@ export function parseProgressEntry(raw: unknown): ProgressEntry | null {
     } else if (survivalScore !== undefined) return null;
     return {
       challenge: tier,
+      ...(origin==='duel'?{difficulty:difficulty as import("./types").DuelDifficulty}:{}),
       ...(typeof survivalScore === 'number' ? { survivalScore } : {}),
       record: { ...common, type: 'answer', origin, outcome, questionId: r.questionId, skillKey: r.skillKey,
         target, elapsedMs: r.elapsedMs, xp },

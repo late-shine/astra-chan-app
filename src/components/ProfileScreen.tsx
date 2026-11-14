@@ -1,3 +1,4 @@
+import {duelKindLabel} from '../quiz/duelSetup';
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
@@ -1698,7 +1699,7 @@ export default function ProfileScreen({
                   </div>
                   <div className="mt-3 flex items-center justify-between text-[10px] font-mono font-black text-natural-forest/60 uppercase tracking-wider">
                     <span>{match.myScore} - {match.opponentScore}</span>
-                    <span>{match.protocolVersion === 2 ? `${match.subject ?? "kana"} · ` : ""}{match.multiplayerMode} · {match.questionCount} rounds{match.endedReason && match.endedReason !== "complete" ? ` · ${match.endedReason}` : ""}</span>
+                    <span>{match.protocolVersion === 2 ? `${match.subject ?? "kana"}${match.kind ? ` / ${duelKindLabel(match.kind)}` : ""} · ` : ""}{match.multiplayerMode} · {match.questionCount} rounds{match.endedReason && match.endedReason !== "complete" ? ` · ${match.endedReason}` : ""}</span>
                   </div>
                 </div>
               );

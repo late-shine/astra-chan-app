@@ -203,3 +203,11 @@ export function buildQuestions(catalogs: Catalogs, config: BuildConfig, history:
   }
   return freeze({ questions, eligibility: report });
 }
+
+/** Public setup inventory without constructing/shuffling a capped question bank. */
+export function listPoolTargets(catalogs:Catalogs,config:BuildConfig):readonly {id:string;face:string}[]{
+  const seen=new Set<string>();return prepare(catalogs,config).candidates.flatMap(candidate=>{
+    if(seen.has(candidate.targetKey))return [];seen.add(candidate.targetKey);
+    return [{id:candidate.itemId,face:candidate.subject==='vocab'?`${candidate.deck.itemKey} · ${candidate.reveal.meaning}`:candidate.face}];
+  });
+}

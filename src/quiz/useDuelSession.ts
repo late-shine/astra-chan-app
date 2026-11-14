@@ -5,7 +5,7 @@ import { acknowledgeReady,advanceCompetitive,advanceParallel,applyDuelAnswer,bui
 import { DuelNetworkError,freshDuelToken,readDuelPointer,writeDuelPointer,type DuelTransport } from './duelTransport';
 import type { Catalogs,DuelRoom,DuelScope,DuelSettings,Response } from './types';
 export const DEFAULT_DUEL_SETTINGS:DuelSettings={subject:'kana',kind:'kana-read',count:10,difficulty:'medium',durationMs:10000,mode:'competitive',pool:{filter:'all',label:'Hiragana · Core',script:'hiragana',stages:['basic']}};
-export function useDuelSession({uid,network,catalogs,autoNext,onRestore}:{uid:string|null;network:DuelTransport;catalogs:Catalogs;autoNext:boolean;onRestore:()=>void}) {
+export function useDuelSession({uid,network,catalogs,autoNext,onRestore,canAdvance=()=>true}:{uid:string|null;network:DuelTransport;catalogs:Catalogs;autoNext:boolean;onRestore:()=>void;canAdvance?:()=>boolean}) {
   const [code,setCode]=useState(''),[room,setRoom]=useState<DuelRoom|null>(null),[error,setError]=useState<string|null>(null),[busy,setBusy]=useState(false);
   const [connection,setConnection]=useState({connected:false,clockReady:false}),[now,setNow]=useState(network.now());
   const [draft,setDraft]=useState(''),[cancelled,setCancelled]=useState<string|null>(null);
@@ -31,7 +31,6 @@ export function useDuelSession({uid,network,catalogs,autoNext,onRestore}:{uid:st
   useEffect(()=>{if(!code)return;setNow(network.now());const timer=setInterval(()=>setNow(network.now()),100);return()=>clearInterval(timer);},[network,code]);
   const attach=useCallback((newCode:string,next:DuelRoom)=>{
     const actor=live.current.uid;if(!actor||next.hostId!==actor&&next.guestId!==actor)throw Error('You are not a participant in this room.');
-    if(next.v2.settings.subject!=='kana')throw Error('This build supports kana duels.');
     if(next.v2.expiresAt<=network.now())throw Error('This room has expired.');
     setCode(newCode);setRoom(next);setError(null);
     try{writeDuelPointer(actor,{code:newCode,matchId:next.v2.matchId,lastSeen:Date.now()});}catch(e){setError((e as Error).message);}
@@ -55,7 +54,6 @@ export function useDuelSession({uid,network,catalogs,autoNext,onRestore}:{uid:st
       if(!active||live.current.uid!==owner)return;
       if(!next){setRoom(null);setError('This duel room was closed. Return to Practice or create a new room.');return;}
       if(next.hostId!==owner&&next.guestId!==owner){setRoom(null);setError('Your membership is no longer available.');return;}
-      if(next.v2.settings.subject!=='kana'){setRoom(null);setError('This build supports kana duels.');return;}
       setRoom(next);try{writeDuelPointer(owner,{code,matchId:next.v2.matchId,lastSeen:Date.now()});}catch(e){setError((e as Error).message);}
     },message=>{if(active&&live.current.uid===owner)setError(message);});
     return()=>{active=false;stop();};
@@ -89,11 +87,11 @@ export function useDuelSession({uid,network,catalogs,autoNext,onRestore}:{uid:st
       if(round?.lockedAt!==undefined&&now>=round.lockedAt+1600){const nextStartAt=network.now()+1500;void transact(`advance:${draftKey}`,(raw,s)=>advanceCompetitive(raw,s,index,nextStartAt),true);}
       else if(round?.lockedAt===undefined&&view.deadlineAt!==null&&now>=view.deadlineAt)void transact(`expire:${draftKey}`,(raw,s)=>expireQuestion(raw,s,index),true);
     }else if(!own&&view.deadlineAt!==null&&now>=view.deadlineAt)void transact(`expire:${draftKey}`,(raw,s)=>expireQuestion(raw,s,index),true);
-    else if(own?.outcome==='correct'&&autoNext&&cancelled!==draftKey&&now>=own.acceptedAt+1600)void transact(`advance:${draftKey}`,(raw,s)=>advanceParallel(raw,s,index,'auto'),true);
-  },[room,uid,code,connection,now,view?.phase,draftKey,autoNext,cancelled,network,run,transact]);
+    else if(own?.outcome==='correct'&&autoNext&&canAdvance()&&cancelled!==draftKey&&now>=own.acceptedAt+1600)void transact(`advance:${draftKey}`,(raw,s)=>advanceParallel(raw,s,index,'auto'),true);
+  },[room,uid,code,connection,now,view?.phase,draftKey,autoNext,cancelled,network,run,transact,canAdvance]);
   const enter=async(name:string,settings:DuelSettings)=>{const result=await run('create',()=>network.create(name,settings));if(result)attach(result.code,result.room);};
   const join=async(newCode:string,name:string)=>{const next=await run('join',()=>network.join(newCode,name));if(next){attach(newCode.trim().toUpperCase(),next);return true;}return false;};
-  const next=()=>{if(!view||!room)return;const index=view.index;if(room.v2.settings.mode==='parallel')void transact(`next:${draftKey}`,(raw,s)=>advanceParallel(raw,s,index,'manual'));
+  const next=()=>{if(!view||!room||room.v2.settings.mode==='parallel'&&!canAdvance())return;const index=view.index;if(room.v2.settings.mode==='parallel')void transact(`next:${draftKey}`,(raw,s)=>advanceParallel(raw,s,index,'manual'));
     else {const startAt=network.now()+1500;void transact(`next:${draftKey}`,(raw,s)=>advanceCompetitive(raw,s,index,startAt));}};
   const submit=(response:Response)=>{
     if(!view||view.phase!=='asking'||!connection.connected||!connection.clockReady||busy)return;
@@ -114,7 +112,7 @@ export function useDuelSession({uid,network,catalogs,autoNext,onRestore}:{uid:st
   return {uid,code,room,view,now,error,busy,connected:connection.connected&&connection.clockReady,draft,setDraft,enter,join,start,next,submit,forget,leave,
     cancelAuto:()=>setCancelled(draftKey??null),autoCancelled:cancelled===draftKey,
     ready:()=>transact('ready',(raw,s)=>acknowledgeReady(raw,s,2)),
-    changeSettings:(settings:DuelSettings)=>{if(settings.subject!=='kana')return;return transact('settings',(raw,s)=>changeDuelSettings(raw,s,settings));},
+    changeSettings:(settings:DuelSettings)=>{return transact('settings',(raw,s)=>changeDuelSettings(raw,s,settings));},
     rematch:()=>{if(!room)return;const id=duelMatchId(room.v2.seriesId,room.v2.generation+1);return transact('rematch',(raw,s)=>rematch(raw,s,id));},
     endConnection:()=>transact('connection-end',(raw,s)=>finishMatch(raw,s,'connection')),
     retry:()=>run('retry',async()=>{if(!code)throw Error('Create or join a room to continue.');const next=await network.fetchRoom(code);if(!next)throw Error('This duel room no longer exists.');attach(code,next);}),

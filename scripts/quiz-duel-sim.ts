@@ -229,6 +229,8 @@ check('budget fixture manifest fits individual limit',new TextEncoder().encode(J
 rejected('combined room payload max enforced',startMatch(budgetLobby,scope(budgetLobby),budgetManifest,NOW+1500),'invalid');
 const invalidChoice=structuredClone(base);(invalidChoice.v2.manifest!.questions[0] as unknown as {choices:{id:string;label:string}[]}).choices[1].label=(invalidChoice.v2.manifest!.questions[0] as {choices:readonly {label:string}[]}).choices[0].label;
 throws('duplicate displayed options rejected',()=>decodeDuelRoom(invalidChoice));
+const activeWords=started(settings('parallel','vocab-meaning'));
+check('word compatibility alphabet mixed never determines live subject',activeWords.settings.alphabet==='mixed'&&reconnectDuel(activeWords,'G',activeWords.v2.matchId,NOW+1600).question?.subject==='vocab');
 const source=readFileSync('src/quiz/duel.ts','utf8');
 check('no ambient time/random/network inside pure module',!source.includes('Date.now')&&!source.includes('new Date')&&!source.includes('Math.random')&&!source.includes('firebase/')&&!source.includes('localStorage'));
 console.log(`Largest sampled manifest: ${largestManifest} bytes (limit ${DUEL_LIMITS.manifestBytes}).`);

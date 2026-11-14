@@ -133,7 +133,9 @@ import {
 } from "./profileSync";
 import MenuScreen from "./components/MenuScreen";
 import { useDuelSession } from "./quiz/useDuelSession";
-import { QuizFlow, type KanaLaunch } from "./components/quiz/QuizFlow";
+import {useDuelLearning} from "./quiz/useDuelLearning";
+import {duelLearningId,duelMisses,mappedDuelMisses} from "./quiz/duelProgress";
+import { QuizFlow,startQuizRepair, type KanaLaunch } from "./components/quiz/QuizFlow";
 import type { Catalogs } from "./quiz/types";
 import KanjiScrollScreen from "./components/KanjiScrollScreen";
 import ProfileScreen from "./components/ProfileScreen";
@@ -1353,8 +1355,21 @@ export default function App() {
   const seenFriendRequestIdsRef = useRef<Set<string>>(new Set());
   const friendRequestsLoadedRef = useRef(false);
   // ── END FRIEND SYSTEM STATE ────────────────────────────────────────────────
-  const duel = useDuelSession({uid:myUid,network:duelNetwork,catalogs:SOLO_CATALOGS,autoNext:quizPreferences.quizAutoNext,
+  const duelLearningGate=useRef(false);
+  const duel = useDuelSession({uid:myUid,network:duelNetwork,catalogs:SOLO_CATALOGS,autoNext:quizPreferences.quizAutoNext,canAdvance:()=>duelLearningGate.current,
     onRestore:()=>{setShowProfilePanel(false);setCurrentScreen("online-multiplayer");}});
+  const duelLearning=useDuelLearning({uid:myUid,ready:quizReady&&myUid===progressOwner,cloud:isAccountUser,room:duel.room,stats,storage:quizBrowserStorage,bridge:quizBridge,reserve:quizSession.reserveProgress});
+  duelLearningGate.current=!duelLearning.pending||duelLearning.volatile;
+  const duelRepair=useMemo(()=>{if(!duel.room||!myUid||duel.room.status!=='finished')return {questions:[],count:0};
+    const count=duelMisses(duel.room,myUid).length;try{const questions=mappedDuelMisses(duel.room,myUid,SOLO_CATALOGS);return {questions,count,...(count&&!questions.length?{unavailable:"Practice is unavailable because this set cannot be mapped to the current local catalog."}:{})};}catch{return {questions:[],count,unavailable:"Practice is unavailable for this catalog version."};}},[duel.room,myUid]);
+  const practiceDuelMisses=()=>{
+    if(!quizReady||!myUid||myUid!==progressOwner||!duel.room||duelLearning.pending||duelLearning.error)return;
+    if(quizSession.state.phase!=="idle"){showToast("Resume or discard your saved solo practice before starting a repair.");return;}
+    if(!duelRepair.questions.length)return;
+    const subject=duel.room.v2.settings.subject;
+    if(startQuizRepair(quizSession,duelRepair.questions,subject,duelLearningId(duel.room.v2.matchId,myUid),quizPreferences.quizAutoNext)){duel.forget();enterQuiz(subject);}else showToast("This repair could not start. Your confirmed match results are kept.");
+  };
+
 
 
   // 1. Initial State Load & Study Streak evaluation
@@ -1685,6 +1700,7 @@ export default function App() {
       const binding: StatsBinding = { owner, ...(account ? { backupUpload: quizDeviceId() } : {}) };
       const saved = quizBrowserStorage.replaceFromBackup(importedStats, binding);
       if (saved.ok === false) { showToast(saved.message); return; }
+      duel.forget();
       quizSession.detach(owner, true);
       quizBridge.cancel(true);
       quizBridge.observeDeviceStats(importedStats);
@@ -2989,7 +3005,7 @@ export default function App() {
   };
 
   const onlineMultiplayerScreenProps = {
-    controller:duel,catalogs:SOLO_CATALOGS,profileName,friends,inviteResponses,pendingInviteUids,
+    controller:duel,learning:duelLearning,onRepair:practiceDuelMisses,repairCount:duelRepair.count,repairUnavailable:duelRepair.unavailable??(quizSession.state.phase!=="idle"?"Resume or discard your saved solo practice before starting repair.":duelLearning.error?"Save your learning progress before starting repair.":undefined),catalogs:SOLO_CATALOGS,profileName,friends,inviteResponses,pendingInviteUids,
     onInvite:handleInviteFriend,onClearInvite:handleClearInviteResponse,onFriendRequest:handleSendFriendRequestToPlayer,
     onBack:returnToPracticeHub,autoNext:quizPreferences.quizAutoNext,
     onAutoNext:(quizAutoNext:boolean)=>setQuizPreferences(previous=>({...previous,quizAutoNext})),

@@ -1,18 +1,22 @@
 import {useEffect,useLayoutEffect,useRef,useState} from 'react';
 import type {DuelSessionController} from '../../quiz/useDuelSession';
+import type {DuelLearning} from '../../quiz/useDuelLearning';
+import {DuelLearningStatus} from './DuelLearningStatus';
+import {duelQuestionModel} from '../../quiz/duelSetup';
+import {questionView} from '../../quiz/grade';
 import {summarizeDuel} from '../../quiz/duel';
 import {QuizPlayer,QuizMoreMenu} from './QuizPlayer';
 import {QuizFeedback} from './QuizFeedback';
 import {useKeyboardViewport} from './QuizFlow';
 import {StudioSheet,type StudioPresentation} from './StudioShell';
 import type {QuizQuestionView,QuizAnswerState} from './viewTypes';
-export function DuelPlayer({controller:c,shell,autoNext,onAutoNext}:{controller:DuelSessionController;shell:StudioPresentation;autoNext:boolean;onAutoNext:(enabled:boolean)=>void}) {
+export function DuelPlayer({controller:c,learning,shell,autoNext,onAutoNext}:{controller:DuelSessionController;learning:DuelLearning;shell:StudioPresentation;autoNext:boolean;onAutoNext:(enabled:boolean)=>void}) {
   const [why,setWhy]=useState(false),[exit,setExit]=useState(false);const input=useRef<HTMLInputElement>(null),prompt=useRef<HTMLDivElement>(null);
   const q=c.room!.v2.manifest!.questions[c.view!.index],v=c.view!,room=c.room!,round=room.v2.rounds?.[`r_${v.index}`],own=round?.answers?.[v.role];
   const competitive=room.v2.settings.mode==='competitive',locked=round?.lockedAt!==undefined;
   const frame=useKeyboardViewport(input,q.responseType==='typed');
   useLayoutEffect(()=>{setWhy(false);if(v.phase==='asking')(input.current??prompt.current)?.focus({preventScroll:true});},[v.draftKey,v.phase==='asking']);
-  const blocked=c.busy||!c.connected||v.phase==='countdown'||v.phase==='opening';
+  const blocked=c.busy||!c.connected||v.phase==='countdown'||v.phase==='opening'||!competitive&&learning.pending&&!learning.volatile;
   useEffect(()=>{
     const handler=(event:KeyboardEvent)=>{if(event.defaultPrevented||event.repeat||event.isComposing||event.keyCode===229||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey||exit)return;
       const target=event.target instanceof HTMLElement?event.target:null;
@@ -23,18 +27,18 @@ export function DuelPlayer({controller:c,shell,autoNext,onAutoNext}:{controller:
     };document.addEventListener('keydown',handler);return()=>document.removeEventListener('keydown',handler);
   },[c,q,v.phase,blocked,exit,own,competitive]);
   const summary=summarizeDuel(room);
-  const question:QuizQuestionView={id:q.id,index:v.index,total:room.v2.manifest!.questions.length,subjectLabel:'Kana duel',kindLabel:q.kind==='kana-type'?'Type romaji':'Read the kana',instruction:v.phase==='countdown'?`Shared round starts in ${Math.max(0,Math.ceil(((v.startAt??c.now)-c.now)/1000))}s`:q.instruction,
-    prompt:{text:q.face,size:'glyph',ja:true},mode:q.responseType,choices:q.choices?.map(choice=>({...choice,ja:false}))??[],choiceLayout:'short',typedPlaceholder:'Type in romaji',
-    timer:{kind:'question',label:v.phase==='countdown'?'Get ready':`${Math.ceil(v.remainingMs/1000)} s`,fraction:Math.min(1,v.remainingMs/room.v2.settings.durationMs)}};
+  const meaning=q.kind==='vocab-meaning'||q.kind==='kanji-meaning',reverse=q.kind==='vocab-reverse';
+  const question=duelQuestionModel(questionView(q),v.index,room.v2.manifest!.questions.length,v.remainingMs,room.v2.settings.durationMs,v.phase==='countdown'?(v.startAt??c.now)-c.now:undefined);
   const answer:QuizAnswerState=own?{status:'answered',outcome:own.outcome,selectedId:own.response?.type==='choice'?own.response.choiceId:undefined,typedValue:own.response?.type==='typed'?own.response.value:undefined,correctId:q.correctChoiceId}:{status:'unanswered'};
   const status=<div className="quiz-stack"><div className="quiz-duel-score" aria-label="Match score"><span>{room.hostName} · {competitive?summary.host.points:summary.host.correct}</span><span>{room.guestName} · {competitive?summary.guest.points:summary.guest.correct}</span></div>
     {!c.connected&&<p className="quiz-notice" role="status">Your connection was lost. Reconnecting… The room deadline keeps running.</p>}
     {v.opponentDisconnected&&<p className="quiz-notice" role="status">Your friend lost connection. Reconnecting…</p>}
     {v.canEndForConnection&&<button className="quiz-btn quiz-btn--secondary" onClick={()=>void c.endConnection()}>End this interrupted match</button>}
     {c.error&&<div className="quiz-notice" role="alert"><p>{c.error}</p><button className="quiz-btn quiz-btn--quiet" onClick={()=>void c.retry()}>Retry connection</button></div>}
+    <DuelLearningStatus learning={learning}/>
     {c.busy&&<p className="quiz-help" role="status">Waiting for the room to confirm…</p>}
   </div>;
-  const feedback=own?<QuizFeedback view={{outcome:own.outcome,verdict:own.outcome==='correct'?'Correct':own.outcome==='timeout'?'Time is up':'Not quite',correctAnswer:q.reveal.answer,sentence:`${q.face} is read “${q.reveal.answer}”.`,canListen:false,announcement:`${own.outcome}. Answer: ${q.reveal.answer}.`,why:{mnemonic:q.reveal.note??`The taught reading is ${q.reveal.answer}.`}}}
+  const feedback=own?<QuizFeedback view={{outcome:own.outcome,verdict:own.outcome==='correct'?'Correct':own.outcome==='timeout'?'Time is up':'Not quite',correctAnswer:q.reveal.answer,sentence:q.subject==='kana'?`${q.face} is read “${q.reveal.answer}”.`:q.subject==='vocab'?`${reverse?q.reveal.answer:q.face} (${q.reveal.reading}) means “${q.reveal.meaning}”.`:meaning?`${q.face} means “${q.reveal.answer}”.`:`One taught on’yomi of ${q.face} is “${q.reveal.answer}”. Meaning: ${q.reveal.meaning}.`,canListen:false,announcement:`${own.outcome}. Answer: ${q.reveal.answer}.`,why:{mnemonic:q.reveal.note??`The taught answer is ${q.reveal.answer}.`}}}
     whyOpen={why} onToggleWhy={()=>{c.cancelAuto();setWhy(!why);}} onInteract={c.cancelAuto}
     autoNext={!competitive&&own.outcome==='correct'&&autoNext?{phase:c.autoCancelled?'paused':'counting',label:c.autoCancelled?'Auto-next paused':'Next in 1.6s',durationMs:1600}:undefined} onPauseAutoNext={c.cancelAuto}/>
     :locked?<section className="quiz-feedback"><p className="quiz-body">{round?.winner?'Your friend claimed this round.':'This round ended without a point.'} No answer was recorded for you.</p><p className="quiz-body">Answer: {q.reveal.answer}</p></section>:undefined;

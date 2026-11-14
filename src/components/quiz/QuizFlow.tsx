@@ -146,6 +146,12 @@ export function useKeyboardViewport(input: RefObject<HTMLInputElement | null>, t
   return typed ? frame : undefined;
 }
 
+/** Shared repair entry for results and QZ11 personal duel misses; existing controller only. */
+export function startQuizRepair(controller:QuizSessionController,source:readonly import("../../quiz/types").Question[],subject:SoloSubject,repairOf:string,autoNext:boolean){
+  const sessionId=quizDeviceId(),clock=quizClock(),questions=repairQuestions(source,sessionId);
+  return !!questions.length&&controller.dispatch({type:"START",questions,clock,config:{sessionId,subject,origin:"repair",challenge:"steady",autoNext,previousSurvivalBest:0,rewardVersion:1,repairOf}});
+}
+
 export function QuizFlow({ home = false, onEnterSession, onResume, onStudyRoom, onFriend, reviewDeck, reviewDue = 0, dailyNewCap = 0, hasReviewCard, onAddReviewCard, onOpenReviewDeck,
   subject: requestedSubject = "kana", learnedWords = NO_LEARNED, studiedKanji = NO_LEARNED, speechEnabled, onSpeechChange, owner, controller, ready, unavailable, launch, catalogs, history, preferences, onPreferenceChange, onReadCustom, onSaveCustom, previousBest,
   streak, cloudPending, autoPronounce, exampleFor, speak, chime, onBack, onProfile }: Props) {

@@ -1,4 +1,7 @@
 /** QZ8 growth contracts. Owner command: npx tsx scripts/quiz-growth-sim.ts. */
+import {startQuizRepair} from '../src/components/quiz/QuizFlow';
+import type {QuizSessionController} from '../src/quiz/useQuizSession';
+import type {SessionEvent} from '../src/quiz/types';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
@@ -89,4 +92,10 @@ check('nothing automatically adds a card',Object.keys(stats.srsCards).length===0
 const app=readFileSync('src/App.tsx','utf8');
 check('single controller retained',(app.match(/useQuizSession\(/g)??[]).length===1);
 check('Writing Desk guide remains',readFileSync('src/components/MenuScreen.tsx','utf8').includes('guide: "desk"'));
+let launched:SessionEvent|undefined;
+const launcher={dispatch:(event:SessionEvent)=>{launched=event;return true;}} as unknown as QuizSessionController;
+check('external personal repair enters the existing controller',startQuizRepair(launcher,all.slice(0,8),'kana','duel-parent',true));
+const external=active(reduceSession(createSession(),launched!));
+check('external repair keeps max5, no duel origin or completion eligibility',external.questions.length===5&&external.config.origin==='repair'&&external.config.repairOf==='duel-parent'&&external.questions.every(q=>all.some(original=>original.skillKey===q.skillKey)));
+check('rejected repair launch is reported',!startQuizRepair({dispatch:()=>false} as unknown as QuizSessionController,all.slice(0,2),'kana','duel-parent',true));
 console.log(`${passed} QZ8 growth checks passed, 0 failed.`);

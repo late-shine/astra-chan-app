@@ -60,7 +60,6 @@ export function createDuelTransport(database:Database,identity:()=>string|null) 
   async function join(code:string,name:string):Promise<DuelRoom> {
     code=cleanDuelCode(code);const actor=uid();demandOnline();const before=await fetchRoom(code);
     if(!before)throw new DuelNetworkError('This room no longer exists.');
-    if(before.v2.settings.subject!=='kana')throw new DuelNetworkError('This build supports kana duels. Refresh both clients for other subjects.','version');
     if(before.hostId===actor)return before;
     if(before.v2.expiresAt<=now()||before.status!=='waiting'||before.guestId&&before.guestId!==actor)throw new DuelNetworkError('This lobby is full, expired, or already playing.');
     const guestRef=ref(database,`rooms/${code}/guestId`);let stopped=false;

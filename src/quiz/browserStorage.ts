@@ -1,4 +1,5 @@
 import type { StudentStats } from '../types';
+import {duelJournalKey,parseDuelLearning,type DuelLearningJournal} from './duelProgress';
 import { isSafeKey } from './ids';
 import { hasUnseenQuizReceipt, parseProgressEntry, progressEntryForPending, QUIZ_OUTBOX_LIMIT, receiptThrough, type ProgressEntry } from './progress';
 import { normalizeOwnerKey, serializeSnapshot, snapshotKey, validateSnapshot } from './snapshot';
@@ -148,6 +149,13 @@ export function createQuizStorage(getStorage: () => StorageAccess = () => window
       return ok(undefined);
     }),
     removeSnapshot: (owner: string) => useStorage(storage => { storage.removeItem(snapshotKey(owner)); return ok(undefined); }),
+    readDuelLearning: (owner:string) => useStorage(storage=>{
+      const raw=storage.getItem(duelJournalKey(owner));try{return ok(raw?parseDuelLearning(raw,owner):null);}catch{return fail('invalid','Duel learning recovery could not be read.');}
+    }),
+    writeDuelLearning: (journal:DuelLearningJournal) => useStorage(storage=>{
+      const raw=JSON.stringify(journal);try{parseDuelLearning(raw,journal.owner);}catch{return fail('invalid','Invalid duel learning checkpoint.');}
+      storage.setItem(duelJournalKey(journal.owner),raw);return ok(undefined);
+    }),
     readOutbox,
     appendOutbox: (owner: string, incoming: readonly ProgressEntry[]): StorageResult<void> => {
       if (!incoming.length) return ok(undefined);
@@ -190,11 +198,13 @@ export function createQuizStorage(getStorage: () => StorageAccess = () => window
       return remaining.length === found.value.length ? ok(undefined) : writeOutbox(owner, remaining);
     },
     replaceFromBackup: (stats: StudentStats, binding: StatsBinding) => useStorage(storage => {
-      const keys = [snapshotKey(binding.owner), outboxKey(binding.owner), MASTER_STATS_KEY, STATS_OWNER_KEY];
+      const keys = [snapshotKey(binding.owner), outboxKey(binding.owner), MASTER_STATS_KEY, STATS_OWNER_KEY, duelJournalKey(binding.owner), `astra_duel_resume_v2:${binding.owner}`];
       const before = keys.map(key => storage.getItem(key));
       try {
         storage.removeItem(keys[0]);
         storage.removeItem(keys[1]);
+        storage.removeItem(keys[4]);
+        storage.removeItem(keys[5]);
         const result = writeStats(stats, binding);
         if (result.ok === true) return result;
         for (const [index, key] of keys.entries()) {
@@ -283,9 +293,11 @@ export function readHydrationJournal(store: QuizStorage, owner: string, baseline
       entry.record.seq > receiptThrough(baseline, entry.record.sessionId)));
     if (appended.ok === false) return appended;
   }
+  const duel=store.readDuelLearning(owner);if(duel.ok===false)return duel;
+  if(duel.value){const appended=store.appendOutbox(owner,duel.value.entries.filter(entry=>entry.record.seq>duel.value!.acknowledgedThrough&&entry.record.seq>receiptThrough(baseline,entry.record.sessionId)));if(appended.ok===false)return appended;}
   const outbox = store.readOutbox(owner);
   if (outbox.ok === false) return outbox;
-  return ok({ entries: outbox.value, activeSessions: new Set(active ? [active.config.sessionId] : []) });
+  return ok({ entries: outbox.value, activeSessions: new Set([...(active?[active.config.sessionId]:[]),...(duel.value&&duel.value.acknowledgedThrough<duel.value.entries.length?[duel.value.sessionId]:[])]) });
 }
 
 export interface CloudSaveRequest {

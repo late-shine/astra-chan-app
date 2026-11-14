@@ -312,6 +312,7 @@ export function useQuizSession(options: Options) {
 
   return {
     state, dispatch, suspend, detach, discard, saveForLater, recoveryError, otherTab,
+    reserveProgress: (sessionId:string) => {const owner=live.current.owner;return !!owner&&eligible(owner)&&claim(owner,sessionId,quizClock());},
     canReplace: (owner: string) => current.current.storage.leaseAvailable(owner, tabId(), quizClock().epochMs),
   };
 }
