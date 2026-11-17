@@ -1,6 +1,7 @@
 import { soloQuestionModel, soloFeedbackModel, soloSpeechText } from "../../quiz/soloViews";
 import { remainingQuestions, repairQuestions, reviewChoices, reviewBatch, reviewAddedCopy } from "../../quiz/recommend";
 import {useHomeRecommendation} from "../../quiz/useHomeRecommendation";
+import { usePracticeArrival } from '../../quiz/usePracticeArrival';
 import { PracticeHome } from "./PracticeHome";
 import { VOCAB_CATEGORY_META } from "../../vocab/vocabCategories";
 import { vocabularyId } from "../../quiz/content/vocabulary";
@@ -164,6 +165,10 @@ export function QuizFlow({ home = false, onEnterSession, onResume, onStudyRoom, 
   const subjectLabel = soloSubjectLabel(subject);
   const [companionPause, setCompanionPause] = useState(0);
   const companion = useQuizCompanion(owner, home ? null : active, !ready || otherTab || unavailable || !!recoveryError || active?.pending?.status === "failed", !speechEnabled, companionPause);
+  const arrival = usePracticeArrival(owner, subject, !speechEnabled, active
+    ? { subject: soloSubjectLabel(active.config.subject), results: active.phase === 'results' } : undefined);
+  const hasPracticed = useMemo(() => home && (Object.values(history.skills ?? {}).some(item => item.firstAttempts > 0)
+    || Object.values(history.characterProgress ?? {}).some(item => item.total > 0)), [home, history]);
   const [mode, setMode] = useState<KanaMode>(launch === "timed" ? "timed" : launch === "survival" ? "survival" : "practice");
   const [kindOverride, setKindOverride] = useState<string | null>(launch === "typed" ? "type" : null);
   const [setup, setSetup] = useState(!home && (launch === "customize" || launch === "timed" || requestedSubject !== "kana"));
@@ -211,7 +216,7 @@ export function QuizFlow({ home = false, onEnterSession, onResume, onStudyRoom, 
   const homeRecommendation=useHomeRecommendation(homeRequest);
 
   function start(acceptFallback: boolean, newMode = mode, newKind = kind, selected = custom) {
-    if (!ready || otherTab || active && active.phase !== "results") return false;
+    if (!ready || otherTab || active && (home || active.phase !== "results")) return false;
     const clock = quizClock();
     const sessionId = quizDeviceId();
     const config = configFor(preferences, newMode, newKind, selected ?? undefined, sessionId, clock.epochMs);
@@ -360,25 +365,36 @@ export function QuizFlow({ home = false, onEnterSession, onResume, onStudyRoom, 
     const saved = onSaveCustom(ids);
     if (saved) setCustom([...saved]);
   };
-  const openSetup = (nextMode: KanaMode) => { setMode(nextMode); setSetup(true); setMessage(undefined); };
-  const setupSheet = setup && preflight ? <QuizSetupSheet returnFocusRef={customizeRef}
-    view={{ subject: words ? "words" : subject, subjects: home ? [{id:"kana",label:"Kana"},{id:"words",label:"Words"},{id:"kanji",label:"Kanji"}] : [{ id: words ? "words" : subject, label: subjectLabel }], poolId: custom ? "custom" : kanji ? preferences.quizKanjiPool : preferences.quizVocabPool, pools: poolOptions, kindId: kind,
+  const openSetup = (nextMode: KanaMode) => {
+    if (home && active) { setMessage('Resume or discard your saved session before customizing a new one.'); return; }
+    setMode(nextMode); setSetup(true); setMessage(undefined);
+  };
+  // One validated preference update serves quick choices and the full sheet.
+  // Standalone post-result setup retains its existing behavior.
+  const changeKind = (id: string) => {
+    if (home && active) return;
+    if (kanji) { const option = KANJI_KINDS.find(row => row.id === id); if (option) onPreferenceChange({quizKanjiKind: option.id as QuizPreferences['quizKanjiKind']}); }
+    else if (words) { const option = VOCAB_KINDS.find(row => row.id === id); if (option) onPreferenceChange({quizVocabKind: option.id as QuizPreferences['quizVocabKind']}); }
+    else { const option = KINDS.find(row => row.id === id); if (option) { setKindOverride(null); onPreferenceChange({quizKanaKind: option.id}); } }
+  };
+  const setupSheet = setup && preflight ? <QuizSetupSheet returnFocusRef={customizeRef} guided={home} sessionLabel={`${subjectLabel} · ${modeName(mode)}`}
+    view={{ subject: words ? "words" : subject, subjects: [{ id: words ? "words" : subject, label: subjectLabel }], poolId: custom ? "custom" : kanji ? preferences.quizKanjiPool : preferences.quizVocabPool, pools: poolOptions, kindId: kind,
       kinds: (words ? VOCAB_KINDS : kanji ? KANJI_KINDS : KINDS).filter(option => mode !== "survival" || option.id !== "type").map(option => ({ ...option, ...(kanji && option.id === "word" ? {hint:preflight.curatedSetLabel} : {}) })),
       lengthHelp: preferences.quizLength === "all"
         ? mode === "survival" ? `All ${preflight.eligibleTargets} eligible ${targetName} in the bank. Survival repeats after one pass.`
           : `All ${preflight.eligibleTargets} eligible ${targetName}, once each. Mixed uses one question type per target.`
         : !kana ? `${preflight.eligibleTargets} eligible ${targetName} for this pool and question type.${kanji && kind === "word" ? " Answer with the complete word reading." : ""}` : undefined,
       length: preferences.quizLength, lengths: [...LENGTHS], autoNext: preferences.quizAutoNext, matchCount: preflight.eligibleTargets,
-      startBlocked: oversizedAll,
-      emptyAlternative: kanji ? {id:"all",label:"Use all kanji",reason:custom ? `Choose ${kind === "word" ? "curated words" : "kanji"} in Advanced below. Unsupported readings are skipped; changing question type can change eligibility.` : preferences.quizKanjiPool === "studied" ? "No eligible targets for your studied kanji. Use Study on a kanji card, choose another question type, or use All kanji. Quiz answers do not mark kanji studied." : "No supported targets for this question type. In words uses only reviewed curated entries; try Meaning for isolated kanji."}
-        : words ? {id:"all",label:"Use all words",reason: custom ? "Choose words in Advanced below. Reading mode needs an eligible kanji-containing written word." : preferences.quizVocabPool === "learned" ? "No eligible words are marked learned. Mark words manually in Learn > Words, or use All words." : "No words match this pool and question type."} : custom ? { id: "all", label: "Use all matching kana", reason: "Your custom selection has no matching targets." } : undefined,
+      startBlocked: oversizedAll || home && !!active,
+      emptyAlternative: kanji ? {id:"all",label:"Use all kanji",reason:custom ? `Choose ${kind === "word" ? "curated words" : "kanji"} in ${home ? 'More options' : 'Advanced'} below. Unsupported readings are skipped; changing question type can change eligibility.` : preferences.quizKanjiPool === "studied" ? "No eligible targets for your studied kanji. Use Study on a kanji card, choose another question type, or use All kanji. Quiz answers do not mark kanji studied." : "No supported targets for this question type. In words uses only reviewed curated entries; try Meaning for isolated kanji."}
+        : words ? {id:"all",label:"Use all words",reason: custom ? `Choose words in ${home ? 'More options' : 'Advanced'} below. Reading mode needs an eligible kanji-containing written word.` : preferences.quizVocabPool === "learned" ? "No eligible words are marked learned. Mark words manually in Learn > Words, or use All words." : "No words match this pool and question type."} : custom ? { id: "all", label: "Use all matching kana", reason: "Your custom selection has no matching targets." } : undefined,
       startLabel: preflight.requiresFourChoiceAcknowledgement ? "Start with four choices" : undefined,
       notice: oversizedAll ? `All ${preflight.eligibleTargets} targets exceeds the 256-question recovery limit. Narrow the pool or choose 10, 20 or 30.` : preflight.requiresFourChoiceAcknowledgement ? preflight.notices[0] : undefined,
       kana: !kana ? undefined : { script: preferences.quizKanaScript, scripts: SCRIPTS, choices: preferences.quizChoiceCount,
         stages: STAGES.map(stage => ({ ...stage, on: selectedStages.includes(stage.id) })) } }}
     actions={{ onSubjectChange: id => {setCustom(null);setCustomSearch("");if(mode === "survival" && id !== "kana")setMode("practice");onPreferenceChange({quizSubject:id === "words" ? "vocab" : id});}, onPoolChange: id => { if (id === "custom") setCustom(onReadCustom()); else { setCustom(null); const pool = poolOptions.find(option=>option.id===id); if (pool) onPreferenceChange(kanji ? {quizKanjiPool:pool.id as QuizPreferences["quizKanjiPool"]} : {quizVocabPool: pool.id as QuizPreferences["quizVocabPool"]}); } }, onClose: () => setSetup(false), onStart: () => start(preflight.requiresFourChoiceAcknowledgement),
       onUseAlternative: () => {setCustom(null); if (kanji) onPreferenceChange({quizKanjiPool:"all"}); else if (words) onPreferenceChange({quizVocabPool:"all"});},
-      onKindChange: id => { if (kanji) { const option = KANJI_KINDS.find(row=>row.id===id); if(option) onPreferenceChange({quizKanjiKind:option.id as QuizPreferences["quizKanjiKind"]}); return; } if (words) { const option = VOCAB_KINDS.find(row=>row.id===id); if(option) onPreferenceChange({quizVocabKind:option.id as QuizPreferences["quizVocabKind"]}); return; } const chosen = KINDS.find(option => option.id === id); if (chosen) { setKindOverride(null); onPreferenceChange({ quizKanaKind: chosen.id }); } },
+      onKindChange: changeKind,
       onLengthChange: n => { const length = LENGTHS.find(candidate => candidate === n); if (length) onPreferenceChange({ quizLength: length }); },
       onScriptChange: quizKanaScript => onPreferenceChange({ quizKanaScript }), onToggleStage: id => {
         const bit = STAGES.findIndex(stage => stage.id === id);
@@ -426,21 +442,43 @@ export function QuizFlow({ home = false, onEnterSession, onResume, onStudyRoom, 
 
   if (home) {
     const next = homeRecommendation.value ?? {needsSetup:true,summary:`${homeRecommendation.loading ? "Preparing" : "Customize"} ${subjectLabel} practice`,note:homeRecommendation.error??"Preparing your selected set…"};
+    const kinds = words ? VOCAB_KINDS : kanji ? KANJI_KINDS : [...KINDS];
+    const kindLabel = kinds.find(option => option.id === homeKind)?.label ?? 'Mixed';
+    const material = custom ? 'Custom selection' : kana
+      ? `${SCRIPTS.find(option => option.id === preferences.quizKanaScript)?.label} · ${STAGES.filter(stage => selectedStages.includes(stage.id)).map(stage => stage.label).join(', ')}`
+      : kanji ? ({recommended:'Recommended kanji',all:'All available kanji',studied:'Studied kanji'}[preferences.quizKanjiPool])
+      : preferences.quizVocabPool === 'recommended' ? 'Recommended words'
+      : preferences.quizVocabPool === 'all' ? 'All available words'
+      : preferences.quizVocabPool === 'learned' ? 'Learned words'
+      : VOCAB_CATEGORY_META.find(category => `theme:${category.id}` === preferences.quizVocabPool)?.label ?? 'Selected vocabulary theme';
+    const summary = homeRecommendation.value && !next.needsSetup
+      ? `${homeRecommendation.value.count} ${homeRecommendation.value.count === 1 ? 'question' : 'questions'} · ${arrival.entered ? '' : `${subjectLabel} · `}${kindLabel} · Untimed`
+      : next.summary;
     const homeView = {
+      entered: arrival.entered, arrivalId: arrival.id, hasPracticed,
+      focus: { value: homeKind, options: kinds.filter(option => !kanji || option.id !== 'word' || homeKind === 'word') },
       resume: active ? {subjectLabel:soloSubjectLabel(active.config.subject),positionLabel:active.phase === "results" ? "Saved results" : active.config.origin === "survival" ? `Survival question ${active.index+1}` : `Question ${active.index+1} of ${active.questions.length}`,actionLabel:active.phase === "results" ? "View results" : "Resume"} : undefined,
-      recommendation:{eyebrow:"Your next practice",summary:next.summary,note:active ? "Resume or discard your saved session before starting another." : next.note,cta:homeRecommendation.loading ? "Preparing practice…" : next.needsSetup ? "Adjust practice" : "Start practice",blocked:!!active||homeRecommendation.loading},
+      recommendation:{eyebrow:"Your next practice",summary,details:material,note:active ? "Resume or discard your saved session before starting another." : next.note,cta:homeRecommendation.loading ? "Preparing practice…" : next.needsSetup ? "Adjust practice" : "Start practice",blocked:!!active||homeRecommendation.loading},
       subjects:[{id:"kana" as const,label:"Kana"},{id:"words" as const,label:"Words"},{id:"kanji" as const,label:"Kanji"}],subject:words ? "words" as const : kanji ? "kanji" as const : "kana" as const,
       challenges:[{id:"timed" as const,title:"Timed practice",description:kana ? "12, 6 or 3 seconds per question" : "20 or 10 seconds per question"},
         ...(kana ? [{id:"survival" as const,title:"Survival",description:"Kana choices · 45-second starting budget"}] : []),
         ...(onFriend ? [{id:"friend" as const,title:"Play with a friend",description:"Open the existing online duel lobby"}] : [])],
       reviewDeck:reviewDeck ?? {title:"Review Deck",detail:"Practice cards you have saved.",badge:"Open"}
     };
-    return <StudioShell {...shell} label="Practice" width="home" header={header} overlay={setupSheet} modalOpen={!!setupSheet}>
+    return <StudioShell {...shell} companion={unavailable || !!recoveryError || active?.pending?.status === 'failed' ? companion : arrival.companion}
+      label="Practice" width="home" header={header} overlay={setupSheet} modalOpen={!!setupSheet}>
       {status}{message && <p className="quiz-notice" role="status">{message}</p>}
       <PracticeHome view={homeView} customizeRef={customizeRef} actions={{
         onStart:()=>{if(active||homeRecommendation.loading)return;if(next.needsSetup)openSetup("practice");else start(false,"practice",homeKind);},
         onCustomize:()=>{if(active)setMessage("Resume or discard your saved session before customizing a new one.");else openSetup("practice");},
-        onSelectSubject:id=>{setCustom(null);setCustomSearch("");setMode("practice");onPreferenceChange({quizSubject:id === "words" ? "vocab" : id});},
+        onSelectSubject:id=>{
+          if (active) { setMessage('Resume or discard your saved session before choosing a new subject.'); return; }
+          const nextSubject = id === 'words' ? 'vocab' : id;
+          if (arrival.entered && nextSubject === subject) return;
+          arrival.arrive(); setMessage(undefined); setMode('practice'); setKindOverride(null);
+          if (nextSubject !== subject) { setCustom(null); setCustomSearch(''); onPreferenceChange({quizSubject: nextSubject}); }
+        },
+        onFocusChange: changeKind,
         onChallenge:id=>{if(active){setMessage("Resume or discard your saved session first.");return;}if(id === "friend")onFriend?.();else openSetup(id === "survival" ? "survival" : "timed");},
         onResume:()=>onResume?.(),onDiscardResume:()=>{if(!controller.discard())setMessage("Save pending progress before discarding this position.");else setMessage(undefined);},
         onOpenReviewDeck:()=>{if(!active || controller.saveForLater())onOpenReviewDeck?.();else setMessage("Save the remaining progress before opening Review Deck.");}

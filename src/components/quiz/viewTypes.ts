@@ -12,6 +12,8 @@ import type { AtelierExpression } from "../../quiz/atelierAssets";
 export interface QuizCompanionView {
   expression: AtelierExpression;
   speech: string;
+  /** Only home dialogue opts into a finite, interruptible text reveal. */
+  revealId?: string;
 }
 
 /** The same ids the app already stores for the saved theme. The studio maps them to light/dark tokens in CSS. */
@@ -36,6 +38,8 @@ export interface ResumeBannerView {
 
 export interface RecommendationView {
   blocked?: boolean;
+  /** Current material/script selection, from the same preferences as Start. */
+  details?: string;
   /** "Your next practice" */
   eyebrow: string;
   /** "10 questions · Kana · Untimed" */
@@ -62,6 +66,10 @@ export interface ReviewDeckLinkView {
 }
 
 export interface PracticeHomeView {
+  entered?: boolean;
+  arrivalId?: string;
+  hasPracticed?: boolean;
+  focus?: { value: string; options: SegmentOption[] };
   resume?: ResumeBannerView;
   recommendation: RecommendationView;
   subjects: SubjectOption[];
@@ -72,6 +80,7 @@ export interface PracticeHomeView {
 }
 
 export interface PracticeHomeActions {
+  onFocusChange?: (kind: string) => void;
   onSelectSubject: (subject: QuizSubject) => void;
   onStart: () => void;
   onCustomize: () => void;

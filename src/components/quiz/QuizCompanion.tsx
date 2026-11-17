@@ -1,17 +1,19 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { Fragment, useEffect, useRef, useState, type CSSProperties } from "react";
 import { ATELIER_PORTRAITS, type AtelierExpression } from "../../quiz/atelierAssets";
 import type { QuizCompanionView } from "./viewTypes";
+import { PracticeSpeech } from './PracticeSpeech';
 
 export interface QuizCompanionProps {
   view: QuizCompanionView;
   unavailable?: boolean;
+  reducedMotion?: boolean;
   onInteract?: () => void;
 }
 
 const warmed = new Set<AtelierExpression>();
 
 /** Decorative decoding never owns quiz state, focus, speech, or a timer. */
-export function QuizCompanion({ view, unavailable = false, onInteract }: QuizCompanionProps) {
+export function QuizCompanion({ view, unavailable = false, reducedMotion, onInteract }: QuizCompanionProps) {
   const desired = useRef(view.expression);
   desired.current = view.expression;
   const [shown, setShown] = useState<{ current: AtelierExpression | null; previous: AtelierExpression | null }>({ current: null, previous: null });
@@ -76,7 +78,12 @@ export function QuizCompanion({ view, unavailable = false, onInteract }: QuizCom
     data-art={hasArt ? "ready" : "fallback"} onPointerDown={onInteract} onPointerEnter={onInteract} onFocusCapture={onInteract}>
     <div className="quiz-companion__speech">
       <p className="quiz-companion__name">Astra<span className="quiz-companion__role"> · Your study companion</span></p>
-      {view.speech && <p className="quiz-companion__line">{view.speech}</p>}
+      {view.revealId ? <>
+        <p className="practice-sr-only" aria-live="polite" aria-atomic="true">{view.speech}</p>
+        {view.speech && <Fragment key={`${view.revealId}:${view.speech}`}>
+          <PracticeSpeech text={view.speech} reducedMotion={reducedMotion} />
+        </Fragment>}
+      </> : view.speech && <p className="quiz-companion__line">{view.speech}</p>}
       {view.speech && <p className="quiz-companion__compact">Here with you.</p>}
     </div>
     <div className="quiz-companion__portrait" aria-hidden="true">

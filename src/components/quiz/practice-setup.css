@@ -1,0 +1,64 @@
+/* Guided-home setup only. Keep the shared dialog's scroll owner, focus trap,
+   footer, and non-home presentation intact. */
+.quiz-sheet:has(.practice-setup) {
+  border: 1px solid var(--quiz-border);
+  background: var(--quiz-surface-solid);
+}
+.quiz-sheet:has(.practice-setup) .quiz-sheet__head {
+  padding: 1rem 1rem .75rem 1.5rem;
+}
+.quiz-sheet:has(.practice-setup) .quiz-sheet__title {
+  font-family: Georgia, serif;
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  line-height: 1.2;
+  font-weight: 500;
+}
+.quiz-sheet:has(.practice-setup) .quiz-sheet__body { padding-top: 1rem; }
+.quiz-form.practice-setup { gap: 1.25rem; }
+.practice-setup__context {
+  color: var(--quiz-ink-muted);
+  font-size: .9375rem;
+  line-height: 1.4;
+  margin: 0;
+}
+.practice-setup .quiz-field__label {
+  color: var(--quiz-ink);
+  font-size: .9375rem;
+  line-height: 1.4;
+}
+.practice-setup .quiz-select { background: var(--quiz-surface); }
+.practice-setup .quiz-advanced { border-top: 1px solid var(--quiz-border); padding-top: .25rem; }
+.practice-setup .quiz-disclosure {
+  border: 0;
+  border-radius: 8px;
+  padding: .75rem .25rem;
+  gap: .75rem;
+  text-align: left;
+}
+.practice-setup__more-title { display: block; font-weight: 600; }
+.practice-setup__more-note {
+  display: block;
+  margin-top: .25rem;
+  font-size: .8125rem;
+  line-height: 1.3;
+  font-weight: 400;
+  color: var(--quiz-ink-muted);
+}
+.practice-setup .quiz-advanced__panel { padding-top: 1rem; }
+.quiz-sheet .practice-setup__summary {
+  margin: 0 0 .75rem;
+  font-size: .9375rem;
+  line-height: 1.45;
+  color: var(--quiz-ink);
+  overflow-wrap: anywhere;
+}
+@media (min-width: 768px) {
+  .quiz-sheet:has(.practice-setup) { max-width: 600px; }
+  .quiz-sheet:has(.practice-setup) .quiz-sheet__head { padding: 1.25rem 1.25rem 1rem 2rem; }
+  .quiz-sheet:has(.practice-setup) .quiz-sheet__body { padding: 1.25rem 2rem 1.5rem; }
+  .quiz-sheet:has(.practice-setup) .quiz-sheet__foot { padding: 1rem 2rem 1.5rem; }
+}
+@media (forced-colors: active) {
+  .quiz-sheet:has(.practice-setup) { background: Canvas; color: CanvasText; border-color: CanvasText; }
+  .practice-setup .quiz-select { background: Field; color: FieldText; }
+}

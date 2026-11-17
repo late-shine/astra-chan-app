@@ -119,7 +119,7 @@ export function StudioShell({
               </div>
               <p className="quiz-atelier-caption" aria-hidden="true">A quiet room. One {studyUnit} at a time.</p>
             </div>
-            <QuizCompanion view={companion} unavailable={artUnavailable} onInteract={onCompanionInteract} />
+            <QuizCompanion view={companion} unavailable={artUnavailable} reducedMotion={reducedMotion} onInteract={onCompanionInteract} />
           </div>
           <div className="quiz-room-note" aria-hidden="true"><span>A rainy evening</span><span>Learn with Astra</span></div>
         </div>

@@ -11,6 +11,7 @@ import { useEffect, useId, useState, type ReactNode, type RefObject } from "reac
 import { Check, ChevronDown, CircleAlert } from "lucide-react";
 import { StudioSegmented, StudioSheet, StudioSwitch } from "./StudioShell";
 import type { QuizSetupActions, QuizSetupView } from "./viewTypes";
+import './practice-setup.css';
 
 export interface QuizSetupSheetProps {
   view: QuizSetupView;
@@ -19,25 +20,35 @@ export interface QuizSetupSheetProps {
   returnFocusRef?: RefObject<HTMLElement | null>;
   customSelection?: ReactNode;
   modeOptions?: ReactNode;
+  /** The guided Practice home uses the approved, subject-specific arrangement. */
+  guided?: boolean;
+  /** Supplied by the flow so timed/survival context stays accurate. */
+  sessionLabel?: string;
 }
 
 function plural(count: number, one: string, many: string): string {
   return count === 1 ? one : many;
 }
 
-export function QuizSetupSheet({ view, actions, returnFocusRef, customSelection, modeOptions }: QuizSetupSheetProps) {
+export function QuizSetupSheet({ view, actions, returnFocusRef, customSelection, modeOptions, guided = false, sessionLabel }: QuizSetupSheetProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   useEffect(() => { if (view.subject !== "kana" && view.poolId === "custom") setAdvancedOpen(true); }, [view.subject, view.poolId]);
   const poolId = useId();
   const noticeId = useId();
   const advancedPanelId = useId();
+  const kindId = useId();
+  const kindHintId = useId();
 
   const { matchCount, length } = view;
   const isEmpty = matchCount <= 0;
   const startCount = length === "all" ? Math.max(0, matchCount) : Math.min(length, Math.max(0, matchCount));
   const shrinks = !isEmpty && length !== "all" && matchCount < length;
 
-  const startLabel = view.startLabel ?? (isEmpty ? "Start practice" : `Start ${startCount} ${plural(startCount, "question", "questions")}`);
+  const startLabel = view.startLabel ?? (guided && view.startBlocked ? 'Adjust choices to start'
+    : isEmpty ? "Start practice" : `Start ${startCount} ${plural(startCount, "question", "questions")}`);
+  const subjectLabel = view.subjects.find(subject => subject.id === view.subject)?.label
+    ?? (view.subject === 'words' ? 'Words' : view.subject === 'kanji' ? 'Kanji' : 'Kana');
+  const selectedKind = view.kinds.find(kind => kind.id === view.kindId);
 
   const handleStart = () => {
     // aria-disabled keeps the button focusable (so its reason can be read), so the guard lives here.
@@ -47,6 +58,10 @@ export function QuizSetupSheet({ view, actions, returnFocusRef, customSelection,
 
   const footer = (
     <>
+      {guided && <p className="practice-setup__summary">
+        {isEmpty ? 'No matching questions' : view.startBlocked ? 'Adjust these choices to continue'
+          : `${startCount} ${plural(startCount, 'question', 'questions')} · ${subjectLabel} · ${selectedKind?.label ?? 'Practice'}`}
+      </p>}
       <button
         type="button"
         className="quiz-btn quiz-btn--primary quiz-btn--block"
@@ -60,8 +75,9 @@ export function QuizSetupSheet({ view, actions, returnFocusRef, customSelection,
   );
 
   return (
-    <StudioSheet title="Customize practice" closeLabel="Close customize" onClose={actions.onClose} footer={footer} size="setup" returnFocusRef={returnFocusRef}>
-      <div className="quiz-form">
+    <StudioSheet title={guided ? 'Adjust session' : 'Customize practice'} closeLabel={guided ? 'Close adjust session' : 'Close customize'} onClose={actions.onClose} footer={footer} size="setup" returnFocusRef={returnFocusRef}>
+      <div className={`quiz-form${guided ? ' practice-setup' : ''}`}>
+        {guided && <p className="practice-setup__context">{sessionLabel ?? subjectLabel}</p>}
         {view.subjects.length > 1 && <div className="quiz-field">
           <span className="quiz-field__label">Subject</span>
           <StudioSegmented label="Subject" options={view.subjects} value={view.subject} onChange={actions.onSubjectChange} columns={3} />
@@ -107,7 +123,7 @@ export function QuizSetupSheet({ view, actions, returnFocusRef, customSelection,
 
         {view.pools.length > 1 && <div className="quiz-field">
           <label className="quiz-field__label" htmlFor={poolId}>
-            Practice pool
+            {guided ? 'Practice material' : 'Practice pool'}
           </label>
           <select id={poolId} className="quiz-select" value={view.poolId} onChange={(event) => actions.onPoolChange(event.target.value)}>
             {view.pools.map((pool) => (
@@ -119,14 +135,24 @@ export function QuizSetupSheet({ view, actions, returnFocusRef, customSelection,
         </div>}
 
         <div className="quiz-field">
-          <span className="quiz-field__label">Question type</span>
-          <StudioSegmented label="Question type" options={view.kinds} value={view.kindId} onChange={actions.onKindChange} columns={2} />
+          {guided ? <>
+            <label className="quiz-field__label" htmlFor={kindId}>Question type</label>
+            <select id={kindId} className="quiz-select" value={view.kindId}
+              aria-describedby={selectedKind?.hint ? kindHintId : undefined}
+              onChange={event => actions.onKindChange(event.target.value)}>
+              {view.kinds.map(kind => <option key={kind.id} value={kind.id}>{kind.label}</option>)}
+            </select>
+            {selectedKind?.hint && <p id={kindHintId} className="quiz-help">{selectedKind.hint}</p>}
+          </> : <>
+            <span className="quiz-field__label">Question type</span>
+            <StudioSegmented label="Question type" options={view.kinds} value={view.kindId} onChange={actions.onKindChange} columns={2} />
+          </>}
         </div>
 
         <div className="quiz-field">
-          <span className="quiz-field__label">Length</span>
+          <span className="quiz-field__label">{guided ? 'Questions' : 'Length'}</span>
           <StudioSegmented
-            label="Length"
+            label={guided ? 'Questions' : 'Length'}
             options={view.lengths.map((n) => ({ id: n, label: n === "all" ? "All" : String(n) }))}
             value={view.length}
             onChange={actions.onLengthChange}
@@ -135,7 +161,7 @@ export function QuizSetupSheet({ view, actions, returnFocusRef, customSelection,
           {view.lengthHelp && <p className="quiz-help">{view.lengthHelp}</p>}
         </div>
 
-        <div id={noticeId} className="quiz-notice-slot" aria-live="polite">
+        <div id={noticeId} className="quiz-notice-slot" aria-live="polite" hidden={guided && !view.notice && !shrinks && !isEmpty}>
           {view.notice && <p className="quiz-notice"><CircleAlert aria-hidden="true" /><span>{view.notice}</span></p>}
           {shrinks && (
             <p className="quiz-notice">
@@ -166,7 +192,7 @@ export function QuizSetupSheet({ view, actions, returnFocusRef, customSelection,
             </div>
           )}
         </div>
-        <p className="quiz-help">Answer choices may include other items.</p>
+        {!guided && <p className="quiz-help">Answer choices may include other items.</p>}
 
         <div className="quiz-advanced">
           <button
@@ -176,10 +202,11 @@ export function QuizSetupSheet({ view, actions, returnFocusRef, customSelection,
             aria-controls={advancedPanelId}
             onClick={() => setAdvancedOpen((open) => !open)}
           >
-            <span>Advanced</span>
+            <span>{guided ? <><span className="practice-setup__more-title">More options</span><span className="practice-setup__more-note">Specific items and answer pacing</span></> : 'Advanced'}</span>
             <ChevronDown aria-hidden="true" data-open={advancedOpen ? "true" : "false"} />
           </button>
           <div id={advancedPanelId} hidden={!advancedOpen} className="quiz-advanced__panel">
+            {guided && <p className="quiz-help">Answer choices may include other items.</p>}
             {customSelection === undefined ? <div className="quiz-field">
               <span className="quiz-field__label">Custom selection</span>
               <button type="button" className="quiz-btn quiz-btn--secondary quiz-btn--block">
