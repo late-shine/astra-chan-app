@@ -132,6 +132,7 @@ import {
   writeLocalProfile,
 } from "./profileSync";
 import MenuScreen from "./components/MenuScreen";
+import { RoomEntrance } from "./entrance/RoomEntrance";
 import { useDuelSession } from "./quiz/useDuelSession";
 import {useDuelLearning} from "./quiz/useDuelLearning";
 import {duelLearningId,duelMisses,mappedDuelMisses} from "./quiz/duelProgress";
@@ -453,8 +454,42 @@ export default function App() {
   // Tab & Learning Desk Navigation states
   const [activeHubTab, setActiveHubTab] = useState<"learn" | "practice">("learn");
   const [showStudyRoom, setShowStudyRoom] = useState(true);
-  const atelierHome = currentScreen === "menu" && !showStudyRoom && activeHubTab === "practice";
-  const atelierScreen = studioQuiz || atelierHome || currentScreen === "online-multiplayer";
+  const [entrancePhase, setEntrancePhase] = useState<"idle" | "loading" | "leaving" | "connected">("idle");
+  const [roomCoversViewport, setRoomCoversViewport] = useState(false);
+  const entranceRequest = useRef(0);
+  useEffect(() => {
+    if (currentScreen !== "menu") { entranceRequest.current++; setEntrancePhase("idle"); }
+    return () => { entranceRequest.current++; };
+  }, [currentScreen]);
+  const openPracticeEntrance = async (tab: "learn" | "practice") => {
+    const request = ++entranceRequest.current;
+    if (tab !== "practice") { setEntrancePhase("idle"); setActiveHubTab(tab); return; }
+    if (entrancePhase === "connected" && !showStudyRoom) return;
+    setEntrancePhase("loading");
+    const pic = new Image();
+    pic.src = `/assets/entrance/room-${innerWidth < 768 ? "mobile" : "desktop"}.webp`;
+    // The existing app stays visible while the first image is decoded.
+    await new Promise<void>(resolve => {
+      // A stalled poster must not trap navigation; the inline fallback keeps Skip available.
+      const timeout = window.setTimeout(resolve, 8000);
+      pic.decode().catch(() => {}).finally(() => { window.clearTimeout(timeout); resolve(); });
+    });
+    if (request !== entranceRequest.current) return;
+    setEntrancePhase("leaving");
+    await new Promise(resolve => setTimeout(resolve, prefersReducedMotion ? 0 : 160));
+    if (request !== entranceRequest.current) return;
+    // Writing Desk opens the hub, like Bookshelf. Only this navigation returns
+    // to the shell's top; switching Learn → Practice keeps the current position.
+    if (showStudyRoom) window.scrollTo({ top: 0, behavior: "instant" });
+    setShowStudyRoom(false);
+    setActiveHubTab("practice"); setEntrancePhase("connected");
+  };
+  const cancelEntrance = () => {
+    entranceRequest.current++; setEntrancePhase("idle"); setActiveHubTab("learn"); setShowStudyRoom(true);
+  };
+  const entranceConnected = entrancePhase === "connected" && currentScreen === "menu" && activeHubTab === "practice";
+  const atelierHome = currentScreen === "menu" && activeHubTab === "practice" && (!showStudyRoom || entranceConnected);
+  const atelierScreen = studioQuiz || (atelierHome && !entranceConnected) || currentScreen === "online-multiplayer";
   const [subLearnTab, setSubLearnTab] = useState<"hiragana" | "katakana" | "kanji" | "vocabulary">("hiragana");
   const [selectedLearnChar, setSelectedLearnChar] = useState<HiraganaItem | KatakanaItem | null>(null);
 
@@ -2829,9 +2864,11 @@ export default function App() {
     setCurrentKanjiIndex,
     openOnlineMultiplayer,
     showStudyRoom,
-    setShowStudyRoom,
+    setShowStudyRoom: (value: React.SetStateAction<boolean>) => {
+      entranceRequest.current++; setEntrancePhase("idle"); setShowStudyRoom(value);
+    },
     activeHubTab,
-    setActiveHubTab,
+    setActiveHubTab: openPracticeEntrance,
     mascotMood,
     setMascotMood,
     openDock,
@@ -3011,9 +3048,51 @@ export default function App() {
     onAutoNext:(quizAutoNext:boolean)=>setQuizPreferences(previous=>({...previous,quizAutoNext})),
     speechEnabled:quizCompanionSpeech,onSpeechChange:setQuizCompanionSpeech,
   };
+  const practiceFlow = <QuizFlow home={atelierHome} onEnterSession={enterQuiz} onResume={openQuizResume}
+            onStudyRoom={() => {cancelEntrance();setCurrentScreen("menu");}}
+            onFriend={openOnlineMultiplayer}
+            reviewDeck={{title:"Review Deck",detail:totalCount === 0 ? "No cards yet — add missed items after practice." : [formatSessionLine(sessionSummary) ?? "Done for today",formatWaitingLine(sessionSummary)].filter(Boolean).join(" · "),badge:sessionSummary.total ? `${sessionSummary.total} today` : totalCount ? "Done" : "0"}}
+            reviewDue={sessionSummary.total} dailyNewCap={normalizeSrsSettings(stats.srsSettings).dailyNewCap}
+            hasReviewCard={hasCard} onAddReviewCard={(key,type) => {
+              if (!progressOwner || !isCurrentQuizOwner(progressOwner) || !quizReady || hasCard(key,type)) return false;
+              addCard(key,type); return true;
+            }}
+            onOpenReviewDeck={() => {setSrsQueue(getSessionQueue());setSrsQueueIndex(0);setSrsRevealed(false);setCurrentScreen("review-deck");}}
+            subject={atelierHome ? quizPreferences.quizSubject : soloRequestedSubject} learnedWords={learnedQuizWords} studiedKanji={studiedQuizKanji} speechEnabled={quizCompanionSpeech} onSpeechChange={setQuizCompanionSpeech} owner={progressOwner} controller={quizSession} ready={quizReady}
+            unavailable={statsHydrated && cloudStatsHydrated && !progressChanging && !quizReady}
+            launch={currentScreen === "results" ? "resume" : kanaLaunch} catalogs={SOLO_CATALOGS} history={quizHistory}
+            preferences={quizPreferences} onPreferenceChange={patch => setQuizPreferences(previous => ({ ...previous, ...patch }))}
+            onReadCustom={() => {
+              if (!progressOwner || !isCurrentQuizOwner(progressOwner)) return [];
+              const draft = quizBrowserStorage.readCustom(progressOwner);
+              if (draft.ok === true) return draft.value.filter(id => isSoloCustomId(id, soloDraftSubject));
+              showToast(draft.message);
+              return [];
+            }} onSaveCustom={ids => {
+              if (!progressOwner || !isCurrentQuizOwner(progressOwner)) return;
+              const prior = quizBrowserStorage.readCustom(progressOwner);
+              if (prior.ok === false) { showToast(prior.message); return []; }
+              const isCurrent = (id: string) => isSoloCustomId(id, soloDraftSubject);
+              const draftSubject = soloDraftSubject;
+              const merged = mergeSoloCustomDraft(prior.value, ids, draftSubject);
+              const saved = quizBrowserStorage.writeCustom(progressOwner, merged.ids);
+              if (saved.ok === false) { showToast(saved.message); return prior.value.filter(isCurrent); }
+              if (merged.truncated) showToast("The shared custom draft holds 256 items. Your other subject's selection has been kept.");
+              return merged.selected;
+            }}
+            previousBest={stats.survivalBestScore ?? 0} streak={stats.streakCount}
+            cloudPending={isAccountUser && (quizCloudPending || !cloudSyncReady)}
+            exampleFor={glyph => {
+              const example = HIRAGANA_DATA.find(item => item.kana === glyph)?.examples?.[0]
+                ?? KATAKANA_DATA.find(item => item.kana === glyph)?.examples?.[0];
+              return example && { ja: example.japanese, reading: example.romaji, en: example.english };
+            }}
+            autoPronounce={autoPronounce} speak={speakJapanese} chime={playChime}
+            onBack={leaveKanaPractice} onProfile={() => setCurrentScreen("profile")} />;
+
   // ──── RENDER ───────────────────────────────────────────────────────────────
   return (
-    <div className={atelierScreen ? "relative w-full bg-natural-bg" : "min-h-screen text-natural-charcoal font-sans overflow-x-hidden flex flex-col justify-between py-2 px-4 relative bg-natural-bg transition-colors duration-300"}>
+    <div data-entrance={entrancePhase} className={atelierScreen ? "relative w-full bg-natural-bg" : `min-h-screen text-natural-charcoal font-sans flex flex-col justify-between py-2 px-4 relative bg-natural-bg transition-colors duration-300 ${entranceConnected ? "astra-app--journey" : "overflow-x-hidden"}`}>
       <input
         ref={progressUploadInputRef}
         type="file"
@@ -3029,7 +3108,7 @@ export default function App() {
         className="hidden"
       />
       {/* ===== FIXED MULTI-SCENE BACKGROUNDS (position:fixed prevents twitching on clicks) ===== */}
-      {!atelierScreen && <>
+      {!atelierScreen && (!entranceConnected || !roomCoversViewport) && <>
       <motion.div className="fixed inset-0 pointer-events-none select-none z-0 overflow-hidden" style={{ x: bgParallaxX, y: bgParallaxY, scale: 1.05 }}>
         {/* Scene 0 — Misty Sakura Path */}
         <div
@@ -3093,21 +3172,26 @@ export default function App() {
         />
       </motion.div>
 
-      {/* 2. Interactive animated magical witch rain & floating runes background atmosphere */}
-      <AtmosphereCanvas
-        animationType={bgAnimationType}
-        intensity={bgIntensity}
-        theme={theme}
-        activeBgScene={activeBgScene}
-      />
       </>}
+
+      {/* Keep the fade host stable while the covered canvas stops its animation. */}
+      {!atelierScreen && <div className="astra-app-atmosphere" aria-hidden="true">
+        {(!entranceConnected || !roomCoversViewport) && <AtmosphereCanvas
+          animationType={bgAnimationType}
+          intensity={bgIntensity}
+          theme={theme}
+          activeBgScene={activeBgScene}
+        />}
+      </div>}
+
+      {entranceConnected && <div className="astra-entrance-tone" aria-hidden="true" />}
 
       {/* GUIDED TOUR (Polish B2). Root level, outside <main> and outside the layout wrapper's stacking context, so the
           ring and card sit above the dock (z-30 inside the wrapper) and below the character picker (z-40), the toast
           and the duel invites (z-50). The page stays tappable: only the card takes taps. */}
       <React.Fragment key={tourReplay ? `replay-${tourRunId}` : "live"}>
         <GuideTour
-          enabled={tourVisible}
+          enabled={tourVisible && entrancePhase === "idle"}
           replay={tourReplay}
           seen={stats.tips?.seen}
           isTransitioning={isTransitioning}
@@ -3184,6 +3268,7 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
 
       {/* MAIN LAYOUT WRAPPER */}
       <div className={atelierScreen ? "relative z-10 w-full" : `w-full ${(currentScreen === "charts" || currentScreen === "sandbox" || currentScreen === "grammar-dojo" || currentScreen === "reading-room") ? "max-w-5xl px-2 sm:px-4" : "max-w-4xl"} mx-auto flex-grow flex flex-col z-10 relative`} style={atelierScreen ? undefined : { paddingBottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" }}>
@@ -3649,50 +3734,12 @@ export default function App() {
         >
 
           {/* ================= SCREEN 1: MENU ================= */}
-          {currentScreen === "menu" && !atelierHome && <MenuScreen {...menuScreenProps} />}
+          {currentScreen === "menu" && (!atelierHome || entranceConnected) && <MenuScreen {...menuScreenProps}
+            entrancePreparing={entrancePhase === "loading"} entranceLeaving={entrancePhase === "leaving"}
+            practiceEntrance={entranceConnected ? <RoomEntrance onBack={cancelEntrance} onCoverChange={setRoomCoversViewport}>{practiceFlow}</RoomEntrance> : undefined} /> }
 
           {/* ================= SCREEN 2: ACTIVE QUIZ WORKSPACE ================= */}
-          {(studioQuiz || atelierHome) && <QuizFlow home={atelierHome} onEnterSession={enterQuiz} onResume={openQuizResume}
-            onStudyRoom={() => {setShowStudyRoom(true);setCurrentScreen("menu");}}
-            onFriend={openOnlineMultiplayer}
-            reviewDeck={{title:"Review Deck",detail:totalCount === 0 ? "No cards yet — add missed items after practice." : [formatSessionLine(sessionSummary) ?? "Done for today",formatWaitingLine(sessionSummary)].filter(Boolean).join(" · "),badge:sessionSummary.total ? `${sessionSummary.total} today` : totalCount ? "Done" : "0"}}
-            reviewDue={sessionSummary.total} dailyNewCap={normalizeSrsSettings(stats.srsSettings).dailyNewCap}
-            hasReviewCard={hasCard} onAddReviewCard={(key,type) => {
-              if (!progressOwner || !isCurrentQuizOwner(progressOwner) || !quizReady || hasCard(key,type)) return false;
-              addCard(key,type); return true;
-            }}
-            onOpenReviewDeck={() => {setSrsQueue(getSessionQueue());setSrsQueueIndex(0);setSrsRevealed(false);setCurrentScreen("review-deck");}}
-            subject={atelierHome ? quizPreferences.quizSubject : soloRequestedSubject} learnedWords={learnedQuizWords} studiedKanji={studiedQuizKanji} speechEnabled={quizCompanionSpeech} onSpeechChange={setQuizCompanionSpeech} owner={progressOwner} controller={quizSession} ready={quizReady}
-            unavailable={statsHydrated && cloudStatsHydrated && !progressChanging && !quizReady}
-            launch={currentScreen === "results" ? "resume" : kanaLaunch} catalogs={SOLO_CATALOGS} history={quizHistory}
-            preferences={quizPreferences} onPreferenceChange={patch => setQuizPreferences(previous => ({ ...previous, ...patch }))}
-            onReadCustom={() => {
-              if (!progressOwner || !isCurrentQuizOwner(progressOwner)) return [];
-              const draft = quizBrowserStorage.readCustom(progressOwner);
-              if (draft.ok === true) return draft.value.filter(id => isSoloCustomId(id, soloDraftSubject));
-              showToast(draft.message);
-              return [];
-            }} onSaveCustom={ids => {
-              if (!progressOwner || !isCurrentQuizOwner(progressOwner)) return;
-              const prior = quizBrowserStorage.readCustom(progressOwner);
-              if (prior.ok === false) { showToast(prior.message); return []; }
-              const isCurrent = (id: string) => isSoloCustomId(id, soloDraftSubject);
-              const draftSubject = soloDraftSubject;
-              const merged = mergeSoloCustomDraft(prior.value, ids, draftSubject);
-              const saved = quizBrowserStorage.writeCustom(progressOwner, merged.ids);
-              if (saved.ok === false) { showToast(saved.message); return prior.value.filter(isCurrent); }
-              if (merged.truncated) showToast("The shared custom draft holds 256 items. Your other subject's selection has been kept.");
-              return merged.selected;
-            }}
-            previousBest={stats.survivalBestScore ?? 0} streak={stats.streakCount}
-            cloudPending={isAccountUser && (quizCloudPending || !cloudSyncReady)}
-            exampleFor={glyph => {
-              const example = HIRAGANA_DATA.find(item => item.kana === glyph)?.examples?.[0]
-                ?? KATAKANA_DATA.find(item => item.kana === glyph)?.examples?.[0];
-              return example && { ja: example.japanese, reading: example.romaji, en: example.english };
-            }}
-            autoPronounce={autoPronounce} speak={speakJapanese} chime={playChime}
-            onBack={leaveKanaPractice} onProfile={() => setCurrentScreen("profile")} />}
+          {(studioQuiz || (atelierHome && !entranceConnected)) && practiceFlow}
 
           {/* ================= SCREEN 3: DYNAMIC DAILY KANJI MODULE ================= */}
           {currentScreen === "kanji-scroll" && <KanjiScrollScreen {...kanjiScrollScreenProps} />}

@@ -1,0 +1,77 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+/* No scroll container, portal or document lock: the existing shell stays in flow. */
+.astra-app--journey { overflow: clip; }
+/* Behind the shell: carry its theme toward the room without dimming its text. */
+.astra-entrance-tone { position: fixed; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(ellipse at 50% 46%, #1c2037, #101522 54%, #0b0d17); opacity: 0; }
+/* Keep this host mounted when the covered particle canvas stops rendering.
+   Group-level screen blending preserves the particles' relation to the theme. */
+.astra-app-atmosphere { position: fixed; inset: 0; z-index: 0; pointer-events: none; mix-blend-mode: screen; }
+.astra-menu--journey, .astra-app--journey main > [role="region"] { transform: none !important; overflow: visible; }
+.astra-learn-content { transition: opacity 160ms ease, translate 160ms ease; }
+.astra-learn-content[data-leaving="true"] { opacity: 0; translate: 0 -6px; pointer-events: none; }
+.astra-entrance { position: relative; width: var(--entrance-width, 100%); margin-left: calc((100% - var(--entrance-width, 100%)) / 2); color: #f4eadc; font-family: var(--font-sans); overflow-anchor: none; }
+.astra-entrance__stage { position: sticky; top: 0; height: var(--entrance-height, 100svh); overflow: clip; z-index: 0; pointer-events: none; }
+/* Feather the surrounding backdrop, never the artwork. The upper edge stays
+   transparent beside the app, then becomes solid once the scene is pinned. */
+.astra-entrance__mat { position: absolute; inset: 0; background: linear-gradient(to bottom, transparent, #0d0d14 min(32%, 240px)); opacity: var(--entrance-darkness, 0); }
+.astra-entrance__mat::before { content: ''; position: absolute; inset: 0; background: #0d0d14; opacity: var(--entrance-mat-seal, 0); }
+/* Broad indigo/charcoal shadows have transparent upper edges of their own;
+   no duplicated artwork, rectangular masks, or blur filters are needed. */
+.astra-entrance__shadows { position: absolute; inset: 0; pointer-events: none; opacity: var(--entrance-shadows, 0); background: radial-gradient(ellipse 46% 44% at 0% 55%, rgb(9 14 28 / .9), rgb(24 27 49 / .55) 40%, transparent), radial-gradient(ellipse 42% 42% at 100% 56%, rgb(15 12 24 / .85), rgb(28 22 44 / .4) 40%, transparent); }
+.astra-entrance__room { position: absolute; inset: 0; background: #0d0d14 center/cover no-repeat; opacity: var(--entrance-room, 0); }
+.astra-entrance__frame { position: absolute; overflow: hidden; z-index: 1; transform-origin: center; will-change: transform; backface-visibility: hidden; border-radius: var(--entrance-radius, 20px); box-shadow: 0 12px 32px #0003; }
+.astra-entrance[data-poster-ready="false"] .astra-entrance__frame { visibility: hidden; }
+.astra-entrance__frame img,.astra-entrance__frame video { position: absolute; width: 100%; height: 100%; object-fit: contain; object-position: center; display: block; }
+.astra-entrance__frame video { opacity: 0; }
+.astra-entrance__shade { position: absolute; inset: 0; background: linear-gradient(0deg,#080912dc,transparent 45%); }
+/* Sparse, uneven wisps at the lower corners. No blur, video masks, or idle
+   animation; small scroll-driven translations stop as soon as scrolling does. */
+.astra-entrance__mist { position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: var(--entrance-mist, 0); }
+.astra-entrance__mist-bank { position: absolute; bottom: 6%; width: min(48%, 590px); height: clamp(120px, 25%, 230px); background: radial-gradient(ellipse at 12% 66%, rgb(28 32 53 / .64), transparent 49%), radial-gradient(ellipse at 44% 72%, rgb(96 87 137 / .18), transparent 41%), radial-gradient(ellipse at 74% 60%, rgb(164 153 194 / .07), transparent 32%); }
+.astra-entrance__mist-bank--left { left: -6%; transform: translate3d(calc(0px - var(--entrance-mist-drift, 0px)), calc(var(--entrance-mist-drift, 0px) * -.4), 0) rotate(-7deg); }
+/* Leave more open air beside the lantern so its warm light stays prominent. */
+.astra-entrance__mist-bank--right { right: -6%; bottom: 9%; width: min(40%, 500px); height: clamp(100px, 22%, 200px); opacity: .5; transform: translate3d(var(--entrance-mist-drift, 0px), calc(var(--entrance-mist-drift, 0px) * -.6), 0) scaleX(-1) rotate(-4deg); }
+.astra-entrance__ink { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; opacity: 0; pointer-events: none; }
+.astra-entrance__header { position: absolute; top: max(24px,env(safe-area-inset-top)); left: max(20px,calc((100% - 850px)/2)); right: max(20px,calc((100% - 850px)/2)); display: flex; justify-content: space-between; align-items: center; gap: 12px; z-index: 4; }
+.astra-entrance__header button,.astra-entrance__cue { pointer-events: auto; cursor: pointer; color: #f4eadc; touch-action: manipulation; transition: background-color 150ms; }
+.astra-entrance__header[inert] button,.astra-entrance__cue[inert] { pointer-events: none; }
+.astra-entrance__header button:focus-visible,.astra-entrance__cue:focus-visible { outline: 2px solid #e4c394; outline-offset: 4px; }
+.astra-entrance__back,.astra-entrance__skip { min-height: 44px; padding: 10px 18px; border-radius: 40px; background: #11111be8; border: 1px solid #ccb88f70; font-size: 12px; }
+.astra-entrance__skip span { margin-left: 10px; color: #e4c394; }
+.astra-entrance__opening { position: absolute; z-index: 3; left: 5%; bottom: 8%; pointer-events: none; text-shadow: 0 2px 24px #0008; opacity: var(--entrance-copy, 1); }
+.astra-entrance__opening>span { color: #d5bc97; font-size: 12px; letter-spacing: 3px; }
+.astra-entrance__opening h2 { font: 400 clamp(48px,5.5vw,86px)/.99 'Cormorant Garamond',Georgia,serif; letter-spacing: -1.6px; margin: 25px 0 20px; }
+.astra-entrance__opening em { color: #e1c7a1; }
+.astra-entrance__opening p { font-size: 16px; color: #d5ccbf; }
+.astra-entrance__cue { position: absolute; z-index: 4; bottom: 38px; left: 50%; transform: translateX(-50%); border: 0; background: #11111bcc; border-radius: 16px; text-align: center; min-width: 220px; min-height: 72px; padding: 12px; }
+.astra-entrance__cue i { height: 20px; width: 1px; background: #c9ae84; display: block; margin: 0 auto 10px; }
+.astra-entrance__cue span { display: block; text-transform: uppercase; font-size: 10px; letter-spacing: 2px; }
+.astra-entrance__cue small { display: block; font: italic 15px Georgia,serif; color: #b4a997; margin-top: 8px; }
+.astra-entrance__status { position: absolute; z-index: 3; bottom: 12px; left: 20px; margin: 0; font-size: 10px; color: #f4eadc; background: #11111be8; padding: 4px 8px; border-radius: 8px; opacity: var(--entrance-copy, 1); }
+.astra-entrance__travel { pointer-events: none; }
+.astra-entrance__destination { position: relative; opacity: 0; min-height: var(--entrance-height, 100svh); }
+/* Only the connected Practice HOME joins document scrolling. Quiz players keep their original scroll owner. */
+.astra-entrance__destination .quiz-studio { height: auto; min-height: var(--entrance-height, 100svh); overflow: visible; background: transparent; }
+.astra-entrance__destination .quiz-room { display: none; }
+.astra-entrance__destination .quiz-scroll { overflow: visible; overscroll-behavior: auto; }
+.astra-entrance__destination .quiz-studio__body { flex: 1 0 auto; }
+/* Existing setup sheets are modal. Only their open state locks the document;
+   the entrance and Practice home otherwise retain normal document scrolling. */
+html:has(.astra-entrance__destination [aria-modal="true"]) { overflow-y: hidden; }
+@media(max-width:767px) {
+  .astra-entrance__shadows { opacity: calc(var(--entrance-shadows, 0) * .75); }
+  .astra-entrance__mist { opacity: calc(var(--entrance-mist, 0) * .45); }
+  .astra-entrance__mist-bank { bottom: 4%; height: 140px; width: 48%; }
+  .astra-entrance__mist-bank--right { bottom: 7%; width: 40%; height: 120px; }
+  .astra-entrance__header { left: 16px; right: 16px; gap: 8px; }
+  .astra-entrance__back,.astra-entrance__skip { padding: 9px 12px; font-size: 11px; }
+  .astra-entrance__skip span { display: none; }
+  .astra-entrance__opening h2 { font-size: 60px; letter-spacing: -.6px; margin: 16px 0; }
+  .astra-entrance__opening>span { font-size: 14px; letter-spacing: 2px; }
+  .astra-entrance__opening p { font-size: 18px; }
+  .astra-entrance__cue small { display: none; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .astra-learn-content { transition: none; }
+  .astra-learn-content[data-leaving="true"] { translate: none; }
+}

@@ -155,6 +155,9 @@ function playChime(success: boolean) {
 // ─── Types ────────────────────────────────────────────────────────────────
 
 interface MenuScreenProps {
+  practiceEntrance?: React.ReactNode;
+  entrancePreparing?: boolean;
+  entranceLeaving?: boolean;
   // Navigation
   setCurrentScreen: React.Dispatch<React.SetStateAction<ScreenType>>;
   setCurrentKanjiIndex: React.Dispatch<React.SetStateAction<number>>;
@@ -353,13 +356,48 @@ export default function MenuScreen(props: MenuScreenProps) {
   const sessionToDo = sessionSummary.total;
   const reduceMotion = useReducedMotion();
 
+  const hubSelector = (<div className="flex border border-natural-border/60 bg-natural-card/85 p-1.5 rounded-2xl shadow-sm w-full relative z-10">
+                <button
+                  type="button"
+                  id="tab-study-chamber"
+                  onClick={() => {
+                    if (showStudyRoom) setShowStudyRoom(false);
+                    setActiveHubTab("learn");
+                    setMascotMood("learn-flashcard");
+                  }}
+                  className={`flex-1 py-3.5 text-center rounded-xl font-serif text-sm tracking-wider font-bold transition flex items-center justify-center gap-2 cursor-pointer ${activeHubTab === "learn"
+                    ? "bg-natural-forest text-natural-bg shadow-sm font-semibold"
+                    : "text-natural-forest-light hover:text-natural-forest hover:bg-natural-bg/40"
+                    }`}
+                >
+                  <BookOpen className="w-4 h-4" />
+                  Learn
+                </button>
+                <button
+                  type="button"
+                  id="tab-practice-arena"
+                  aria-busy={props.entrancePreparing || undefined}
+                  onClick={() => {
+                    setActiveHubTab("practice");
+                    setMascotMood("idle");
+                  }}
+                  className={`flex-1 py-3.5 text-center rounded-xl font-serif text-sm tracking-wider font-bold transition flex items-center justify-center gap-2 cursor-pointer ${activeHubTab === "practice"
+                    ? "bg-natural-forest text-natural-bg shadow-sm font-semibold"
+                    : "text-natural-forest-light hover:text-natural-forest hover:bg-natural-bg/40"
+                    }`}
+                >
+                  <Activity className="w-4 h-4" />
+                  {props.entrancePreparing ? "Opening Practice…" : "Practice"}
+                </button>
+              </div>);
+
   return (
             // C3b: the Study Room and the Bookshelf / Writing Desk hub swap with the same soft fade
             // as the screens (keyed, wait mode). Nothing else about the layout changes.
             <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={showStudyRoom ? "study-room" : "study-hub"}
-              className="flex flex-col gap-6"
+              className={`flex flex-col gap-6 ${props.practiceEntrance ? "astra-menu--journey" : ""}`} 
               variants={reduceMotion ? SCREEN_VARIANTS_REDUCED : SCREEN_VARIANTS}
               initial="enter"
               animate="center"
@@ -403,7 +441,6 @@ export default function MenuScreen(props: MenuScreenProps) {
                                   setSrsRevealed(false);
                                   setCurrentScreen("review-deck");
                                 } else {
-                                  setShowStudyRoom(false);
                                   setActiveHubTab("practice");
                                   setMascotMood("idle");
                                 }
@@ -458,7 +495,6 @@ export default function MenuScreen(props: MenuScreenProps) {
                           accent: "clay",
                           guide: "desk",
                           action: () => {
-                            setShowStudyRoom(false);
                             setActiveHubTab("practice");
                             setMascotMood("idle");
                           },
@@ -610,43 +646,12 @@ export default function MenuScreen(props: MenuScreenProps) {
                 </span>
               </button>
 
-              {/* STUDY & PRACTICE DESK SWITCHER HEADER */}
-              <div className="flex border border-natural-border/60 bg-natural-card/85 p-1.5 rounded-2xl shadow-sm w-full relative z-10">
-                <button
-                  type="button"
-                  id="tab-study-chamber"
-                  onClick={() => {
-                    setActiveHubTab("learn");
-                    setMascotMood("learn-flashcard");
-                  }}
-                  className={`flex-1 py-3.5 text-center rounded-xl font-serif text-sm tracking-wider font-bold transition flex items-center justify-center gap-2 cursor-pointer ${activeHubTab === "learn"
-                    ? "bg-natural-forest text-natural-bg shadow-sm font-semibold"
-                    : "text-natural-forest-light hover:text-natural-forest hover:bg-natural-bg/40"
-                    }`}
-                >
-                  <BookOpen className="w-4 h-4" />
-                  Learn
-                </button>
-                <button
-                  type="button"
-                  id="tab-practice-arena"
-                  onClick={() => {
-                    setActiveHubTab("practice");
-                    setMascotMood("idle");
-                  }}
-                  className={`flex-1 py-3.5 text-center rounded-xl font-serif text-sm tracking-wider font-bold transition flex items-center justify-center gap-2 cursor-pointer ${activeHubTab === "practice"
-                    ? "bg-natural-forest text-natural-bg shadow-sm font-semibold"
-                    : "text-natural-forest-light hover:text-natural-forest hover:bg-natural-bg/40"
-                    }`}
-                >
-                  <Activity className="w-4 h-4" />
-                  Practice
-                </button>
-              </div>
+              {hubSelector}
+              {activeHubTab === "practice" && props.practiceEntrance}
 
               {/* ================= TAB CONTENT 1: STUDY CHAMBER (LEARN) ================= */}
               {activeHubTab === "learn" && (
-                <div className="flex flex-col gap-5">
+                <div className="astra-learn-content flex flex-col gap-5" data-leaving={props.entranceLeaving || undefined}>
                   {/* Internal Sub navigation chips */}
                   <div className="flex items-center gap-2 border-b border-natural-border/50 pb-2 overflow-x-auto">
                     {[

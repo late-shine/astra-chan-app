@@ -1,0 +1,234 @@
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ATELIER_SCENES } from '../quiz/atelierAssets';
+import { approach, documentJourney, mediaPlane, seekFrame, smooth, timeline } from './timeline.js';
+import { createInk } from './ink.js';
+import './entrance.css';
+
+/** One document scroll: app shell → sticky room → real, naturally scrolling Practice. */
+export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () => void; onCoverChange: (covered: boolean) => void; children: ReactNode }) {
+  const [portrait, setPortrait] = useState(() => innerWidth < 768);
+  const [reduced, setReduced] = useState(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const [mediaState, setMediaState] = useState<'loading' | 'ready' | 'failed'>('loading');
+  const [posterReady, setPosterReady] = useState(false);
+  const [posterFailed, setPosterFailed] = useState(false);
+  const root = useRef<HTMLElement>(null), stage = useRef<HTMLDivElement>(null);
+  const spacer = useRef<HTMLDivElement>(null), destination = useRef<HTMLDivElement>(null);
+  const frame = useRef<HTMLDivElement>(null), video = useRef<HTMLVideoElement>(null);
+  const poster = useRef<HTMLImageElement>(null), canvas = useRef<HTMLCanvasElement>(null);
+  const cue = useRef<HTMLButtonElement>(null), chrome = useRef<HTMLDivElement>(null);
+  const advance = useRef<() => void>(() => {}), skip = useRef<() => void>(() => {});
+  const launchScroll = useRef(window.scrollY), progress = useRef(0);
+  const coverageCallback = useRef(onCoverChange);
+  coverageCallback.current = onCoverChange;
+  const variant = portrait ? 'mobile' : 'desktop';
+  const roomUrl = ATELIER_SCENES[variant].webp;
+  const posterUrl = `/assets/entrance/room-${variant}.webp`;
+
+  useEffect(() => {
+    const query = matchMedia('(prefers-reduced-motion: reduce)');
+    const change = () => setReduced(query.matches);
+    const resize = () => setPortrait(innerWidth < 768);
+    query.addEventListener('change', change); window.addEventListener('resize', resize);
+    return () => { query.removeEventListener('change', change); window.removeEventListener('resize', resize); };
+  }, []);
+
+  useEffect(() => {
+    const el = root.current!, box = stage.current!, card = frame.current!;
+    const app = el.closest<HTMLElement>('[data-entrance]');
+    const tone = app?.querySelector<HTMLElement>('.astra-entrance-tone');
+    // The wrapper survives the canvas being unmounted at full coverage.
+    // Its opacity is already correct when particles remount on reversal.
+    const particles = app?.querySelector<HTMLElement>('.astra-app-atmosphere');
+    const v = video.current!, cv = canvas.current!, end = destination.current!;
+    let live = true, raf = 0, previous = 0, p = progress.current, target = p;
+    let loaded = false, failed = false, duration = 0, desiredTime = 0, lastRequested = -1;
+    let watchdog = 0, seekPending = false, pendingFocus = false;
+    let width = 0, height = innerHeight, top = 0, endScroll = 0, contentWidth = 0;
+    let plane = mediaPlane(innerWidth, height, portrait), initialScale = plane.startScale, initialY = 0;
+    let ink: ReturnType<typeof createInk> | null = null, available = false;
+    let wasActive = false, wasCovered = false;
+    const bg = new Image();
+    setMediaState('loading'); setPosterFailed(false);
+    setPosterReady(poster.current!.complete && poster.current!.naturalWidth > 0);
+    v.style.opacity = '0';
+    function wake() { if (live && !raf) { previous = 0; raf = requestAnimationFrame(tick); } }
+    function measure() {
+      const nextWidth = document.documentElement.clientWidth;
+      const nextContentWidth = el.parentElement!.clientWidth;
+      // Do not resize the artwork in response to a phone address bar changing height.
+      if (width !== nextWidth || contentWidth !== nextContentWidth || (!portrait && height !== innerHeight)) {
+        width = nextWidth; contentWidth = nextContentWidth; height = innerHeight;
+        el.style.setProperty('--entrance-width', `${width}px`);
+        el.style.setProperty('--entrance-height', `${height}px`);
+        plane = mediaPlane(width, height, portrait);
+        initialScale = Math.min(contentWidth / plane.width, height * .76 / plane.height, 1);
+        initialY = 12 + plane.height * initialScale / 2 - height / 2;
+        const bounds = { width: `${plane.width}px`, height: `${plane.height}px`, left: `${plane.left}px`, top: `${plane.top}px` };
+        Object.assign(card.style, bounds);
+        ink?.resize(width, height);
+      }
+      top = el.getBoundingClientRect().top + window.scrollY;
+      endScroll = documentJourney(window.scrollY, launchScroll.current, top, height, reduced).end;
+      const nextSpacer = `${Math.max(0, endScroll - top - height)}px`;
+      if (spacer.current!.style.height !== nextSpacer) spacer.current!.style.height = nextSpacer;
+      wake();
+    }
+    function fail() {
+      if (!live || failed) return;
+      failed = true; loaded = false; seekPending = false; v.style.opacity = '0';
+      v.pause(); v.removeAttribute('src'); v.load();
+      window.clearTimeout(watchdog); setMediaState('failed'); wake();
+    }
+    function seek() {
+      if (!loaded || failed || reduced || v.seeking) return;
+      const next = seekFrame(desiredTime, duration, v.currentTime, lastRequested);
+      if (next !== null) {
+        lastRequested = next; seekPending = true;
+        window.clearTimeout(watchdog); watchdog = window.setTimeout(fail, 4000);
+        try { v.currentTime = next; } catch { fail(); }
+      }
+    }
+    function tick(now: number) {
+      raf = 0; if (!live || document.hidden) return;
+      const journey = documentJourney(window.scrollY, launchScroll.current, top, height, reduced);
+      const covered = journey.takeover >= .999;
+      if (covered !== wasCovered) { wasCovered = covered; coverageCallback.current(covered); }
+      target = journey.story;
+      const dt = previous ? Math.min((now - previous) / 1000, .05) : 1 / 60;
+      previous = now;
+      p = reduced ? target : approach(p, target, dt, .095);
+      // Finish finite settling, rather than issuing sub-frame seeks indefinitely.
+      if (Math.abs(p - target) < .0005) p = target;
+      progress.current = p;
+      const t = timeline(p);
+      desiredTime = t.video * Math.max(0, duration - 1 / 30); seek();
+      // Layout expansion is tied directly to scroll, never to delayed video decoding.
+      const expansion = reduced ? 0 : journey.takeover;
+      const pinned = smooth(top, top + height * (reduced ? .15 : .55), window.scrollY);
+      const scale = initialScale + (1 - initialScale) * expansion;
+      // Keep the whole top edge visible beside the app. Introduce the centered
+      // fullscreen crop only after the stage is pinned to the viewport top.
+      const y = initialY * (1 - expansion) + Math.min(0, plane.top) * ((reduced ? 0 : pinned) - expansion);
+      card.style.transform = `translate3d(0,${y}px,0) scale(${scale})`;
+      el.style.setProperty('--entrance-radius', `${20 * (1 - expansion) / scale}px`);
+      // The backdrop has a transparent upper edge while the shell is visible.
+      // Seal that edge only after pinning, becoming solid before camera/ink.
+      el.style.setProperty('--entrance-darkness', String(smooth(.12, .95, journey.takeover)));
+      el.style.setProperty('--entrance-mat-seal', String(pinned));
+      // Quiet, colored shadows replace repeated scenery. Wisps recede before
+      // the camera begins, keeping the later ink wash a distinct moment.
+      const shadows = smooth(.03, .58, journey.takeover) * (1 - smooth(.84, 1, journey.takeover));
+      const mist = smooth(.12, .46, journey.takeover) * (1 - smooth(.62, .95, journey.takeover));
+      el.style.setProperty('--entrance-shadows', String(shadows));
+      el.style.setProperty('--entrance-mist', String(mist * (reduced ? .35 : 1)));
+      el.style.setProperty('--entrance-mist-drift', `${reduced ? 0 : 18 * journey.takeover}px`);
+      // This wash sits behind the existing shell, so its controls stay clear.
+      if (tone) tone.style.opacity = String(.78 * smooth(.04, .82, journey.takeover) * (1 - smooth(.94, 1, journey.takeover)));
+      if (particles) particles.style.opacity = String(1 - smooth(.12, .76, journey.takeover));
+      el.style.setProperty('--entrance-copy', String(1 - smooth(.05, .75, journey.takeover)));
+      el.style.setProperty('--entrance-room', t.ink > 0 ? '1' : '0');
+      cv.style.opacity = available && !reduced && t.ink > 0 && t.ink < 1 ? '1' : '0';
+      card.style.opacity = t.ink >= 1 ? '0' : available && !reduced ? '1' : String(1 - t.ink);
+      if (available && !reduced && t.ink > 0 && t.ink < 1) ink!.render(t.ink);
+      const reveal = smooth(.92, 1, p);
+      // Destination is in the document, so upward scrolling retraces the room.
+      const active = target >= .995 && p >= .995;
+      // Fully opaque when interactive: do not trap existing fixed setup sheets
+      // in an opacity stacking context below the app sound dock.
+      end.style.opacity = active ? "1" : String(reveal);
+      if (active !== wasActive) { end.inert = !active; wasActive = active; }
+      const controlsHidden = target >= .99;
+      chrome.current!.inert = controlsHidden;
+      chrome.current!.style.opacity = controlsHidden ? '0' : '1';
+      cue.current!.inert = journey.takeover >= .8;
+      cue.current!.style.opacity = String(1 - smooth(.4, .8, journey.takeover));
+      if (pendingFocus && active) {
+        pendingFocus = false;
+        const title = end.querySelector<HTMLElement>('h1');
+        if (title) { title.tabIndex = -1; title.focus({ preventScroll: true }); }
+      }
+      Object.assign(el.dataset, { progress: p.toFixed(4), takeover: journey.takeover.toFixed(4), targetTime: desiredTime.toFixed(3), videoTime: v.currentTime.toFixed(3), ink: available ? 'webgl' : 'crossfade' });
+      // No idle animation loop. Scroll, resize, and decoder events wake us.
+      if (p !== target) raf = requestAnimationFrame(tick);
+    }
+    const initInk = () => {
+      if (!live || reduced || !bg.naturalWidth) return;
+      try { ink = createInk(cv, bg); ink.resize(width, height); available = true; } catch { available = false; }
+      wake();
+    };
+    const onData = () => {
+      if (failed || reduced) return;
+      duration = v.duration;
+      if (!Number.isFinite(duration) || duration <= 0) { fail(); return; }
+      loaded = true; window.clearTimeout(watchdog); setMediaState('ready');
+      desiredTime = timeline(p).video * Math.max(0, duration - 1 / 30);
+      if (desiredTime < 1 / 30) v.style.opacity = '1';
+      seek(); wake();
+    };
+    const onSeeked = () => {
+      seekPending = false; window.clearTimeout(watchdog);
+      if (!failed && Math.abs(v.currentTime - desiredTime) < .1) v.style.opacity = '1';
+      seek(); wake();
+    };
+    const visibility = () => {
+      if (document.hidden) window.clearTimeout(watchdog);
+      else {
+        if (!reduced && !failed && (!loaded || seekPending)) watchdog = window.setTimeout(fail, 8000);
+        wake();
+      }
+    };
+    const contextLost = (e: Event) => { e.preventDefault(); available = false; wake(); };
+    end.inert = true;
+    bg.onload = initInk; bg.src = roomUrl;
+    cv.addEventListener('webglcontextlost', contextLost);
+    v.addEventListener('loadeddata', onData); v.addEventListener('seeked', onSeeked); v.addEventListener('error', fail);
+    if (!reduced) { v.src = `/assets/entrance/room-${variant}.mp4`; v.load(); watchdog = window.setTimeout(fail, 12000); }
+    else { v.pause(); v.removeAttribute('src'); v.load(); }
+    window.addEventListener('scroll', wake, { passive: true }); window.addEventListener('resize', measure);
+    document.addEventListener('visibilitychange', visibility);
+    // Track layout above the room (e.g. the existing companion changing height).
+    const observer = new ResizeObserver(measure);
+    observer.observe(el.parentElement!);
+    if (app) observer.observe(app);
+    measure();
+    advance.current = () => window.scrollTo({ top: Math.min(endScroll, window.scrollY + height * .65), behavior: reduced ? 'instant' : 'smooth' });
+    skip.current = () => { pendingFocus = true; p = 1; window.scrollTo({ top: endScroll, behavior: 'instant' }); wake(); };
+    return () => {
+      live = false; cancelAnimationFrame(raf); window.clearTimeout(watchdog); bg.onload = null; observer.disconnect();
+      window.removeEventListener('scroll', wake); window.removeEventListener('resize', measure);
+      document.removeEventListener('visibilitychange', visibility); cv.removeEventListener('webglcontextlost', contextLost);
+      v.removeEventListener('loadeddata', onData); v.removeEventListener('seeked', onSeeked); v.removeEventListener('error', fail);
+      ink?.dispose(); v.pause(); v.removeAttribute('src'); v.load();
+      tone?.style.removeProperty('opacity');
+      particles?.style.removeProperty('opacity');
+      coverageCallback.current(false);
+    };
+  }, [portrait, reduced, variant, roomUrl]);
+
+  return <section ref={root} className="astra-entrance" data-poster-ready={posterReady} aria-label="Astra’s room entrance">
+    <div ref={stage} className="astra-entrance__stage">
+      <div className="astra-entrance__mat" />
+      <div className="astra-entrance__shadows" aria-hidden="true" />
+      <div className="astra-entrance__room" style={{ backgroundImage: `url(${roomUrl})` }} />
+      <div ref={frame} className="astra-entrance__frame">
+        <img key={posterUrl} ref={poster} src={posterUrl} onLoad={() => setPosterReady(true)} onError={() => { setPosterReady(false); setPosterFailed(true); }} alt="Astra waits beside an open book in her softly lit room." />
+        <video ref={video} muted playsInline preload="auto" aria-hidden="true" disablePictureInPicture />
+        <div className="astra-entrance__shade" />
+        <div className="astra-entrance__opening" aria-hidden="true"><span>THE ROOM BETWEEN CHAPTERS</span><h2>Some places<br />keep a little <em>magic.</em></h2><p>A quiet moment. Then, something new.</p></div>
+      </div>
+      <div className="astra-entrance__mist" aria-hidden="true">
+        <div className="astra-entrance__mist-bank astra-entrance__mist-bank--left" />
+        <div className="astra-entrance__mist-bank astra-entrance__mist-bank--right" />
+      </div>
+      <canvas ref={canvas} className="astra-entrance__ink" aria-hidden="true" />
+      <div ref={chrome} className="astra-entrance__header">
+        <button className="astra-entrance__back" onClick={onBack}>Back to Study Room</button>
+        <button className="astra-entrance__skip" onClick={() => skip.current()}>Skip to Practice <span aria-hidden="true">↗</span></button>
+      </div>
+      <button ref={cue} className="astra-entrance__cue" onClick={() => advance.current()}><i aria-hidden="true" /><span>Scroll to step inside</span><small>Take your time.</small></button>
+      <p className="astra-entrance__status" role="status">{posterFailed ? 'Room artwork unavailable · Practice is ready below' : !posterReady ? 'Preparing Astra’s room…' : reduced ? 'Still artwork · reduced motion' : mediaState === 'loading' ? 'Opening the room · still artwork while loading' : mediaState === 'failed' ? 'Still artwork · the room is ready to enter' : 'A moment with Astra'}</p>
+    </div>
+    <div ref={spacer} className="astra-entrance__travel" aria-hidden="true" />
+    <div ref={destination} className="astra-entrance__destination" inert>{children}</div>
+  </section>;
+}
