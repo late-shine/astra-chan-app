@@ -126,7 +126,38 @@
 .quiz-studio[data-width="home"] .quiz-companion__speech { flex: 1 1 0; min-width: 0; padding: .75rem 0; text-align: left; }
 .quiz-studio[data-width="home"] .quiz-companion__line { display: block; font-size: .9375rem; line-height: 1.5; }
 .quiz-studio[data-width="home"] .quiz-companion__compact { display: none; }
-.quiz-studio[data-width="home"] .quiz-companion__portrait { display: block; flex: 0 0 120px; width: 120px; height: 160px; margin: 0; }
+.quiz-studio[data-width="home"] .quiz-companion__portrait { display: block; flex: 0 0 120px; width: 120px; height: 160px; margin: 0; isolation: isolate; }
+/* A portrait surround gives the cropped artwork an intentional lower boundary.
+   Keep both expression layers opaque; the room must not show through clothing. */
+.quiz-studio[data-width="home"] .quiz-companion__art {
+  inset: auto 0 0;
+  aspect-ratio: 3 / 4;
+  z-index: 1;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.quiz-studio[data-width="home"] .quiz-companion[data-art="ready"] .quiz-companion__portrait::before {
+  content: "";
+  position: absolute;
+  inset: 20% 0 0;
+  z-index: 0;
+  pointer-events: none;
+  border: 1px solid var(--quiz-border);
+  border-radius: 50% 50% 10px 10px;
+  background: linear-gradient(to bottom, rgb(23 22 32 / .55), #171620 76%);
+}
+.quiz-studio[data-width="home"] .quiz-companion[data-art="ready"] .quiz-companion__portrait::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 6px;
+  z-index: 2;
+  pointer-events: none;
+  border: 1px solid var(--quiz-border);
+  border-top-color: rgb(216 189 145 / .55);
+  border-radius: 0 0 10px 10px;
+  background: var(--quiz-surface-solid);
+}
 .quiz-studio[data-width="home"] .quiz-companion__art img { object-fit: contain; }
 .quiz-studio[data-width="home"] .quiz-companion__art[data-layer="current"],
 .quiz-studio[data-width="home"] .quiz-companion__art[data-layer="previous"] { animation-duration: 300ms; }
@@ -226,7 +257,15 @@
   .quiz-studio[data-width="home"] .quiz-companion__line { font-size: 1.0625rem; line-height: 1.5; }
   .quiz-studio[data-width="home"] .practice-speech__text { min-height: 3em; }
   .quiz-studio[data-width="home"] .quiz-companion__portrait { flex: none; width: 100%; height: auto; aspect-ratio: 3 / 4; margin: .375rem 0 0; }
-  .quiz-studio[data-width="home"] .quiz-companion__art { inset: 0; }
+  .quiz-studio[data-width="home"] .quiz-companion[data-art="ready"] .quiz-companion__portrait::before {
+    inset-block-start: 18%;
+    border-radius: 50% 50% 16px 16px;
+    box-shadow: 0 12px 24px rgb(0 0 0 / .12);
+  }
+  .quiz-studio[data-width="home"] .quiz-companion[data-art="ready"] .quiz-companion__portrait::after {
+    height: 12px;
+    border-radius: 0 0 16px 16px;
+  }
   .quiz-studio[data-width="home"] .practice-home .quiz-resume { flex-direction: column; align-items: stretch; }
 }
 
