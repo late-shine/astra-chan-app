@@ -1,3 +1,4 @@
+import { THEME_IDS, STUDY_THEMES } from '../../../themeIds';
 import { CompanionFixture } from "./CompanionFixture";
 // Quiz Remake QZ1: the visual prototype page. DEVELOPMENT ONLY (reached with ?quiz-preview=1, see src/main.tsx).
 //
@@ -68,7 +69,7 @@ const FIXTURES: { id: FixtureId; label: string }[] = [
   { id: "results", label: "Results" },
   { id: "duel", label: "Duel lobby" },
 ];
-const THEMES: QuizThemeId[] = ["light", "dark", "dark-cosmic", "dark-emerald", "dark-maple", "dark-cyber"];
+const THEMES: readonly QuizThemeId[] = [...THEME_IDS, ...STUDY_THEMES];
 const TOTAL = 10;
 const AUTO_NEXT_MS = 1600;
 

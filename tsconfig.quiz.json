@@ -9,5 +9,5 @@
       "react/*": ["./node_modules/quiz-react-types/*"]
     }
   },
-  "include": ["src/quiz/**/*.ts", "src/components/quiz/**/*.ts", "src/components/quiz/**/*.tsx", "scripts/quiz-*-sim.ts"]
+  "include": ["src/vite-env.d.ts", "src/quiz/**/*.ts", "src/components/quiz/**/*.ts", "src/components/quiz/**/*.tsx", "scripts/quiz-*-sim.ts"]
 }

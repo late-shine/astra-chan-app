@@ -1,7 +1,7 @@
 /** QZ9 pure protocol. No Firebase, local catalog imports, clocks, RNG, storage or effects. */
 import { assertQuestion, grade, questionView } from './grade';
 import { decodeId, isSafeKey, occurrenceId } from './ids';
-import { buildQuestions } from './pool';
+import { buildQuestions, listPoolTargets } from './pool';
 import { seededRandom } from './random';
 import { questionTargetKey } from './session';
 import { freeze, type Catalogs, type DuelAnswer, type DuelAnswerEvent, type DuelHistory, type DuelKind,
@@ -10,6 +10,8 @@ import { freeze, type Catalogs, type DuelAnswer, type DuelAnswerEvent, type Duel
 
 export const DUEL_LIMITS = freeze({manifestBytes:128*1024,roomBytes:256*1024,questions:20,ttlMs:2*60*60*1000,
   countdownMs:1500,feedbackMs:1600,disconnectBannerMs:3000,disconnectEndMs:60000});
+export const ALL_DUEL_LIMITS = freeze({...DUEL_LIMITS,questions:2048,manifestBytes:2*1024*1024,roomBytes:4*1024*1024,ttlMs:24*60*60*1000});
+const limitsFor=(s:DuelSettings)=>s.count==='all'?ALL_DUEL_LIMITS:DUEL_LIMITS;
 export const OLD_DUEL_MESSAGE = 'This room uses an older duel version. Both players should refresh and create a new room.';
 const ROLES = ['host','guest'] as const;
 const KINDS:Readonly<Record<Subject,readonly DuelKind[]>> = {kana:['kana-read','kana-type'],vocab:['vocab-meaning','vocab-reading','vocab-reverse'],kanji:['kanji-meaning','kanji-on']};
@@ -47,7 +49,7 @@ export const defaultDuelMode=(subject:Subject):DuelSettings['mode']=>subject==='
 export function assertDuelSettings(s:DuelSettings):void {
   keys(s,['subject','kind','pool','count','difficulty','durationMs','mode']);
   need(['kana','vocab','kanji'].includes(s.subject)&&KINDS[s.subject].includes(s.kind));
-  need([5,10,20].includes(s.count)&&['competitive','parallel'].includes(s.mode)&&s.durationMs===duelDuration(s.subject,s.difficulty));
+  need((s.count==='all'||[5,10,20].includes(s.count))&&['competitive','parallel'].includes(s.mode)&&s.durationMs===duelDuration(s.subject,s.difficulty));
   const p=s.pool;keys(p,['filter','label','script','stages','category','targetIds']);
   need(['all','theme','explicit'].includes(p.filter)&&text(p.label,120));
   if(s.subject==='kana')need(['hiragana','katakana','both'].includes(p.script??'')&&Array.isArray(p.stages)&&p.stages.length>0&&p.stages.length<=4&&new Set(p.stages).size===p.stages.length&&p.stages.every(stage=>['basic','dakuon','handakuon','yoon'].includes(stage)));
@@ -60,8 +62,8 @@ export function assertDuelSettings(s:DuelSettings):void {
 
 export function assertDuelManifest(manifest:DuelManifest,settings:DuelSettings,matchId:string,revision:number):void {
   keys(manifest,['schemaVersion','settingsRevision','questions']);need(integer(revision));need(manifest.schemaVersion===1,'Unsupported question schema','version');need(manifest.settingsRevision===revision,'Manifest was prepared for different settings.','stale');
-  need(Array.isArray(manifest.questions)&&manifest.questions.length>=5&&manifest.questions.length<=settings.count&&manifest.questions.length<=20);
-  wire(manifest);need(bytes(manifest)<=DUEL_LIMITS.manifestBytes,'Manifest exceeds128KiB');
+  need(Array.isArray(manifest.questions)&&manifest.questions.length>=5&&manifest.questions.length<=(settings.count==='all'?ALL_DUEL_LIMITS.questions:settings.count));
+  wire(manifest);need(bytes(manifest)<=limitsFor(settings).manifestBytes,'This set is too large for one shared match. Choose a smaller public set.');
   const targets=new Set<string>();
   for(const [index,q] of manifest.questions.entries()) {
     keys(q,['id','itemId','skillKey','subject','kind','instruction','face','faceSub','highlights','reveal','speechText','deck','responseType','choices','correctChoiceId','acceptedTyped']);
@@ -86,13 +88,16 @@ export function assertDuelManifest(manifest:DuelManifest,settings:DuelSettings,m
 /** Build ONCE outside the transaction with a captured seed/matchId; no private history input. */
 export function buildDuelManifest(catalogs:Catalogs,settings:DuelSettings,matchId:string,seed:number,revision=0):DuelManifest {
   assertDuelSettings(settings);const p=settings.pool;
-  const result=buildQuestions(catalogs,{sessionId:matchId,subject:settings.subject,kinds:[settings.kind],length:settings.count,now:0,choiceCount:4,
-    pool:{...(settings.subject==='kana'?{script:p.script!,stages:p.stages!}:{}),...(p.filter==='explicit'?{filter:'custom',itemIds:p.targetIds!}:p.filter==='theme'?{category:p.category!}:{})}}, {},seededRandom(seed));
+  const config={sessionId:matchId,subject:settings.subject,kinds:[settings.kind],length:1,now:0,choiceCount:4 as const,
+    pool:{...(settings.subject==='kana'?{script:p.script!,stages:p.stages!}:{}),...(p.filter==='explicit'?{filter:'custom' as const,itemIds:p.targetIds!}:p.filter==='theme'?{category:p.category!}:{})}};
+  const length=settings.count==='all'?listPoolTargets(catalogs,config).length:settings.count;
+  need(length>=5&&length<=limitsFor(settings).questions,'Choose between five and 2048 eligible targets for an All match.');
+  const result=buildQuestions(catalogs,{...config,length}, {},seededRandom(seed));
   const manifest={schemaVersion:1 as const,settingsRevision:revision,questions:result.questions};assertDuelManifest(manifest,settings,matchId,revision);return freeze(manifest);
 }
 function legacySettings(v:DuelPayload):DuelRoom['settings'] {
   const s=v.settings;return {alphabet:s.subject==='kanji'?'kanji':s.subject==='vocab'?'mixed':s.pool.script==='both'?'mixed':s.pool.script!,difficulty:s.difficulty,
-    questionCount:v.manifest?.questions.length??s.count,quizMode:s.kind==='kana-type'?'romaji':'choice',questionDuration:s.durationMs,stages:s.pool.stages??[],multiplayerMode:s.mode};
+    questionCount:v.manifest?.questions.length??(s.count==='all'?0:s.count),quizMode:s.kind==='kana-type'?'romaji':'choice',questionDuration:s.durationMs,stages:s.pool.stages??[],multiplayerMode:s.mode};
 }
 function player(v:DuelPayload,role:DuelRole):DuelPlayerSummary {
   let points=0,correct=0,wrong=0,timeout=0,elapsedMs=0;
@@ -109,7 +114,7 @@ function seal(room:DuelRoom):DuelRoom {
   const v=room.v2,current=v.rounds?.[roundKey(v.competitiveIndex)];
   const next={...room,settings:legacySettings(v),currentQuestion:v.competitiveIndex,questionStartedAt:v.settings.mode==='competitive'?current?.windows.host?.startAt??null:null,
     scores:{host:player(v,'host').points,guest:player(v,'guest').points}};
-  wire(next);need(bytes(next)<=DUEL_LIMITS.roomBytes,'Room exceeds256KiB');return decodeDuelRoom(next);
+  wire(next);need(bytes(next)<=limitsFor(v.settings).roomBytes,'Room exceeds its size limit');return decodeDuelRoom(next);
 }
 function roleOf(room:DuelRoom,uid:string):DuelRole {const role=room.hostId===uid?'host':room.guestId===uid?'guest':null;need(role,'You are not a participant','outsider');return role;}
 function assertResponse(response:Response,q:Question):void {
@@ -120,7 +125,7 @@ function assertResponse(response:Response,q:Question):void {
 /** Strict bounded wire decoder; empty RTDB maps may be absent. No catalog lookup or regrading receipts. */
 export function decodeDuelRoom(raw:unknown):DuelRoom {
   need(raw!==null&&raw!==undefined,'This duel room is no longer available.','missing');
-  need(plain(raw)&&raw.protocolVersion===2,OLD_DUEL_MESSAGE,'version');wire(raw);need(bytes(raw)<=DUEL_LIMITS.roomBytes);
+  need(plain(raw)&&raw.protocolVersion===2,OLD_DUEL_MESSAGE,'version');wire(raw);need(bytes(raw)<=ALL_DUEL_LIMITS.roomBytes);
   // RTDB removes null-valued children and empty arrays. Joining must claim
   // guestId through its existing child rule before publishing the guest name.
   const rawV2=raw.v2 as DuelPayload;
@@ -132,9 +137,10 @@ export function decodeDuelRoom(raw:unknown):DuelRoom {
   need(['waiting','playing','finished'].includes(r.status)&&safe(r.hostId)&&(r.guestId===null||safe(r.guestId)&&r.guestId!==r.hostId)&&text(r.hostName,24)&&(r.guestName===null||text(r.guestName,24))&&integer(r.seed));
   need((r.guestId===null)===(r.guestName===null));need(r.hostAvatar===undefined||typeof r.hostAvatar==='string'&&r.hostAvatar.length<=DUEL_LIMITS.roomBytes);need(r.guestAvatar===undefined||r.guestAvatar===null||typeof r.guestAvatar==='string'&&r.guestAvatar.length<=DUEL_LIMITS.roomBytes);
   const v=r.v2;keys(v,['seriesId','generation','matchId','settingsRevision','settings','readiness','manifest','rounds','competitiveIndex','progress','createdAt','expiresAt','endedAt','endedReason']);
-  need(v.matchId===duelMatchId(v.seriesId,v.generation)&&integer(v.settingsRevision)&&time(v.createdAt)&&time(v.expiresAt)&&v.expiresAt===v.createdAt+DUEL_LIMITS.ttlMs);
+  need(bytes(raw)<=limitsFor(v.settings).roomBytes);
+  need(v.matchId===duelMatchId(v.seriesId,v.generation)&&integer(v.settingsRevision)&&time(v.createdAt)&&time(v.expiresAt)&&v.expiresAt===v.createdAt+limitsFor(v.settings).ttlMs);
   assertDuelSettings(v.settings);keys(v.progress,ROLES);
-  for(const role of ROLES){const p=v.progress[role];keys(p,['index','finished']);need(integer(p.index,20)&&typeof p.finished==='boolean');}
+  for(const role of ROLES){const p=v.progress[role];keys(p,['index','finished']);need(integer(p.index,limitsFor(v.settings).questions)&&typeof p.finished==='boolean');}
   if(v.readiness){keys(v.readiness,ROLES);for(const ready of Object.values(v.readiness)){keys(ready,['revision','protocol']);need(ready.protocol===2&&ready.revision===v.settingsRevision);}need(!v.readiness.guest||!!r.guestId);}
   const count=v.manifest?.questions.length??0;
   if(v.manifest)assertDuelManifest(v.manifest,v.settings,v.matchId,v.settingsRevision);
@@ -187,7 +193,7 @@ function setRound(room:DuelRoom,index:number,round:DuelRound):DuelRoom {return {
 export function createDuelRoom(hostId:string,hostName:string,settings:DuelSettings,seriesId:string,now:number):DuelResult {return run(()=>{
   need(safe(hostId)&&text(hostName,24)&&time(now));assertDuelSettings(settings);
   const v:DuelPayload={seriesId,generation:0,matchId:duelMatchId(seriesId,0),settingsRevision:0,settings,competitiveIndex:0,
-    progress:{host:{index:0,finished:false},guest:{index:0,finished:false}},createdAt:now,expiresAt:now+DUEL_LIMITS.ttlMs};
+    progress:{host:{index:0,finished:false},guest:{index:0,finished:false}},createdAt:now,expiresAt:now+limitsFor(settings).ttlMs};
   return success(seal({protocolVersion:2,status:'waiting',hostId,guestId:null,hostName,guestName:null,seed:0,settings:legacySettings(v),currentQuestion:0,questionStartedAt:null,scores:{host:0,guest:0},v2:v}));
 });}
 export function joinDuel(raw:unknown,scope:DuelScope,name:string):DuelResult {return run(()=>{
@@ -202,7 +208,7 @@ export function acknowledgeReady(raw:unknown,scope:DuelScope,protocol:number):Du
 });}
 export function changeDuelSettings(raw:unknown,scope:DuelScope,settings:DuelSettings):DuelResult {return run(()=>{
   const {room,role}=context(raw,scope);need(role==='host','Only host changes settings','outsider');need(room.status==='waiting','Not waiting','state');assertDuelSettings(settings);
-  const {readiness, ...v}=room.v2;return success(seal({...room,v2:{...v,settings,settingsRevision:v.settingsRevision+1}}));
+  const {readiness, ...v}=room.v2;return success(seal({...room,v2:{...v,settings,expiresAt:v.createdAt+limitsFor(settings).ttlMs,settingsRevision:v.settingsRevision+1}}));
 });}
 export function startMatch(raw:unknown,scope:DuelScope,manifest:DuelManifest,startAt:number):DuelResult {return run(()=>{
   const {room,role}=context(raw,scope);need(role==='host','Only host starts','outsider');need(room.status==='waiting','Not waiting','state');
@@ -213,13 +219,13 @@ export function startMatch(raw:unknown,scope:DuelScope,manifest:DuelManifest,sta
   return success(seal({...room,status:'playing',v2:{...room.v2,manifest,rounds}}));
 });}
 export function openParallelQuestion(raw:unknown,scope:DuelScope,index:number):DuelResult {return run(()=>{
-  const {room,role}=context(raw,scope);playing(room);need(room.v2.settings.mode==='parallel'&&integer(index,19)&&room.v2.progress[role].index===index&&!room.v2.progress[role].finished,'Stale question index','stale');
+  const {room,role}=context(raw,scope);playing(room);need(room.v2.settings.mode==='parallel'&&integer(index,limitsFor(room.v2.settings).questions-1)&&room.v2.progress[role].index===index&&!room.v2.progress[role].finished,'Stale question index','stale');
   const round=room.v2.rounds?.[roundKey(index)]??{windows:{}};
   if(round.windows[role])return success(room,false);
   return success(seal(setRound(room,index,{...round,windows:{...round.windows,[role]:{startAt:scope.now,deadlineAt:scope.now+room.v2.settings.durationMs}}})));
 });}
 export function applyDuelAnswer(raw:unknown,scope:DuelScope,event:DuelAnswerEvent):DuelResult {return run(()=>{
-  const {room,role}=context(raw,scope,true);keys(event,['index','receiptId','capturedAt','response']);need(integer(event.index,19)&&token(event.receiptId));
+  const {room,role}=context(raw,scope,true);keys(event,['index','receiptId','capturedAt','response']);need(integer(event.index,limitsFor(room.v2.settings).questions-1)&&token(event.receiptId));
   const v=room.v2,round=v.rounds?.[roundKey(event.index)],existing=round?.answers?.[role];
   if(existing?.receiptId===event.receiptId)return success(room,false,existing); // No grade, deadline extension or extra progress.
   need(scope.now<v.expiresAt,'This room has expired.','expired');playing(room);
@@ -238,7 +244,7 @@ export function applyDuelAnswer(raw:unknown,scope:DuelScope,event:DuelAnswerEven
 });}
 export function expireQuestion(raw:unknown,scope:DuelScope,index:number):DuelResult {return run(()=>{
   const {room,role}=context(raw,scope);playing(room);const v=room.v2;
-  need(integer(index,19)&&index===(v.settings.mode==='competitive'?v.competitiveIndex:v.progress[role].index),'Stale question index','stale');
+  need(integer(index,limitsFor(room.v2.settings).questions-1)&&index===(v.settings.mode==='competitive'?v.competitiveIndex:v.progress[role].index),'Stale question index','stale');
   const round=v.rounds?.[roundKey(index)];need(round,'Question not open','early');if(round.lockedAt!==undefined)return success(room,false);
   const roles=v.settings.mode==='competitive'?ROLES:[role];let answers={...round.answers};let changed=false;
   for(const r of roles){const window=round.windows[r];need(window&&scope.now>=window.deadlineAt,'Deadline not reached','early');
@@ -255,7 +261,7 @@ export function advanceCompetitive(raw:unknown,scope:DuelScope,index:number,next
   return success(seal(completed({...room,v2:{...v,competitiveIndex:next,rounds,progress:{host:{index:next,finished},guest:{index:next,finished}}}},scope.now)));
 });}
 export function advanceParallel(raw:unknown,scope:DuelScope,index:number,trigger:'manual'|'auto'):DuelResult {return run(()=>{
-  const {room,role}=context(raw,scope);playing(room);const v=room.v2;need(v.settings.mode==='parallel'&&integer(index,19)&&index===v.progress[role].index&&!v.progress[role].finished,'Stale question index','stale');
+  const {room,role}=context(raw,scope);playing(room);const v=room.v2;need(v.settings.mode==='parallel'&&integer(index,limitsFor(room.v2.settings).questions-1)&&index===v.progress[role].index&&!v.progress[role].finished,'Stale question index','stale');
   const answer=v.rounds?.[roundKey(index)]?.answers?.[role];need(answer,'Answer before advancing','early');need(trigger==='manual'||trigger==='auto');
   if(trigger==='auto')need(answer.outcome==='correct'&&scope.now>=answer.acceptedAt+DUEL_LIMITS.feedbackMs,'Automatic next is correct-only after feedback.','early');
   else need(scope.now>=answer.acceptedAt);

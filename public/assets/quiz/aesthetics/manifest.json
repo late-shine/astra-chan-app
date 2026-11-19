@@ -1,0 +1,128 @@
+[
+  {
+    "source": "Forgotten Railway.png",
+    "files": [
+      {
+        "height": 720,
+        "width": 1280,
+        "bytes": 194423,
+        "file": "forgotten-railway-desktop-1280.jpg"
+      },
+      {
+        "height": 1152,
+        "width": 2048,
+        "bytes": 411684,
+        "file": "forgotten-railway-desktop-2048.jpg"
+      },
+      {
+        "height": 853,
+        "width": 480,
+        "bytes": 89110,
+        "file": "forgotten-railway-mobile-480.jpg"
+      },
+      {
+        "height": 1387,
+        "width": 780,
+        "bytes": 176462,
+        "file": "forgotten-railway-mobile-780.jpg"
+      },
+      {
+        "height": 202,
+        "width": 360,
+        "bytes": 20891,
+        "file": "forgotten-railway-thumb.jpg"
+      }
+    ],
+    "mobileCrop": {
+      "x": 843,
+      "y": 0,
+      "width": 648,
+      "height": 1152
+    },
+    "sha256": "D4D5E9AF30ABEF2FB8C3EFFFD4D6501D2539F304246263FE1EE669E72B4B7374"
+  },
+  {
+    "source": "Morning Lilies.jpg",
+    "files": [
+      {
+        "height": 717,
+        "width": 1280,
+        "bytes": 122665,
+        "file": "morning-lilies-desktop-1280.jpg"
+      },
+      {
+        "height": 1146,
+        "width": 2048,
+        "bytes": 231163,
+        "file": "morning-lilies-desktop-2048.jpg"
+      },
+      {
+        "height": 853,
+        "width": 480,
+        "bytes": 46153,
+        "file": "morning-lilies-mobile-480.jpg"
+      },
+      {
+        "height": 1387,
+        "width": 780,
+        "bytes": 88520,
+        "file": "morning-lilies-mobile-780.jpg"
+      },
+      {
+        "height": 202,
+        "width": 360,
+        "bytes": 19027,
+        "file": "morning-lilies-thumb.jpg"
+      }
+    ],
+    "mobileCrop": {
+      "x": 1538,
+      "y": 0,
+      "width": 927,
+      "height": 1648
+    },
+    "sha256": "AF6ABD1655F585266754A3F87F6B35FE4004532B1B9FBDCD48B37EC822D32323"
+  },
+  {
+    "source": "Quiet Afternoon.jpg",
+    "files": [
+      {
+        "height": 855,
+        "width": 1280,
+        "bytes": 109678,
+        "file": "quiet-afternoon-desktop-1280.jpg"
+      },
+      {
+        "height": 1367,
+        "width": 2048,
+        "bytes": 225565,
+        "file": "quiet-afternoon-desktop-2048.jpg"
+      },
+      {
+        "height": 853,
+        "width": 480,
+        "bytes": 55969,
+        "file": "quiet-afternoon-mobile-480.jpg"
+      },
+      {
+        "height": 1387,
+        "width": 780,
+        "bytes": 118960,
+        "file": "quiet-afternoon-mobile-780.jpg"
+      },
+      {
+        "height": 240,
+        "width": 360,
+        "bytes": 15117,
+        "file": "quiet-afternoon-thumb.jpg"
+      }
+    ],
+    "mobileCrop": {
+      "x": 590,
+      "y": 0,
+      "width": 954,
+      "height": 1696
+    },
+    "sha256": "FFDE12DABEB02633E55440C41762C858435D2363238ED900F8BE79C17908FB6C"
+  }
+]

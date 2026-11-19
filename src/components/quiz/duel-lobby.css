@@ -1,0 +1,65 @@
+/* Phase 1: shared room presentation only. Solo Practice keeps its existing layout. */
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby { display: flex; flex-direction: column; gap: 1rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-heading { text-align: center; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-eyebrow { color: var(--quiz-playful); font-size: .75rem; line-height: 1.2rem; letter-spacing: .1em; text-transform: uppercase; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-heading .quiz-title { margin-top: .3rem; font-family: Georgia, serif; font-size: clamp(1.45rem, 2.6vw, 2.1rem); line-height: 1.2; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-code { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: .5rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-code label { font-size: .875rem; color: var(--quiz-ink-muted); }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-code input { width: 7ch; min-width: 0; border: 0; border-radius: 4px; background: transparent; font-weight: 700; font-size: 1.2rem; letter-spacing: .06em; text-align: center; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-code .quiz-btn { min-height: 40px; padding: .35rem .65rem; display: inline-flex; align-items: center; gap: .35rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-code svg { width: 1rem; height: 1rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-code-input { letter-spacing: .12em; text-transform: uppercase; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-seats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-seat { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: .3rem; padding: 1rem .75rem; border: 1px solid var(--quiz-playful); border-radius: 14px; background: var(--quiz-surface-solid); text-align: center; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-seat[data-empty="true"] { border-style: dashed; border-color: var(--quiz-control-border); }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-seat__avatar { width: 2.65rem; height: 2.65rem; flex: none; display: grid; place-items: center; margin-bottom: .2rem; border: 1px solid var(--quiz-playful); outline: 1px solid var(--quiz-border); outline-offset: 3px; border-radius: 50%; background: var(--quiz-surface-muted); color: var(--quiz-ink); font-family: Georgia, serif; font-size: 1.5rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-seat__avatar svg { width: 1.25rem; height: 1.25rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-seat__name { font-size: 1rem; line-height: 1.35rem; font-weight: 650; overflow-wrap: anywhere; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-seat__status { display: inline-flex; gap: .3rem; align-items: center; justify-content: center; min-height: 1.65rem; min-width: 6rem; max-width: 100%; margin-top: auto; padding: .1rem .5rem; border-radius: 1rem; background: var(--quiz-surface-muted); font-size: .8125rem; line-height: 1.25rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-seat__status svg { width: .85rem; height: .85rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-seat[data-ready="true"] .duel-lobby-seat__status { background: var(--quiz-success-soft); color: var(--quiz-success); }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-summary { border: 1px solid var(--quiz-border); border-radius: 12px; padding: .85rem 1rem; background: var(--quiz-surface-muted); }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-summary__main { display: flex; gap: .8rem; align-items: center; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-summary__main > svg { width: 1.5rem; height: 1.5rem; flex: none; color: var(--quiz-playful); }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-summary__main > div { min-width: 0; overflow-wrap: anywhere; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-summary .quiz-section-title { font-size: 1rem; line-height: 1.4rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-summary .quiz-help { margin-top: .2rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-summary__actions { display: flex; justify-content: center; flex-wrap: wrap; gap: .35rem .65rem; margin-top: .7rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-summary__actions .quiz-btn { min-height: 40px; padding: .4rem .7rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-secondary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .35rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-secondary .quiz-btn { min-height: 40px; padding: .35rem .5rem; font-size: .875rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-notice { display: flex; flex-direction: column; align-items: flex-start; gap: .5rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-preview { overflow-wrap: anywhere; line-height: 2rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-dock { flex: 0 0 auto; width: 100%; border-top: 1px solid var(--quiz-border); padding: .65rem 1rem var(--quiz-footer-clearance); background: var(--quiz-surface-solid); }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-dock__inner { max-width: 610px; margin-inline: auto; display: flex; flex-direction: column; gap: .45rem; text-align: center; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-dock .quiz-btn { min-height: 46px; }
+.quiz-studio[data-presentation="duel-lobby"][data-docked-footer="true"] .quiz-atelier-stage { padding-bottom: 1rem; }
+.quiz-studio[data-presentation="duel-lobby"][data-docked-footer="true"] .quiz-room-note { display: none; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-sheet-actions { display: flex; gap: .75rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-sheet-actions > .quiz-btn { flex: 1; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-settings__fields { min-width: 0; border: 0; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-settings details > summary { cursor: pointer; padding-block: .5rem; }
+.quiz-studio[data-presentation="duel-lobby"] .duel-lobby-settings details[open] > .quiz-stack { margin-top: .65rem; }
+.quiz-studio[data-presentation="duel-lobby"] button:disabled { cursor: default; opacity: .55; }
+.quiz-studio[data-presentation="duel-lobby"] input { scroll-margin-block: 1rem; }
+.quiz-studio[data-presentation="duel-lobby"][data-keyboard="open"] .quiz-sheet-scrim { top: var(--quiz-viewport-top, 0px); bottom: auto; height: var(--quiz-studio-height, 100dvh); }
+.quiz-studio[data-presentation="duel-lobby"][data-keyboard="open"] .quiz-sheet { max-height: 100%; }
+.quiz-studio[data-presentation="duel-lobby"][data-keyboard="open"] .duel-lobby-dock { padding-bottom: calc(.65rem + env(safe-area-inset-bottom, 0px)); }
+@media (max-width: 767px) {
+  .quiz-studio[data-presentation="duel-lobby"] .quiz-page { padding: .875rem; }
+  .quiz-studio[data-presentation="duel-lobby"] .duel-lobby { gap: .7rem; }
+  .quiz-studio[data-presentation="duel-lobby"] .duel-lobby-eyebrow { display: none; }
+  .quiz-studio[data-presentation="duel-lobby"] .duel-lobby-heading .quiz-title { margin-top: 0; }
+  .quiz-studio[data-presentation="duel-lobby"] .duel-lobby-seats { gap: .6rem; }
+  .quiz-studio[data-presentation="duel-lobby"] .duel-lobby-seat { padding: .65rem .5rem; gap: .2rem; }
+  .quiz-studio[data-presentation="duel-lobby"] .duel-lobby-seat__avatar { width: 2rem; height: 2rem; font-size: 1.25rem; }
+  .quiz-studio[data-presentation="duel-lobby"] .duel-lobby-summary { padding: .7rem; }
+  .quiz-studio[data-presentation="duel-lobby"] .duel-lobby-summary__main { gap: .6rem; align-items: flex-start; }
+  .quiz-studio[data-presentation="duel-lobby"] .duel-lobby-summary__main > svg { width: 1.1rem; height: 1.1rem; margin-top: .15rem; }
+  .quiz-studio[data-presentation="duel-lobby"] .duel-lobby-summary__actions { margin-top: .45rem; }
+  .quiz-studio[data-presentation="duel-lobby"] .duel-lobby-dock { padding-top: .5rem; }
+}
+@media (prefers-contrast: more) {
+  .quiz-studio[data-presentation="duel-lobby"] .duel-lobby-seat,
+  .quiz-studio[data-presentation="duel-lobby"] .duel-lobby-summary { background: var(--quiz-surface-solid); border-color: var(--quiz-ink); }
+}

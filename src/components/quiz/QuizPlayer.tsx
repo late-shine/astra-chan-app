@@ -152,6 +152,12 @@ export function LeavePracticeSheet({ answeredCount, onKeepPracticing, onSaveAndL
 /* ───────────────────────────── Player ───────────────────────────── */
 
 export interface QuizPlayerProps {
+  /** Optional shared-match framing; solo practice retains its existing labels and layout. */
+  label?: string;
+  exitLabel?: string;
+  lead?: ReactNode;
+  /** A room can resolve a round before this player submits an answer. */
+  responseLocked?: boolean;
   headerActions?: ReactNode;
   footerOverride?: ReactNode;
   question: QuizQuestionView;
@@ -175,17 +181,17 @@ export interface QuizPlayerProps {
   shell?: StudioPresentation;
 }
 
-export function QuizPlayer({ headerActions, footerOverride, question, answer, typedValue, autoNextEnabled, feedback, status, blocked = false, announcement, actions, promptRef, inputRef, shell }: QuizPlayerProps) {
+export function QuizPlayer({ label = "Practice question", exitLabel = "Exit practice", lead, responseLocked = false, headerActions, footerOverride, question, answer, typedValue, autoNextEnabled, feedback, status, blocked = false, announcement, actions, promptRef, inputRef, shell }: QuizPlayerProps) {
   const inputId = useId();
   const answered = answer.status === "answered";
   const isLast = question.finalQuestion ?? question.index >= question.total - 1;
   const typed = question.mode === "typed";
-  const canCheck = !blocked && typedValue.trim().length > 0;
+  const canCheck = !blocked && !responseLocked && typedValue.trim().length > 0;
   const outcome = answer.status === "answered" ? answer.outcome : undefined;
 
   const header = (
     <StudioHeader
-      backLabel="Exit practice"
+      backLabel={exitLabel}
       backIcon="close"
       onBack={actions.onExit}
       progress={question.positionLabel ? undefined : (question.index + (answered ? 1 : 0)) / Math.max(1, question.total)}
@@ -243,9 +249,10 @@ export function QuizPlayer({ headerActions, footerOverride, question, answer, ty
     : { expression: "focused" as const, speech: "Take your time. I’m right here." };
 
   return (
-    <StudioShell label="Practice question" header={header} footer={typed || answered ? footer : undefined} width="player"
+    <StudioShell label={label} header={header} footer={typed || answered || responseLocked ? footer : undefined} width="player"
       companion={companion} onCompanionInteract={actions.onFeedbackFocus} {...shell}>
       <div className="quiz-player" key={question.id}>
+        {lead}
         <div className="quiz-question-meta"><p className="quiz-question-label">{question.kindLabel}</p>
           {!question.timer && <span>At your own pace</span>}
         </div>
@@ -294,9 +301,9 @@ export function QuizPlayer({ headerActions, footerOverride, question, answer, ty
               placeholder={question.typedPlaceholder}
               maxLength={256}
               value={typedValue}
-              readOnly={answered || blocked}
+              readOnly={answered || responseLocked || blocked}
               onChange={(event) => {
-                if (!answered && !blocked) actions.onTypedChange(event.target.value);
+                if (!answered && !responseLocked && !blocked) actions.onTypedChange(event.target.value);
               }}
               onKeyDown={(event) => {
                 const native = event.nativeEvent;
@@ -311,8 +318,8 @@ export function QuizPlayer({ headerActions, footerOverride, question, answer, ty
         ) : (
           <div className="quiz-choices" data-layout={question.choiceLayout} role="group" aria-label="Answer choices">
             {question.choices.map((choice, i) => {
-              const state = choiceState(choice, answer);
-              const locked = answered || blocked;
+              const state = responseLocked && !answered ? "locked" : choiceState(choice, answer);
+              const locked = answered || responseLocked || blocked;
               return (
                 <button
                   key={choice.id}
@@ -349,9 +356,9 @@ export function QuizPlayer({ headerActions, footerOverride, question, answer, ty
           </div>
         )}
 
-        {answered && feedback}
+        {(answered || responseLocked) && feedback}
         {status}
-        {!answered && !typed && <p className="quiz-player__help">Take a breath. Choose the answer that feels familiar.</p>}
+        {!answered && !responseLocked && !typed && <p className="quiz-player__help">Take a breath. Choose the answer that feels familiar.</p>}
       </div>
 
       <div className="quiz-sr" role="status" aria-live="polite" aria-atomic="true">

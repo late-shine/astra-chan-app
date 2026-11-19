@@ -31,12 +31,13 @@
 // it under plain Node. localStorage access is guarded and optional.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { THEME_IDS, splitThemePreferences, type ThemeId } from './themeIds';
+export { THEME_IDS, type ThemeId } from './themeIds';
+
 import { DEFAULT_CLOUD_JAPANESE_VOICE, getCloudJapaneseVoice } from "./voiceCatalog";
 import { DEFAULT_QUIZ_PREFERENCES, QUIZ_STORAGE_KEYS, parseQuizPreferenceString, validateQuizPreference, type QuizPreferences } from "./quiz/preferences";
 
-/** The six themes. `App.tsx` imports this list so the two can never drift. */
-export const THEME_IDS = ["light", "dark", "dark-cosmic", "dark-emerald", "dark-maple", "dark-cyber"] as const;
-export type ThemeId = typeof THEME_IDS[number];
+
 
 export const BG_ANIMATION_TYPES = ["auto", "snow", "sakura", "sparkles", "rain", "letters", "both", "none"] as const;
 export type BgAnimationType = typeof BG_ANIMATION_TYPES[number];
@@ -168,7 +169,7 @@ function validateValue<K extends keyof UserPreferences>(key: K, value: unknown):
 export function sanitizePreferenceValues(raw: unknown): Partial<UserPreferences> {
   const out: Record<string, unknown> = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out as Partial<UserPreferences>;
-  const source = raw as Record<string, unknown>;
+  const source = splitThemePreferences(raw as Record<string, unknown>);
   for (const key of PREFERENCE_KEYS) {
     const valid = validateValue(key, source[key]);
     if (valid !== undefined) out[key] = valid;
@@ -294,13 +295,13 @@ function toStored(key: keyof UserPreferences, value: UserPreferences[keyof UserP
 /** Full preference set as currently stored on this device (defaults for absent keys). */
 export function readLocalPreferences(): UserPreferences {
   const store = storage();
-  const out: Record<string, unknown> = {};
+  const rawValues: Record<string, unknown> = {};
   for (const key of PREFERENCE_KEYS) {
     let raw: string | null = null;
     try { raw = store ? store.getItem(PREFERENCE_STORAGE_KEYS[key]) : null; } catch { raw = null; }
-    out[key] = parseStored(key, raw);
+    if (raw !== null) rawValues[key] = key === 'theme' || key === 'quizAppearance' ? raw : parseStored(key, raw);
   }
-  return out as unknown as UserPreferences;
+  return completePreferences(sanitizePreferenceValues(rawValues));
 }
 
 /** Only the preferences that child components own. */

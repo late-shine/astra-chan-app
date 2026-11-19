@@ -1,3 +1,4 @@
+import { AppearanceProvider } from './components/Appearance';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -99,7 +100,6 @@ import GrammarDojo from "./components/GrammarDojo";
 import ReadingRoomScreen from "./components/ReadingRoomScreen";
 import { DEFAULT_CLOUD_JAPANESE_VOICE, getCloudJapaneseVoice } from "./voiceCatalog";
 import {
-  THEME_IDS,
   PREFERENCE_CHANGED_EVENT,
   completePreferences,
   readComponentPreferences,
@@ -110,11 +110,12 @@ import {
   serializePreferences,
   writeLocalPreferences,
   writePreferencesEnvelope,
+  type ThemeId,
   type ComponentPreferences,
   type SyncedPreferences,
   type UserPreferences,
 } from "./preferences";
-import { pickQuizPreferences } from "./quiz/preferences";
+import { pickQuizPreferences, type QuizPreferences } from "./quiz/preferences";
 import { createCloudSaveQueue, quizBrowserStorage, readHydrationJournal, type StatsBinding } from "./quiz/browserStorage";
 import { canUseDeviceStats, hydrateQuizProgress, quizHistoryFromStats, readQuizProgress, sanitizeQuizProgress, withQuizMaps } from "./quiz/progress";
 import { useQuizProgressBridge, type QuizProgressBridge } from "./quiz/useQuizProgressBridge";
@@ -581,15 +582,8 @@ export default function App() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   // Customizable background elements and dark/light settings
-  const VALID_THEMES = THEME_IDS; // single shared list: src/preferences.ts
-  type ThemeId = typeof VALID_THEMES[number];
-  const [theme, setTheme] = useState<ThemeId>(() => {
-    try {
-      const stored = localStorage.getItem("hira_theme_mode");
-      if (stored && (VALID_THEMES as readonly string[]).includes(stored)) return stored as ThemeId;
-    } catch (e) { }
-    return "light";
-  });
+  const [initialPreferences] = useState(readLocalPreferences);
+  const [theme, setTheme] = useState<ThemeId>(initialPreferences.theme);
   const [bgAnimationType, setBgAnimationType] = useState<"auto" | "snow" | "sakura" | "sparkles" | "rain" | "letters" | "both" | "none">(() => {
     try {
       const stored = localStorage.getItem("hira_theme_bg_anim");
@@ -753,12 +747,14 @@ export default function App() {
     });
   };
   const [componentPrefs, setComponentPrefs] = useState<ComponentPreferences>(readComponentPreferences);
-  const [quizPreferences, setQuizPreferences] = useState(() => pickQuizPreferences(readLocalPreferences()));
+  const [quizPreferences, setQuizPreferences] = useState(() => pickQuizPreferences(initialPreferences));
   useEffect(() => {
     window.addEventListener(PREFERENCE_CHANGED_EVENT, refreshComponentPrefs);
     return () => window.removeEventListener(PREFERENCE_CHANGED_EVENT, refreshComponentPrefs);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => { writeLocalPreferences({quizAppearance: initialPreferences.quizAppearance}); }, [initialPreferences]);
 
   const preferenceSnapshot: UserPreferences = completePreferences({
     theme,
@@ -2732,13 +2728,14 @@ export default function App() {
   const handleInviteFriend = async (friendUid: string) => {
     if (!duel.code || duel.room?.guestId) {
       showToast("Create a room first to invite friends!");
-      return;
+      return "Open a room with an empty seat before inviting a friend.";
     }
     try {
       const myName = profileName || "Astra Scholar";
       setPendingInviteUids((current) => new Set(current).add(friendUid));
       await sendRoomInvite(friendUid, duel.code, myName);
       showToast("Invite sent!");
+      return null;
     } catch (err: any) {
       setPendingInviteUids((current) => {
         const next = new Set(current);
@@ -2746,6 +2743,7 @@ export default function App() {
         return next;
       });
       showToast(err.message || "Failed to send invite");
+      return String(err.message || "Failed to send invite");
     }
   };
 
@@ -2778,7 +2776,8 @@ export default function App() {
   const handleClearInviteResponse = async (friendUid: string) => {
     try {
       await clearInviteResponse(friendUid);
-    } catch { /* silent */ }
+      return null;
+    } catch (err) { return err instanceof Error ? err.message : "Could not dismiss the invitation response."; }
   };
 
   // ── END FRIEND SYSTEM FUNCTIONS ────────────────────────────────────────────
@@ -2843,11 +2842,6 @@ export default function App() {
   const handleDockToggleAutoCycle = () => {
     setAutoCycleBg(!autoCycleBg);
     showToast(autoCycleBg ? "Auto-cycle OFF" : "Auto-cycle ON (every 1m)");
-  };
-
-  const handleDockSetTheme = (next: "light" | "dark-cosmic") => {
-    setTheme(next);
-    showToast(next === "light" ? "Light mode on!" : "Dark mode on!");
   };
 
   const handleDockSetFont = (next: "digital" | "written") => {
@@ -2993,6 +2987,8 @@ export default function App() {
     setLanguage,
     theme,
     setTheme,
+    quizAppearance: quizPreferences.quizAppearance,
+    onQuizAppearanceChange: (id: QuizPreferences["quizAppearance"]) => setQuizPreferences(previous => ({...previous, quizAppearance:id})),
     bgAnimationType,
     setBgAnimationType,
     bgIntensity,
@@ -3092,6 +3088,7 @@ export default function App() {
 
   // ──── RENDER ───────────────────────────────────────────────────────────────
   return (
+    <AppearanceProvider theme={quizPreferences.quizAppearance} onChange={id => setQuizPreferences(previous => ({...previous, quizAppearance:id}))}>
     <div data-entrance={entrancePhase} className={atelierScreen ? "relative w-full bg-natural-bg" : `min-h-screen text-natural-charcoal font-sans flex flex-col justify-between py-2 px-4 relative bg-natural-bg transition-colors duration-300 ${entranceConnected ? "astra-app--journey" : "overflow-x-hidden"}`}>
       <input
         ref={progressUploadInputRef}
@@ -3846,7 +3843,8 @@ export default function App() {
           bgOpacity={bgOpacity}
           onSelectScene={handleDockSelectScene}
           onToggleAutoCycle={handleDockToggleAutoCycle}
-          onSetTheme={handleDockSetTheme}
+          studyRoom={atelierScreen || entranceConnected}
+          onSetAppTheme={setTheme}
           onSetFont={handleDockSetFont}
           onSetAnimation={setBgAnimationType}
           onSetIntensity={setBgIntensity}
@@ -3867,5 +3865,6 @@ export default function App() {
 
       </div>
     </div>
+    </AppearanceProvider>
   );
 }

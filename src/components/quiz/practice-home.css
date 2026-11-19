@@ -144,7 +144,7 @@
   pointer-events: none;
   border: 1px solid var(--quiz-border);
   border-radius: 50% 50% 10px 10px;
-  background: linear-gradient(to bottom, rgb(23 22 32 / .55), #171620 76%);
+  background: var(--quiz-frame, #171620);
 }
 .quiz-studio[data-width="home"] .quiz-companion[data-art="ready"] .quiz-companion__portrait::after {
   content: "";
@@ -154,7 +154,7 @@
   z-index: 2;
   pointer-events: none;
   border: 1px solid var(--quiz-border);
-  border-top-color: rgb(216 189 145 / .55);
+  border-top-color: var(--quiz-control-border);
   border-radius: 0 0 10px 10px;
   background: var(--quiz-surface-solid);
 }

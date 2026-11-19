@@ -1,5 +1,5 @@
 /** QZ11 own-answer projection. No network, storage, clock, UI, or opponent-learning input. */
-import {decodeDuelRoom} from './duel';
+import {decodeDuelRoom,ALL_DUEL_LIMITS} from './duel';
 import {decodeId,occurrenceId} from './ids';
 import {parseProgressEntry,validQuizSessionId,type ProgressEntry} from './progress';
 import {rewardFor} from './reward';
@@ -15,9 +15,9 @@ export function enrollDuelLearning(raw:unknown,uid:string):DuelLearningJournal {
   return freeze({version:1,owner:uid,matchId:room.v2.matchId,sessionId:duelLearningId(room.v2.matchId,uid),acknowledgedThrough:0,entries:[]});
 }
 export function parseDuelLearning(raw:string,uid:string):DuelLearningJournal {
-  if(new TextEncoder().encode(raw).length>64*1024)throw Error('Duel learning checkpoint is too large.');
+  if(new TextEncoder().encode(raw).length>2*1024*1024)throw Error('Duel learning checkpoint is too large.');
   const j=JSON.parse(raw) as DuelLearningJournal;
-  if(j.version!==1||j.owner!==uid||typeof j.matchId!=='string'||!/^[A-Za-z0-9_]{1,80}$/u.test(j.matchId)||j.sessionId!==duelLearningId(j.matchId,uid)||!Array.isArray(j.entries)||j.entries.length>20||!Number.isSafeInteger(j.acknowledgedThrough)||j.acknowledgedThrough<0||j.acknowledgedThrough>j.entries.length)throw Error('Invalid duel learning checkpoint.');
+  if(j.version!==1||j.owner!==uid||typeof j.matchId!=='string'||!/^[A-Za-z0-9_]{1,80}$/u.test(j.matchId)||j.sessionId!==duelLearningId(j.matchId,uid)||!Array.isArray(j.entries)||j.entries.length>ALL_DUEL_LIMITS.questions||!Number.isSafeInteger(j.acknowledgedThrough)||j.acknowledgedThrough<0||j.acknowledgedThrough>j.entries.length)throw Error('Invalid duel learning checkpoint.');
   const entries=j.entries.map((entry,index)=>{const parsed=parseProgressEntry(entry);if(!parsed||parsed.record.type!=='answer'||parsed.record.origin!=='duel'||parsed.record.sessionId!==j.sessionId||parsed.record.seq!==index+1)throw Error('Invalid duel learning sequence.');return parsed;});
   return freeze({version:1,owner:uid,matchId:j.matchId,sessionId:j.sessionId,acknowledgedThrough:j.acknowledgedThrough,entries});
 }
@@ -56,7 +56,7 @@ export function duelMisses(raw:unknown,uid:string):readonly Question[]{
 export function mappedDuelMisses(room:DuelRoom,uid:string,catalogs:Catalogs):readonly Question[]{
   const misses=duelMisses(room,uid);if(!misses.length)return [];
   const s=room.v2.settings;
-  const local=buildQuestions(catalogs,{sessionId:'duel-repair-map',subject:s.subject,kinds:[s.kind],length:20,choiceCount:4,now:0,
+  const local=buildQuestions(catalogs,{sessionId:'duel-repair-map',subject:s.subject,kinds:[s.kind],length:misses.length,choiceCount:4,now:0,
     pool:{filter:'custom',itemIds:misses.map(q=>q.itemId),...(s.subject==='kana'?{script:s.pool.script,stages:s.pool.stages}:{})}},{},seededRandom(1)).questions;
   const keys=new Set(local.map(q=>q.skillKey));return misses.every(q=>keys.has(q.skillKey))?misses:[];
 }

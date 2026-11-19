@@ -8,9 +8,11 @@
 
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { ChevronLeft, X } from "lucide-react";
-import { ATELIER_SCENES } from "../../quiz/atelierAssets";
+import { studyScene, studyTheme, studyTokens, STUDY_LABELS } from "../../appearance";
+import { useAppearance, AppearanceShortcut } from "../Appearance";
 import { QuizCompanion } from "./QuizCompanion";
 import type { QuizCompanionView, QuizThemeId } from "./viewTypes";
+import './duel-studio.css';
 
 /* ───────────────────────────── Astra mark ───────────────────────────── */
 
@@ -38,9 +40,13 @@ export interface StudioShellProps {
   children: ReactNode;
   /** Actions remain attached to the study panel and reserve dock clearance. */
   footer?: ReactNode;
+  /** A lobby action stays outside the scroll region, including with long names or large text. */
+  dockedFooter?: boolean;
+  /** Optional duel-only treatment. Solo and entrance layouts keep their existing defaults. */
+  presentation?: "duel-lobby" | "duel-match" | "duel-results";
   /** Sheets / dialogs. Rendered after the content so they stack above it. */
   overlay?: ReactNode;
-  /** Retains app theme metadata. All IDs share the r2 night palette inside this frame. */
+  /** Fixture override. Production uses the separate saved quiz appearance preference. */
   themeId?: QuizThemeId;
   /** Forces the reduced-motion rules (the OS setting is honoured separately in CSS). */
   reducedMotion?: boolean;
@@ -61,16 +67,18 @@ export interface StudioShellProps {
   artUnavailable?: boolean;
 }
 
-function AtelierRoom({ unavailable }: { unavailable: boolean }) {
-  const [failed, setFailed] = useState(false);
-  const { desktop, mobile } = ATELIER_SCENES;
-  if (failed || unavailable) return null;
-  return <picture className="quiz-room" aria-hidden="true">
-    <source media="(max-width: 767px)" type="image/webp" srcSet={mobile.webpSrcSet} sizes="100vw" />
+function AtelierRoom({ unavailable, theme }: { unavailable: boolean; theme: string }) {
+  const [failed, setFailed] = useState<string[]>([]);
+  const requested = studyTheme(theme);
+  const selected = failed.includes(requested) ? 'rainy-atelier' : requested;
+  const { desktop, mobile } = studyScene(selected);
+  if (unavailable || failed.includes(selected)) return null;
+  return <picture key={selected} className="quiz-room" aria-hidden="true">
+    {mobile.webpSrcSet && <source media="(max-width: 767px)" type="image/webp" srcSet={mobile.webpSrcSet} sizes="100vw" />}
     <source media="(max-width: 767px)" srcSet={mobile.srcSet} sizes="100vw" />
-    <source type="image/webp" srcSet={desktop.webpSrcSet} sizes="100vw" />
+    {desktop.webpSrcSet && <source type="image/webp" srcSet={desktop.webpSrcSet} sizes="100vw" />}
     <img src={desktop.src} srcSet={desktop.srcSet} sizes="100vw" width={desktop.width} height={desktop.height}
-      alt="" fetchPriority="high" decoding="async" draggable={false} onError={() => setFailed(true)} />
+      alt="" fetchPriority="high" decoding="async" draggable={false} onError={() => setFailed(prior => [...prior, selected])} />
   </picture>;
 }
 
@@ -79,6 +87,8 @@ export function StudioShell({
   header,
   children,
   footer,
+  dockedFooter = false,
+  presentation,
   overlay,
   themeId,
   reducedMotion,
@@ -92,22 +102,28 @@ export function StudioShell({
   artUnavailable = false,
   studyUnit = "character",
 }: StudioShellProps) {
+  const appearance = useAppearance();
+  const selectedTheme = themeId ?? appearance.theme;
+  const phase = presentation === "duel-match" || width === "player" ? "match" : presentation === "duel-results" || width === "results" ? "results" : "lobby";
   return (
     <div
       className="quiz-studio"
       role="region"
       aria-label={label}
-      data-theme={themeId}
+      data-theme={selectedTheme}
+      data-aesthetic={studyTheme(selectedTheme)}
       data-motion={reducedMotion ? "reduced" : undefined}
       data-keyboard={keyboardOpen ? "open" : undefined}
       data-live={liveViewport ? "true" : undefined}
-      style={liveViewport?.height ? {
+      style={{ ...studyTokens(selectedTheme, phase), ...(liveViewport?.height ? {
         "--quiz-studio-height": `${liveViewport.height}px`, "--quiz-viewport-top": `${liveViewport.offsetTop ?? 0}px`,
-      } as CSSProperties : undefined}
+      } : {}) } as CSSProperties}
       data-footer={footer ? "true" : "false"}
       data-width={width}
+      data-presentation={presentation}
+      data-docked-footer={dockedFooter && footer ? "true" : undefined}
     >
-      <AtelierRoom unavailable={artUnavailable} />
+      <AtelierRoom unavailable={artUnavailable} theme={selectedTheme} />
       <div className="quiz-studio__body" inert={modalOpen ? true : undefined}>
         {header}
         <div className="quiz-scroll" ref={scrollRef}>
@@ -115,20 +131,21 @@ export function StudioShell({
             <div className="quiz-study-column">
               <div className="quiz-study">
                 <div className="quiz-page">{children}</div>
-                {footer}
+                {!dockedFooter && footer}
               </div>
               <p className="quiz-atelier-caption" aria-hidden="true">A quiet room. One {studyUnit} at a time.</p>
             </div>
             <QuizCompanion view={companion} unavailable={artUnavailable} reducedMotion={reducedMotion} onInteract={onCompanionInteract} />
           </div>
-          <div className="quiz-room-note" aria-hidden="true"><span>A rainy evening</span><span>Learn with Astra</span></div>
+          <div className="quiz-room-note" aria-hidden="true"><span>{STUDY_LABELS[studyTheme(selectedTheme)].title}</span><span>Learn with Astra</span></div>
         </div>
+        {dockedFooter && footer}
       </div>
       {overlay}
     </div>
   );
 }
-export type StudioPresentation = Pick<StudioShellProps, "themeId" | "reducedMotion" | "keyboardOpen" | "liveViewport" | "modalOpen" | "overlay" | "scrollRef" | "companion" | "artUnavailable" | "onCompanionInteract" | "speechEnabled" | "onSpeechChange" | "studyUnit">;
+export type StudioPresentation = Pick<StudioShellProps, "themeId" | "reducedMotion" | "keyboardOpen" | "liveViewport" | "modalOpen" | "overlay" | "scrollRef" | "companion" | "artUnavailable" | "onCompanionInteract" | "speechEnabled" | "onSpeechChange" | "studyUnit" | "presentation" | "dockedFooter">;
 
 /* ───────────────────────────── Header ───────────────────────────── */
 
@@ -155,6 +172,7 @@ export function StudioHeader({ backLabel, onBack, backIcon = "back", children, t
         </button>
         <div className="quiz-header__brand" aria-hidden="true"><span>Astra’s atelier</span><span>A little time for yourself.</span></div>
         <div className="quiz-header__center">{children}</div>
+        <AppearanceShortcut className="quiz-icon-btn" />
         <div className="quiz-header__trail">{trailing}</div>
       </div>
       {typeof progress === "number" && (
@@ -169,7 +187,7 @@ export function StudioHeader({ backLabel, onBack, backIcon = "back", children, t
 /* ───────────────────────────── Sheet / dialog ───────────────────────────── */
 
 const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
 export interface StudioSheetProps {
   title: string;

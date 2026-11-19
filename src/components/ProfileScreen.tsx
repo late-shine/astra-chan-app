@@ -1,3 +1,6 @@
+import type { StudyTheme } from '../themeIds';
+import { AppearancePicker, AppThemePicker } from './Appearance';
+import { appearanceLabel } from '../appearance';
 import {duelKindLabel} from '../quiz/duelSetup';
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
@@ -88,8 +91,8 @@ const TRANSLATIONS = {
     combosSyllabary: "Combos (Yōon)",
     settingsTitle: "Grimoire Workshop & Settings",
     settingsSubtitle: "Customize color aesthetics, voice synthesizer, and background magic",
-    colorAesthetic: "Color Aesthetic Presets",
-    colorAestheticDesc: "Choose a visual energy that suits your learning flow",
+    colorAesthetic: "App theme",
+    colorAestheticDesc: "For the original app. Practice and duels have their own appearance below.",
     languageTitle: "Interface Language",
     languageDesc: "Translate the grimoire interface text",
     voiceTitle: "Text-to-Speech Synth Voice",
@@ -239,6 +242,8 @@ interface ProfileScreenProps {
 
   language: "en" | "ja";
   setLanguage: React.Dispatch<React.SetStateAction<"en" | "ja">>;
+  quizAppearance: StudyTheme;
+  onQuizAppearanceChange: (id: StudyTheme) => void;
   theme: string;
   setTheme: React.Dispatch<React.SetStateAction<any>>;
   bgAnimationType: "auto" | "snow" | "sakura" | "sparkles" | "rain" | "letters" | "both" | "none";
@@ -334,6 +339,8 @@ export default function ProfileScreen({
   setLanguage,
   theme,
   setTheme,
+  quizAppearance,
+  onQuizAppearanceChange,
   bgAnimationType,
   setBgAnimationType,
   bgIntensity,
@@ -701,70 +708,12 @@ export default function ProfileScreen({
                 </label>
                 <p className="text-[9px] text-natural-forest/50 font-mono mt-0.5">{t.colorAestheticDesc}</p>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {[
-                  {
-                    id: "light",
-                    title: "🌸 Washi Parchment",
-                    desc: language === "ja" ? "和風の白砂と墨汁の美しいライト" : "Classic light cream scroll style",
-                    colors: ["#FAF7F2", "#C0B8AC", "#E8B98A", "#F0967A"]
-                  },
-                  {
-                    id: "dark-cosmic",
-                    title: "🔮 Cosmic Witch",
-                    desc: language === "ja" ? "宇宙魔女の夜空を飾るアメジスト" : "Glowing amethyst mystical violet",
-                    colors: ["#120E1B", "#32264C", "#DF9BFF", "#FF7597"]
-                  },
-                  {
-                    id: "dark-emerald",
-                    title: "🎋 Emerald Jade",
-                    desc: language === "ja" ? "静かな竹林の抹茶グリーン" : "Fresh matcha & bamboo green",
-                    colors: ["#0D1612", "#1E3E30", "#34D399", "#FCD34D"]
-                  },
-                  {
-                    id: "dark-maple",
-                    title: "🍁 Autumn Maple",
-                    desc: language === "ja" ? "紅葉の夕暮れを思わせる琥珀" : "Terracotta rust & sunset amber",
-                    colors: ["#180F0E", "#4D2D2A", "#F0967A", "#F5B041"]
-                  },
-                  {
-                    id: "dark-cyber",
-                    title: "🌌 Cyber Tokyo",
-                    desc: language === "ja" ? "ネオンに輝くサイバーパンク" : "Neon cyan & synth pink aura",
-                    colors: ["#0B0E17", "#212E46", "#06B6D4", "#EC4899"]
-                  }
-                ].map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => {
-                      setTheme(preset.id);
-                      document.documentElement.setAttribute("data-theme", preset.id);
-                      showToast(language === "ja" ? `カラーを「${preset.title}」に変更しました` : `Aesthetic: ${preset.title}`);
-                    }}
-                    className={`p-3 rounded-xl border text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between h-20 hover:scale-[1.02] cursor-pointer ${
-                      theme === preset.id
-                        ? "bg-natural-forest/10 border-natural-forest shadow-sm"
-                        : "bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/10"
-                    }`}
-                  >
-                    <div>
-                      <p className="text-xs font-serif font-black text-natural-forest leading-tight">
-                        {preset.title}
-                      </p>
-                      <p className="text-[8px] text-natural-forest/60 font-mono mt-0.5 leading-tight">
-                        {preset.desc}
-                      </p>
-                    </div>
-                    {/* Tiny Color chips */}
-                    <div className="flex gap-1 mt-1">
-                      {preset.colors.map((c, idx) => (
-                        <span key={idx} className="w-3 h-3 rounded-full border border-white/10 shadow-xs" style={{ backgroundColor: c }} />
-                      ))}
-                    </div>
-                  </button>
-                ))}
-              </div>
+              <AppThemePicker theme={theme} onChange={setTheme} />
+              <details className="profile-quiz-appearance">
+                <summary>{language === 'ja' ? 'クイズの外観' : 'Quiz appearance'} <span>{appearanceLabel(quizAppearance)}</span></summary>
+                <p>{language === 'ja' ? '練習と対戦だけに適用されます。' : 'For Practice and duels only. Your app theme stays unchanged.'}</p>
+                <AppearancePicker theme={quizAppearance} onChange={onQuizAppearanceChange} />
+              </details>
             </div>
 
             {/* Voices and pronunciation check */}

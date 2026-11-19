@@ -1,3 +1,5 @@
+import { useAppearance, AppThemePicker } from './Appearance';
+import { appearanceLabel } from '../appearance';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -22,7 +24,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
-import { Clock, Moon, Music, Palette, Sun, Volume2, VolumeX, X } from "lucide-react";
+import { Clock, Music, Palette, Volume2, VolumeX, X } from "lucide-react";
 
 export type DockPanelId = "music" | "atmosphere";
 
@@ -84,7 +86,8 @@ export interface SoundAtmosphereDockProps {
   bgOpacity: BgOpacity;
   onSelectScene: (index: number, title: string) => void;
   onToggleAutoCycle: () => void;
-  onSetTheme: (theme: "light" | "dark-cosmic") => void;
+  studyRoom?: boolean;
+  onSetAppTheme: (id: import("../themeIds").ThemeId) => void;
   onSetFont: (font: "digital" | "written") => void;
   onSetAnimation: (value: BgAnimationType) => void;
   onSetIntensity: (value: BgIntensity) => void;
@@ -129,7 +132,8 @@ export default function SoundAtmosphereDock(props: SoundAtmosphereDockProps) {
     bgOpacity,
     onSelectScene,
     onToggleAutoCycle,
-    onSetTheme,
+    studyRoom,
+    onSetAppTheme,
     onSetFont,
     onSetAnimation,
     onSetIntensity,
@@ -138,6 +142,7 @@ export default function SoundAtmosphereDock(props: SoundAtmosphereDockProps) {
     showToast,
   } = props;
 
+  const appearance = useAppearance();
   const reduceMotion = useReducedMotion();
   const rootRef = useRef<HTMLDivElement>(null);
   const musicButtonRef = useRef<HTMLButtonElement>(null);
@@ -162,6 +167,8 @@ export default function SoundAtmosphereDock(props: SoundAtmosphereDockProps) {
       launcher.current?.focus();
     };
     const handlePointer = (event: PointerEvent) => {
+      // The native Appearance dialog owns interaction; retain its dock opener for focus return.
+      if (event.target instanceof Element && event.target.closest('.appearance-dialog[open]')) return;
       const root = rootRef.current;
       if (root && event.target instanceof Node && root.contains(event.target)) return;
       onOpenPanelChange(null);
@@ -313,6 +320,7 @@ export default function SoundAtmosphereDock(props: SoundAtmosphereDockProps) {
 
             {activePanel === "atmosphere" && (
               <div id="witch-grimoire-controls" className="flex flex-col gap-4">
+                {!studyRoom && <>
                 {/* Scene: backdrop + auto-cycle */}
                 <div className="flex flex-col gap-1.5">
                   <h3 className={GROUP_LABEL}>Scene</h3>
@@ -351,37 +359,14 @@ export default function SoundAtmosphereDock(props: SoundAtmosphereDockProps) {
                   </div>
                 </div>
 
+                </>}
                 {/* Look: theme + font */}
                 <div className="flex flex-col gap-1.5">
                   <h3 className={GROUP_LABEL}>Look</h3>
-                  <div role="group" aria-label="Theme" className={SEGMENT}>
-                    <button
-                      type="button"
-                      id="toggle-theme-light"
-                      aria-pressed={theme === "light"}
-                      onClick={() => onSetTheme("light")}
-                      className={`flex-1 min-h-11 px-3 rounded-lg flex items-center justify-center gap-1.5 text-xs font-bold transition cursor-pointer ${FOCUS_RING} ${
-                        theme === "light" ? PILL_ON : PILL_OFF
-                      }`}
-                      title="Washi Light Mode"
-                    >
-                      <Sun className="w-3.5 h-3.5" aria-hidden="true" />
-                      Light
-                    </button>
-                    <button
-                      type="button"
-                      id="toggle-theme-dark"
-                      aria-pressed={theme === "dark" || theme === "dark-cosmic"}
-                      onClick={() => onSetTheme("dark-cosmic")}
-                      className={`flex-1 min-h-11 px-3 rounded-lg flex items-center justify-center gap-1.5 text-xs font-bold transition cursor-pointer ${FOCUS_RING} ${
-                        theme === "dark" || theme === "dark-cosmic" ? PILL_ON : PILL_OFF
-                      }`}
-                      title="Witchy Dark Mode"
-                    >
-                      <Moon className="w-3.5 h-3.5" aria-hidden="true" />
-                      Dark
-                    </button>
-                  </div>
+                  {!studyRoom && <AppThemePicker theme={theme} onChange={onSetAppTheme} />}
+                  <button type="button" onClick={appearance.open} className={`${SEGMENT} min-h-11 px-3 text-sm text-natural-forest ${FOCUS_RING}`}>
+                    <Palette className="w-4 h-4" aria-hidden="true" /> Quiz appearance · {appearanceLabel(appearance.theme)}
+                  </button>
                   <div role="group" aria-label="Font" className={SEGMENT}>
                     <button
                       type="button"

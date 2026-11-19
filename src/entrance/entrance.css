@@ -51,8 +51,9 @@
 .astra-entrance__travel { pointer-events: none; }
 .astra-entrance__destination { position: relative; opacity: 0; min-height: var(--entrance-height, 100svh); }
 /* Only the connected Practice HOME joins document scrolling. Quiz players keep their original scroll owner. */
-.astra-entrance__destination .quiz-studio { height: auto; min-height: var(--entrance-height, 100svh); overflow: visible; background: transparent; }
-.astra-entrance__destination .quiz-room { display: none; }
+.astra-entrance__destination .quiz-studio { height: auto; min-height: var(--entrance-height, 100svh); overflow: visible; background: var(--quiz-bg); }
+/* Practice owns its selected scene. The video/ink layer remains the original room. */
+.astra-entrance__destination .quiz-room { display: block; }
 .astra-entrance__destination .quiz-scroll { overflow: visible; overscroll-behavior: auto; }
 .astra-entrance__destination .quiz-studio__body { flex: 1 0 auto; }
 /* Existing setup sheets are modal. Only their open state locks the document;

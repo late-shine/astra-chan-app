@@ -31,5 +31,17 @@ export function documentJourney(scroll, start, top, height, reduced=false) {
     takeover: smooth(Math.min(start,top),takeoverEnd,scroll),
     story: scroll>=end-1 ? 1 : clamp((scroll-takeoverEnd)/travel),
     end,
+    // Only the final reveal into Practice may settle: at most 160px, never the story.
+    settleStart: end - Math.min(160, height * .2, travel * .08),
   };
+}
+
+// Forward-only assistance at the final handoff. Pauses/reversal elsewhere stay manual.
+export function journeySettleTarget(scroll, settleStart, end, direction) {
+  if (direction <= 0 || end <= settleStart || scroll < settleStart || scroll >= end - 1) return null;
+  return end;
+}
+export function journeyCrossing(scroll, previous, start, end) {
+  if (previous < end - 1 && previous >= start && scroll > end) return end;
+  return null;
 }

@@ -16,8 +16,8 @@ export interface QuizCompanionView {
   revealId?: string;
 }
 
-/** The same ids the app already stores for the saved theme. The studio maps them to light/dark tokens in CSS. */
-export type QuizThemeId = ThemeId;
+/** Quiz appearance IDs; legacy app IDs remain accepted by standalone preview fixtures. */
+export type QuizThemeId = ThemeId | import("../../themeIds").StudyTheme;
 
 export type QuizSubject = "kana" | "words" | "kanji";
 

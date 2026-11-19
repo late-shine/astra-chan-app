@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ATELIER_SCENES } from '../quiz/atelierAssets';
-import { approach, documentJourney, mediaPlane, seekFrame, smooth, timeline } from './timeline.js';
+import { approach, documentJourney, mediaPlane, seekFrame, smooth, timeline, journeySettleTarget, journeyCrossing } from './timeline.js';
 import { createInk } from './ink.js';
 import './entrance.css';
 
@@ -42,8 +42,10 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
     const v = video.current!, cv = canvas.current!, end = destination.current!;
     let live = true, raf = 0, previous = 0, p = progress.current, target = p;
     let loaded = false, failed = false, duration = 0, desiredTime = 0, lastRequested = -1;
+    let settleTimer = 0, settleRaf = 0, snapping = false, touching = false;
+    let lastScroll = window.scrollY, scrollDirection = 0, landingUntil = 0, landingPoint = 0;
     let watchdog = 0, seekPending = false, pendingFocus = false;
-    let width = 0, height = innerHeight, top = 0, endScroll = 0, contentWidth = 0;
+    let width = 0, height = innerHeight, top = 0, endScroll = 0, settleStart = 0, contentWidth = 0;
     let plane = mediaPlane(innerWidth, height, portrait), initialScale = plane.startScale, initialY = 0;
     let ink: ReturnType<typeof createInk> | null = null, available = false;
     let wasActive = false, wasCovered = false;
@@ -68,11 +70,67 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
         ink?.resize(width, height);
       }
       top = el.getBoundingClientRect().top + window.scrollY;
-      endScroll = documentJourney(window.scrollY, launchScroll.current, top, height, reduced).end;
+      const measuredJourney = documentJourney(window.scrollY, launchScroll.current, top, height, reduced);
+      endScroll = measuredJourney.end;
+      settleStart = measuredJourney.settleStart;
       const nextSpacer = `${Math.max(0, endScroll - top - height)}px`;
       if (spacer.current!.style.height !== nextSpacer) spacer.current!.style.height = nextSpacer;
       wake();
     }
+    const modalOpen = () => !!document.querySelector('dialog[open], [aria-modal="true"]');
+    function cancelSettle() {
+      window.clearTimeout(settleTimer); cancelAnimationFrame(settleRaf);
+      settleRaf = 0; snapping = false;
+    }
+    function glideTo(point: number) {
+      cancelSettle(); landingUntil = 0;
+      const from = window.scrollY;
+      if (reduced || Math.abs(from - point) < 2) {
+        window.scrollTo({top: point, behavior: 'instant'}); lastScroll = point; wake(); return;
+      }
+      snapping = true;
+      const began = performance.now();
+      const duration = 280;
+      const step = (now: number) => {
+        if (!live || modalOpen()) { cancelSettle(); return; }
+        const fraction = Math.min(1, (now - began) / duration);
+        window.scrollTo({top: from + (point - from) * smooth(0, 1, fraction), behavior: 'instant'});
+        lastScroll = window.scrollY; wake();
+        if (fraction < 1) settleRaf = requestAnimationFrame(step);
+        else { snapping = false; settleRaf = 0; landingPoint = point; landingUntil = now + 180; }
+      };
+      settleRaf = requestAnimationFrame(step);
+    }
+    function queueSettle() {
+      window.clearTimeout(settleTimer);
+      if (snapping || touching || document.hidden || modalOpen()) return;
+      settleTimer = window.setTimeout(() => {
+        if (touching || document.hidden || modalOpen()) return;
+        const point = journeySettleTarget(window.scrollY, settleStart, endScroll, scrollDirection);
+        if (point !== null) glideTo(point);
+      }, 180);
+    }
+    function onScroll() {
+      let y = window.scrollY;
+      if (!snapping && !modalOpen()) {
+        // Catch one large gesture at the section boundary; leave content scroll alone.
+        const crossing = journeyCrossing(y, lastScroll, launchScroll.current, endScroll);
+        if (crossing !== null) { landingPoint = crossing; landingUntil = performance.now() + 180; }
+        const pastLanding = landingPoint === endScroll ? y > landingPoint + 1 : y < landingPoint - 1;
+        if (performance.now() < landingUntil && pastLanding) {
+          y = landingPoint; window.scrollTo({top:y, behavior:'instant'});
+        }
+        if (Math.abs(y - lastScroll) > 1) scrollDirection = Math.sign(y - lastScroll);
+      }
+      lastScroll = y; wake(); queueSettle();
+    }
+    const interrupt = () => { cancelSettle(); queueSettle(); };
+    const touchStart = () => { touching = true; cancelSettle(); };
+    const touchEnd = () => { touching = false; queueSettle(); };
+    const keyScroll = (event: KeyboardEvent) => {
+      if (modalOpen() || (event.target instanceof Element && event.target.closest('input,textarea,select,button,a,[contenteditable]'))) return;
+      if (['ArrowDown','ArrowUp','PageDown','PageUp','Home','End',' '].includes(event.key)) interrupt();
+    };
     function fail() {
       if (!live || failed) return;
       failed = true; loaded = false; seekPending = false; v.style.opacity = '0';
@@ -171,7 +229,7 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
       seek(); wake();
     };
     const visibility = () => {
-      if (document.hidden) window.clearTimeout(watchdog);
+      if (document.hidden) { window.clearTimeout(watchdog); cancelSettle(); }
       else {
         if (!reduced && !failed && (!loaded || seekPending)) watchdog = window.setTimeout(fail, 8000);
         wake();
@@ -184,18 +242,29 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
     v.addEventListener('loadeddata', onData); v.addEventListener('seeked', onSeeked); v.addEventListener('error', fail);
     if (!reduced) { v.src = `/assets/entrance/room-${variant}.mp4`; v.load(); watchdog = window.setTimeout(fail, 12000); }
     else { v.pause(); v.removeAttribute('src'); v.load(); }
-    window.addEventListener('scroll', wake, { passive: true }); window.addEventListener('resize', measure);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('wheel', interrupt, { passive: true });
+    window.addEventListener('touchstart', touchStart, { passive: true });
+    window.addEventListener('touchend', touchEnd, { passive: true });
+    window.addEventListener('touchcancel', touchEnd, { passive: true });
+    window.addEventListener('keydown', keyScroll); window.addEventListener('resize', measure);
     document.addEventListener('visibilitychange', visibility);
     // Track layout above the room (e.g. the existing companion changing height).
     const observer = new ResizeObserver(measure);
     observer.observe(el.parentElement!);
     if (app) observer.observe(app);
     measure();
+    // The cue advances a little; only Skip explicitly jumps to the destination.
     advance.current = () => window.scrollTo({ top: Math.min(endScroll, window.scrollY + height * .65), behavior: reduced ? 'instant' : 'smooth' });
-    skip.current = () => { pendingFocus = true; p = 1; window.scrollTo({ top: endScroll, behavior: 'instant' }); wake(); };
+    skip.current = () => { cancelSettle(); landingUntil = 0; lastScroll = endScroll; pendingFocus = true; p = 1; window.scrollTo({ top: endScroll, behavior: 'instant' }); wake(); };
     return () => {
-      live = false; cancelAnimationFrame(raf); window.clearTimeout(watchdog); bg.onload = null; observer.disconnect();
-      window.removeEventListener('scroll', wake); window.removeEventListener('resize', measure);
+      live = false; cancelSettle(); cancelAnimationFrame(raf); window.clearTimeout(watchdog); bg.onload = null; observer.disconnect();
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('wheel', interrupt);
+      window.removeEventListener('touchstart', touchStart);
+      window.removeEventListener('touchend', touchEnd);
+      window.removeEventListener('touchcancel', touchEnd);
+      window.removeEventListener('keydown', keyScroll); window.removeEventListener('resize', measure);
       document.removeEventListener('visibilitychange', visibility); cv.removeEventListener('webglcontextlost', contextLost);
       v.removeEventListener('loadeddata', onData); v.removeEventListener('seeked', onSeeked); v.removeEventListener('error', fail);
       ink?.dispose(); v.pause(); v.removeAttribute('src'); v.load();

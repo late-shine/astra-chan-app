@@ -1,3 +1,4 @@
+import { STUDY_THEMES, type StudyTheme } from '../themeIds';
 import type { VocabCategory } from '../types';
 import { VOCAB_CATEGORY_META } from '../vocab/vocabCategories';
 import { SESSION_LIMITS, type ChallengeTier, type KanaStage, type Subject } from './types';
@@ -8,6 +9,7 @@ export type QuizLength = typeof QUIZ_LENGTH_OPTIONS[number];
 export function quizBuildLength(length: QuizLength): number { return length === 'all' ? SESSION_LIMITS.questions : length; }
 
 export interface QuizPreferences {
+  quizAppearance: StudyTheme;
   quizSubject: Subject;
   quizLength: QuizLength;
   quizAutoNext: boolean;
@@ -23,20 +25,21 @@ export interface QuizPreferences {
 }
 
 export const DEFAULT_QUIZ_PREFERENCES: Readonly<QuizPreferences> = Object.freeze({
-  quizSubject: 'kana', quizLength: 10, quizAutoNext: true, quizKanaKind: 'read',
+  quizAppearance: 'rainy-atelier', quizSubject: 'kana', quizLength: 10, quizAutoNext: true, quizKanaKind: 'read',
   quizVocabKind: 'meaning', quizKanjiKind: 'meaning', quizKanaScript: 'hiragana',
   quizKanaStagesMask: 1, quizVocabPool: 'recommended', quizKanjiPool: 'recommended',
   quizChoiceCount: 4, quizChallengeTier: 'steady',
 });
 export const QUIZ_PREFERENCE_KEYS = Object.keys(DEFAULT_QUIZ_PREFERENCES) as (keyof QuizPreferences)[];
 export const QUIZ_STORAGE_KEYS: Record<keyof QuizPreferences, string> = {
-  quizSubject: 'astra_quiz_subject', quizLength: 'astra_quiz_length', quizAutoNext: 'astra_quiz_auto_next',
+  quizAppearance: 'astra_quiz_appearance', quizSubject: 'astra_quiz_subject', quizLength: 'astra_quiz_length', quizAutoNext: 'astra_quiz_auto_next',
   quizKanaKind: 'astra_quiz_kana_kind', quizVocabKind: 'astra_quiz_vocab_kind', quizKanjiKind: 'astra_quiz_kanji_kind',
   quizKanaScript: 'astra_quiz_kana_script', quizKanaStagesMask: 'astra_quiz_kana_stages',
   quizVocabPool: 'astra_quiz_vocab_pool', quizKanjiPool: 'astra_quiz_kanji_pool',
   quizChoiceCount: 'astra_quiz_choices', quizChallengeTier: 'astra_quiz_challenge_tier',
 };
 const options: Partial<Record<keyof QuizPreferences, readonly unknown[]>> = {
+  quizAppearance: STUDY_THEMES,
   quizSubject: ['kana', 'vocab', 'kanji'],
   quizLength: QUIZ_LENGTH_OPTIONS,
   quizKanaKind: ['read', 'pick', 'type', 'mixed'],

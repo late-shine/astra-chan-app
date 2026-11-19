@@ -9,7 +9,25 @@ import {QuizPlayer,QuizMoreMenu} from './QuizPlayer';
 import {QuizFeedback} from './QuizFeedback';
 import {useKeyboardViewport} from './QuizFlow';
 import {StudioSheet,type StudioPresentation} from './StudioShell';
-import type {QuizQuestionView,QuizAnswerState} from './viewTypes';
+import type {QuizAnswerState} from './viewTypes';
+import type {DuelRoom} from '../../quiz/types';
+import './duel-match-results.css';
+
+/** Confirmed room scores only. This region does not announce every clock update. */
+export function DuelScoreboard({room,uid}:{room:DuelRoom;uid:string|null}) {
+  const summary=summarizeDuel(room),competitive=room.v2.settings.mode==='competitive';
+  return <section className="duel-scoreboard" aria-label="Confirmed match scores">
+    <p className="duel-scoreboard__mode">{competitive?'Competitive':'Parallel'}<span>{competitive?'First accepted correct answer claims the round':'The same timed set, answered independently'}</span></p>
+    <div className="duel-scoreboard__seats">{(['host','guest'] as const).map(role=>{
+      const local=(role==='host'?room.hostId:room.guestId)===uid;
+      return <div className="duel-scoreboard__seat" data-local={local||undefined} key={role}>
+        <div className="duel-scoreboard__identity"><span className="duel-scoreboard__name">{role==='host'?room.hostName:room.guestName??'Friend'}</span><span className="duel-scoreboard__role">{local?'You · ':''}{role==='host'?'Host':'Guest'}</span></div>
+        <p className="duel-scoreboard__value"><strong>{competitive?summary[role].points:summary[role].correct}</strong><span>{competitive?'points':'correct'}</span></p>
+      </div>;
+    })}</div>
+  </section>;
+}
+
 export function DuelPlayer({controller:c,learning,shell,autoNext,onAutoNext}:{controller:DuelSessionController;learning:DuelLearning;shell:StudioPresentation;autoNext:boolean;onAutoNext:(enabled:boolean)=>void}) {
   const [why,setWhy]=useState(false),[exit,setExit]=useState(false);const input=useRef<HTMLInputElement>(null),prompt=useRef<HTMLDivElement>(null);
   const q=c.room!.v2.manifest!.questions[c.view!.index],v=c.view!,room=c.room!,round=room.v2.rounds?.[`r_${v.index}`],own=round?.answers?.[v.role];
@@ -26,11 +44,10 @@ export function DuelPlayer({controller:c,learning,shell,autoNext,onAutoNext}:{co
       if(event.key==='Enter'&&own&&!competitive&&target!==input.current){event.preventDefault();c.next();}
     };document.addEventListener('keydown',handler);return()=>document.removeEventListener('keydown',handler);
   },[c,q,v.phase,blocked,exit,own,competitive]);
-  const summary=summarizeDuel(room);
   const meaning=q.kind==='vocab-meaning'||q.kind==='kanji-meaning',reverse=q.kind==='vocab-reverse';
   const question=duelQuestionModel(questionView(q),v.index,room.v2.manifest!.questions.length,v.remainingMs,room.v2.settings.durationMs,v.phase==='countdown'?(v.startAt??c.now)-c.now:undefined);
   const answer:QuizAnswerState=own?{status:'answered',outcome:own.outcome,selectedId:own.response?.type==='choice'?own.response.choiceId:undefined,typedValue:own.response?.type==='typed'?own.response.value:undefined,correctId:q.correctChoiceId}:{status:'unanswered'};
-  const status=<div className="quiz-stack"><div className="quiz-duel-score" aria-label="Match score"><span>{room.hostName} · {competitive?summary.host.points:summary.host.correct}</span><span>{room.guestName} · {competitive?summary.guest.points:summary.guest.correct}</span></div>
+  const status=<div className="quiz-stack duel-match-status">
     {!c.connected&&<p className="quiz-notice" role="status">Your connection was lost. Reconnecting… The room deadline keeps running.</p>}
     {v.opponentDisconnected&&<p className="quiz-notice" role="status">Your friend lost connection. Reconnecting…</p>}
     {v.canEndForConnection&&<button className="quiz-btn quiz-btn--secondary" onClick={()=>void c.endConnection()}>End this interrupted match</button>}
@@ -42,9 +59,9 @@ export function DuelPlayer({controller:c,learning,shell,autoNext,onAutoNext}:{co
     whyOpen={why} onToggleWhy={()=>{c.cancelAuto();setWhy(!why);}} onInteract={c.cancelAuto}
     autoNext={!competitive&&own.outcome==='correct'&&autoNext?{phase:c.autoCancelled?'paused':'counting',label:c.autoCancelled?'Auto-next paused':'Next in 1.6s',durationMs:1600}:undefined} onPauseAutoNext={c.cancelAuto}/>
     :locked?<section className="quiz-feedback"><p className="quiz-body">{round?.winner?'Your friend claimed this round.':'This round ended without a point.'} No answer was recorded for you.</p><p className="quiz-body">Answer: {q.reveal.answer}</p></section>:undefined;
-  return <QuizPlayer question={question} answer={answer} typedValue={c.draft} autoNextEnabled={autoNext} blocked={blocked} announcement={own?`${own.outcome}. Answer: ${q.reveal.answer}.`:locked?'Round resolved. No answer recorded for you.':''} status={status} feedback={feedback} inputRef={input} promptRef={prompt}
+  return <QuizPlayer label="Friendly duel question" exitLabel="Leave duel" lead={<DuelScoreboard room={room} uid={c.uid}/>} responseLocked={locked} question={question} answer={answer} typedValue={c.draft} autoNextEnabled={autoNext} blocked={blocked} announcement={own?`${own.outcome}. Answer: ${q.reveal.answer}.`:locked?'Round resolved. No answer recorded for you.':''} status={status} feedback={feedback} inputRef={input} promptRef={prompt}
     headerActions={<QuizMoreMenu competitive={competitive} speechEnabled={shell.speechEnabled} onSpeechChange={shell.onSpeechChange} autoNext={autoNext} onAutoNextChange={onAutoNext} onOpen={c.cancelAuto}/>}
     footerOverride={competitive&&(own||locked)?<button className="quiz-btn quiz-btn--primary quiz-btn--block" aria-disabled={!locked||c.now<(round.lockedAt??0)+1600||!c.connected} onClick={()=>{if(locked&&c.now>=(round.lockedAt??0)+1600&&c.connected)c.next();}}>{locked?'Next shared round':'Waiting for the round to resolve'}</button>:undefined}
-    shell={{...shell,keyboardOpen:!!frame,liveViewport:frame??{},onCompanionInteract:c.cancelAuto,overlay:exit?<StudioSheet title="Leave this duel?" closeLabel="Keep playing" onClose={()=>setExit(false)} footer={<button className="quiz-btn quiz-btn--primary" onClick={()=>void c.leave().then(ok=>{if(ok)setExit(false);})}>Leave and keep partial results</button>}><p className="quiz-body">The shared clock keeps running. Leaving ends this match with the answers already confirmed.</p></StudioSheet>:undefined,modalOpen:exit}}
+    shell={{...shell,presentation:'duel-match',keyboardOpen:!!frame,liveViewport:frame??{},onCompanionInteract:c.cancelAuto,overlay:exit?<StudioSheet title="Leave this duel?" closeLabel="Keep playing" onClose={()=>setExit(false)} footer={<button className="quiz-btn quiz-btn--primary" aria-disabled={c.busy||!c.connected} onClick={()=>{if(!c.busy&&c.connected)void c.leave().then(ok=>{if(ok)setExit(false);});}}>Leave and keep partial results</button>}><p className="quiz-body">The shared clock keeps running. Leaving ends this match with the answers already confirmed.</p>{c.error&&<p className="quiz-notice" role="alert">{c.error}</p>}{!c.connected&&<p className="quiz-notice" role="status">Reconnecting before the room can confirm that you left.</p>}</StudioSheet>:undefined,modalOpen:exit}}
     actions={{onChoose:choiceId=>{if(!blocked)void c.submit({type:'choice',choiceId});},onTypedChange:c.setDraft,onSubmitTyped:event=>{event?.stopPropagation();if(!blocked&&c.draft.trim())void c.submit({type:'typed',value:c.draft});},onNext:c.next,onExit:()=>setExit(true),onFeedbackFocus:c.cancelAuto,onAutoNextChange:onAutoNext}}/>;
 }

@@ -251,7 +251,7 @@ export interface DuelPublicPool {
 }
 export interface DuelSettings {
   readonly subject: Subject; readonly kind: DuelKind; readonly pool: DuelPublicPool;
-  readonly count: 5 | 10 | 20; readonly difficulty: DuelDifficulty;
+  readonly count: 5 | 10 | 20 | 'all'; readonly difficulty: DuelDifficulty;
   readonly durationMs: number; readonly mode: 'competitive' | 'parallel';
 }
 export interface DuelManifest { readonly schemaVersion: 1; readonly settingsRevision: number; readonly questions: readonly Question[] }

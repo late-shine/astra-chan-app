@@ -107,7 +107,7 @@ check("defaults are self-consistent (sanitize keeps every key)",
   PREFERENCE_KEYS.every((key) => key in sanitizePreferenceValues(DEFAULT_PREFERENCES)));
 check("every preference has a storage key", PREFERENCE_KEYS.every((key) => !!PREFERENCE_STORAGE_KEYS[key]));
 check("storage keys are unique", new Set(Object.values(PREFERENCE_STORAGE_KEYS)).size === PREFERENCE_KEYS.length);
-check("six themes", THEME_IDS.length === 6);
+check("six app palettes independent of quiz appearance", THEME_IDS.length === 6);
 
 const garbage = sanitizePreferenceValues({
   theme: "neon", fontStyle: 5, language: "fr", showRomaji: "yes", bgBlur: 99, bgOpacity: null,
