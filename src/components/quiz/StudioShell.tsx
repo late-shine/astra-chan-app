@@ -1,3 +1,4 @@
+import { AtelierRoom } from "./AtelierRoom";
 // QZ5A Rainlit Atelier. One scrolling region, bounded companion, and attached study actions.
 // All colours come from the --quiz-* tokens in src/index.css, which are scoped to `.quiz-studio`.
 // Nothing here reads stats, storage, SRS or the network.
@@ -6,9 +7,9 @@
 // dialog from 768 px; focus trap, Escape, focus returns to the launcher) and StudioMark (the small
 // four-point Astra star).
 
-import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useRef, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { ChevronLeft, X } from "lucide-react";
-import { studyScene, studyTheme, studyTokens, STUDY_LABELS } from "../../appearance";
+import { studyTheme, studyTokens, STUDY_LABELS } from "../../appearance";
 import { useAppearance, AppearanceShortcut } from "../Appearance";
 import { QuizCompanion } from "./QuizCompanion";
 import type { QuizCompanionView, QuizThemeId } from "./viewTypes";
@@ -65,21 +66,6 @@ export interface StudioShellProps {
   onCompanionInteract?: () => void;
   /** Fixture-only failure state. Production uses image error handlers. */
   artUnavailable?: boolean;
-}
-
-function AtelierRoom({ unavailable, theme }: { unavailable: boolean; theme: string }) {
-  const [failed, setFailed] = useState<string[]>([]);
-  const requested = studyTheme(theme);
-  const selected = failed.includes(requested) ? 'rainy-atelier' : requested;
-  const { desktop, mobile } = studyScene(selected);
-  if (unavailable || failed.includes(selected)) return null;
-  return <picture key={selected} className="quiz-room" aria-hidden="true">
-    {mobile.webpSrcSet && <source media="(max-width: 767px)" type="image/webp" srcSet={mobile.webpSrcSet} sizes="100vw" />}
-    <source media="(max-width: 767px)" srcSet={mobile.srcSet} sizes="100vw" />
-    {desktop.webpSrcSet && <source type="image/webp" srcSet={desktop.webpSrcSet} sizes="100vw" />}
-    <img src={desktop.src} srcSet={desktop.srcSet} sizes="100vw" width={desktop.width} height={desktop.height}
-      alt="" fetchPriority="high" decoding="async" draggable={false} onError={() => setFailed(prior => [...prior, selected])} />
-  </picture>;
 }
 
 export function StudioShell({

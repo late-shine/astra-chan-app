@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ATELIER_SCENES } from '../quiz/atelierAssets';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { AtelierRoom } from '../components/quiz/AtelierRoom';
+import { useAppearance } from '../components/Appearance';
 import { approach, documentJourney, mediaPlane, seekFrame, smooth, timeline, journeySettleTarget, journeyCrossing } from './timeline.js';
 import { createInk } from './ink.js';
 import './entrance.css';
@@ -21,7 +22,13 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
   const coverageCallback = useRef(onCoverChange);
   coverageCallback.current = onCoverChange;
   const variant = portrait ? 'mobile' : 'desktop';
-  const roomUrl = ATELIER_SCENES[variant].webp;
+  const { theme } = useAppearance();
+  const washImage = useRef<HTMLImageElement | null>(null);
+  const refreshInk = useRef<(() => void) | null>(null);
+  const attachWashImage = useCallback((image: HTMLImageElement | null) => {
+    washImage.current = image;
+    refreshInk.current?.();
+  }, []);
   const posterUrl = `/assets/entrance/room-${variant}.webp`;
 
   useEffect(() => {
@@ -49,7 +56,7 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
     let plane = mediaPlane(innerWidth, height, portrait), initialScale = plane.startScale, initialY = 0;
     let ink: ReturnType<typeof createInk> | null = null, available = false;
     let wasActive = false, wasCovered = false;
-    const bg = new Image();
+    let textureSource = '';
     setMediaState('loading'); setPosterFailed(false);
     setPosterReady(poster.current!.complete && poster.current!.naturalWidth > 0);
     v.style.opacity = '0';
@@ -209,9 +216,22 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
       // No idle animation loop. Scroll, resize, and decoder events wake us.
       if (p !== target) raf = requestAnimationFrame(tick);
     }
-    const initInk = () => {
-      if (!live || reduced || !bg.naturalWidth) return;
-      try { ink = createInk(cv, bg); ink.resize(width, height); available = true; } catch { available = false; }
+    const syncInk = () => {
+      const image = washImage.current;
+      const source = image?.complete && image.naturalWidth ? image.currentSrc : '';
+      if (!live || reduced || (available && source === textureSource)) return;
+      ink?.dispose();
+      ink = null;
+      available = false;
+      cv.style.opacity = '0';
+      textureSource = source;
+      if (image && source) {
+        try {
+          ink = createInk(cv, image);
+          ink.resize(width, height);
+          available = true;
+        } catch { /* The same picture supplies the crossfade without WebGL. */ }
+      }
       wake();
     };
     const onData = () => {
@@ -237,7 +257,7 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
     };
     const contextLost = (e: Event) => { e.preventDefault(); available = false; wake(); };
     end.inert = true;
-    bg.onload = initInk; bg.src = roomUrl;
+    refreshInk.current = syncInk;
     cv.addEventListener('webglcontextlost', contextLost);
     v.addEventListener('loadeddata', onData); v.addEventListener('seeked', onSeeked); v.addEventListener('error', fail);
     if (!reduced) { v.src = `/assets/entrance/room-${variant}.mp4`; v.load(); watchdog = window.setTimeout(fail, 12000); }
@@ -254,11 +274,12 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
     observer.observe(el.parentElement!);
     if (app) observer.observe(app);
     measure();
+    syncInk();
     // The cue advances a little; only Skip explicitly jumps to the destination.
     advance.current = () => window.scrollTo({ top: Math.min(endScroll, window.scrollY + height * .65), behavior: reduced ? 'instant' : 'smooth' });
     skip.current = () => { cancelSettle(); landingUntil = 0; lastScroll = endScroll; pendingFocus = true; p = 1; window.scrollTo({ top: endScroll, behavior: 'instant' }); wake(); };
     return () => {
-      live = false; cancelSettle(); cancelAnimationFrame(raf); window.clearTimeout(watchdog); bg.onload = null; observer.disconnect();
+      live = false; cancelSettle(); cancelAnimationFrame(raf); window.clearTimeout(watchdog); refreshInk.current = null; observer.disconnect();
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('wheel', interrupt);
       window.removeEventListener('touchstart', touchStart);
@@ -272,13 +293,15 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
       particles?.style.removeProperty('opacity');
       coverageCallback.current(false);
     };
-  }, [portrait, reduced, variant, roomUrl]);
+  }, [portrait, reduced, variant]);
 
   return <section ref={root} className="astra-entrance" data-poster-ready={posterReady} aria-label="Astra’s room entrance">
     <div ref={stage} className="astra-entrance__stage">
       <div className="astra-entrance__mat" />
       <div className="astra-entrance__shadows" aria-hidden="true" />
-      <div className="astra-entrance__room" style={{ backgroundImage: `url(${roomUrl})` }} />
+      <div className="astra-entrance__room" aria-hidden="true">
+        <AtelierRoom theme={theme} imageRef={attachWashImage} onImageLoad={() => refreshInk.current?.()} />
+      </div>
       <div ref={frame} className="astra-entrance__frame">
         <img key={posterUrl} ref={poster} src={posterUrl} onLoad={() => setPosterReady(true)} onError={() => { setPosterReady(false); setPosterFailed(true); }} alt="Astra waits beside an open book in her softly lit room." />
         <video ref={video} muted playsInline preload="auto" aria-hidden="true" disablePictureInPicture />
