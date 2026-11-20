@@ -46,27 +46,24 @@
 }
 .reading-book button, .reading-book summary { cursor: pointer; }
 .reading-book button:disabled { cursor: default; }
-.reading-book :is(button,summary):focus-visible { outline: 3px solid #936327; outline-offset: 3px; }
+.reading-book button:focus-visible, .reading-book summary:focus-visible { outline: 3px solid #936327; outline-offset: 3px; }
 .book-endpaper button:focus-visible, .book-nav button:focus-visible { outline-color: #ffe1a6; }
 .book-nav { display: flex; align-items: center; gap: 22px; position: relative; margin: 0 0 clamp(38px,5vw,62px); }
 .book-nav::after { content: ""; height: 1px; flex: 1; background: linear-gradient(90deg,#e9d2ad90,transparent); }
 .book-nav::after { order: 1; }
 .book-appearance { position: relative; z-index: 3; order: 2; }
-.book-appearance summary { display: flex; align-items: center; gap: .5rem; min-height: 44px; padding: .4rem .75rem;
+.book-appearance-trigger { display: flex; align-items: center; gap: .5rem; min-height: 44px; padding: .4rem .75rem;
   border: 1px solid #b09b80; border-radius: 4px; background: #29242de8; color: #fff1d8; font-size: .82rem; list-style: none; }
-.book-appearance summary::-webkit-details-marker { display: none; }
 .book-appearance-panel { position: absolute; inset-inline-end: 0; top: calc(100% + 6px); display: grid; gap: 1rem;
   padding: 1rem; width: min(20rem,calc(100vw - 4rem)); border-radius: 6px; border: 1px solid var(--rule);
   color: var(--ink); background: var(--page); box-shadow: 0 10px 24px #1d162955; font: 600 .82rem/1.45 system-ui,sans-serif; }
 .book-appearance-panel select { display: block; width: 100%; margin-top: .35rem; min-height: 42px; padding: .35rem;
   background: var(--gloss); color: var(--ink); border: 1px solid var(--muted); border-radius: 4px; font: inherit; }
-.book-appearance-panel select:focus-visible,.book-swatches input:focus-visible + span { outline: 3px solid var(--violet-ink); outline-offset: 2px; }
+.book-appearance-panel select:focus-visible,.book-swatches button:focus-visible { outline: 3px solid var(--violet-ink); outline-offset: 2px; }
 .book-swatches { display: grid; grid-template-columns: repeat(3,1fr); gap: .35rem; margin-top: .35rem; }
-.book-swatches label { position: relative; cursor: pointer; }
-.book-swatches input { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); }
-.book-swatches span { display: grid; justify-items: center; align-content: center; gap: .3rem; min-height: 58px;
+.book-swatches button { display: grid; justify-items: center; align-content: center; gap: .3rem; min-height: 58px;
   padding: .25rem; border: 1px solid var(--rule); border-radius: 4px; text-align: center; font-size: .76rem; }
-.book-swatches input:checked + span { background: var(--gloss); border-color: var(--violet-ink); box-shadow: inset 0 0 0 1px var(--violet-ink); }
+.book-swatches button[aria-pressed="true"] { background: var(--gloss); border-color: var(--violet-ink); box-shadow: inset 0 0 0 1px var(--violet-ink); }
 .book-swatches i { width: 25px; height: 15px; border: 1px solid #8a8074; border-radius: 2px; background: linear-gradient(90deg,#47354d 35%,#f5eee2 35%); }
 .book-swatches [data-swatch="moss"] { background: linear-gradient(90deg,#2b4339 35%,#e9eadb 35%); }
 .book-swatches [data-swatch="moonlight"] { background: linear-gradient(90deg,#323d58 35%,#262b37 35%); }
@@ -196,8 +193,8 @@ html.font-written .book-text p[lang="ja"] { font-family: var(--font-serif); }
   .reading-book { padding-top: 6px; }
   .book-nav { justify-content: space-between; gap: 6px; margin: 0 0 clamp(30px,7svh,60px); }
   .book-nav::after { display: none; }
-  .book-appearance summary { width: 42px; justify-content: center; padding: 0; }
-  .book-appearance summary span { display: none; }
+  .book-appearance-trigger { width: 42px; justify-content: center; padding: 0; }
+  .book-appearance-trigger span { display: none; }
   .book-nav button { padding: .4rem .55rem; font-size: .76rem; }
   .book-masthead { gap: .2rem; font-size: clamp(1rem,4.3vw,1.45rem); }
   .book-masthead img { width: 29px; }
