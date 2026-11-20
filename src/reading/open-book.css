@@ -44,6 +44,42 @@
   --binding: #20283e; --endpaper: #323d58; --ribbon: #7882a2; --page: #262b37; --lamplight: #343947;
   --gutter: #1b1e2a; --folio: #d6c59e; --gloss: #383e4e; --page-hover: #434958; --violet-ink: #d6b3f1;
 }
+/* Soft, low-glare night palettes for late study. Same variable set as moonlight. */
+.reading-book[data-palette="amber"] {
+  --ink: #ebdfcf; --muted: #c3b29d; --rule: #6a5a4b; --plum: #6a4a3a; --primary-hover: #7a5845;
+  --binding: #1f1a17; --endpaper: #3a2e28; --ribbon: #a0754f; --page: #2a2420; --lamplight: #3a3029;
+  --gutter: #1c1815; --folio: #dcbb82; --gloss: #372f29; --page-hover: #463b33; --violet-ink: #e6bd8c;
+}
+.reading-book[data-palette="pine"] {
+  --ink: #e0e9df; --muted: #b2c1b7; --rule: #4f635b; --plum: #3f6455; --primary-hover: #4a7463;
+  --binding: #141d1b; --endpaper: #2a3d37; --ribbon: #6f9a86; --page: #1f2a27; --lamplight: #2c3b36;
+  --gutter: #151e1c; --folio: #cfca95; --gloss: #2b3935; --page-hover: #394b45; --violet-ink: #a9d8c0;
+}
+.reading-book[data-palette="wisteria"] {
+  --ink: #e9e4f0; --muted: #c0b8cf; --rule: #625a7a; --plum: #594a80; --primary-hover: #68588f;
+  --binding: #1c1828; --endpaper: #382f50; --ribbon: #8f7bb8; --page: #2a2536; --lamplight: #393250;
+  --gutter: #1a1624; --folio: #dccaa0; --gloss: #352f46; --page-hover: #443c59; --violet-ink: #d3bcf6;
+}
+.reading-book[data-palette="rose"] {
+  --ink: #ecdfe0; --muted: #c4b3b6; --rule: #6d5a60; --plum: #7a4a5c; --primary-hover: #895669;
+  --binding: #1f181b; --endpaper: #40303a; --ribbon: #b07a8c; --page: #2c2528; --lamplight: #3c2f34;
+  --gutter: #1b1518; --folio: #e2c29c; --gloss: #3a2e33; --page-hover: #4a3b41; --violet-ink: #f2bccb;
+}
+.reading-book[data-palette="graphite"] {
+  --ink: #e5e7e6; --muted: #b6bcbd; --rule: #5a6165; --plum: #4b5b63; --primary-hover: #566871;
+  --binding: #1a1d1f; --endpaper: #353c41; --ribbon: #7f949c; --page: #272a2d; --lamplight: #343a3e;
+  --gutter: #181b1c; --folio: #d4c69d; --gloss: #33383c; --page-hover: #41484d; --violet-ink: #bcd8e2;
+}
+.reading-book[data-palette="lagoon"] {
+  --ink: #dde9ea; --muted: #b0c2c5; --rule: #4d6568; --plum: #35686b; --primary-hover: #3f7578;
+  --binding: #121e20; --endpaper: #27403f; --ribbon: #6aa3a5; --page: #1d2b2e; --lamplight: #293b3e;
+  --gutter: #141e20; --folio: #d2c99a; --gloss: #293a3d; --page-hover: #37494c; --violet-ink: #a3dadc;
+}
+/* Dark pages: swap the hard-coded cream rules and page edges for palette-matched ones so nothing glares. */
+.reading-book:is([data-palette="amber"],[data-palette="pine"],[data-palette="wisteria"],[data-palette="rose"],[data-palette="graphite"],[data-palette="lagoon"]) .book-folio::after { background: var(--rule); }
+.reading-book:is([data-palette="amber"],[data-palette="pine"],[data-palette="wisteria"],[data-palette="rose"],[data-palette="graphite"],[data-palette="lagoon"]) .book-title { border-bottom-color: var(--rule); }
+.reading-book:is([data-palette="amber"],[data-palette="pine"],[data-palette="wisteria"],[data-palette="rose"],[data-palette="graphite"],[data-palette="lagoon"]) .book-page { box-shadow: 1px 1px color-mix(in srgb,var(--page),white 12%), 2px 3px color-mix(in srgb,var(--page),black 35%),
+  3px 4px color-mix(in srgb,var(--page),white 7%), 4px 6px color-mix(in srgb,var(--page),black 40%); }
 .reading-book button, .reading-book summary { cursor: pointer; }
 .reading-book button:disabled { cursor: default; }
 .reading-book button:focus-visible, .reading-book summary:focus-visible { outline: 3px solid #936327; outline-offset: 3px; }
@@ -55,18 +91,30 @@
 .book-appearance-trigger { display: flex; align-items: center; gap: .5rem; min-height: 44px; padding: .4rem .75rem;
   border: 1px solid #b09b80; border-radius: 4px; background: #29242de8; color: #fff1d8; font-size: .82rem; list-style: none; }
 .book-appearance-panel { position: absolute; inset-inline-end: 0; top: calc(100% + 6px); display: grid; gap: 1rem;
+  grid-template-columns: minmax(0,1fr); box-sizing: border-box;
   padding: 1rem; width: min(20rem,calc(100vw - 4rem)); border-radius: 6px; border: 1px solid var(--rule);
+  max-height: min(36rem,calc(100dvh - 8rem)); overflow-y: auto; overscroll-behavior: contain;
   color: var(--ink); background: var(--page); box-shadow: 0 10px 24px #1d162955; font: 600 .82rem/1.45 system-ui,sans-serif; }
-.book-appearance-panel select { display: block; width: 100%; margin-top: .35rem; min-height: 42px; padding: .35rem;
+.book-appearance-panel > * { min-width: 0; }
+.book-appearance-panel label { display: block; }
+.book-appearance-panel fieldset { min-inline-size: 0; margin: 0; padding: 0; border: 0; }
+.book-appearance-panel legend { padding: 0; }
+.book-appearance-panel select { display: block; box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; margin-top: .35rem; text-overflow: ellipsis; min-height: 42px; padding: .35rem;
   background: var(--gloss); color: var(--ink); border: 1px solid var(--muted); border-radius: 4px; font: inherit; }
 .book-appearance-panel select:focus-visible,.book-swatches button:focus-visible { outline: 3px solid var(--violet-ink); outline-offset: 2px; }
-.book-swatches { display: grid; grid-template-columns: repeat(3,1fr); gap: .35rem; margin-top: .35rem; }
-.book-swatches button { display: grid; justify-items: center; align-content: center; gap: .3rem; min-height: 58px;
-  padding: .25rem; border: 1px solid var(--rule); border-radius: 4px; text-align: center; font-size: .76rem; }
+.book-swatches { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: .35rem; margin-top: .35rem; }
+.book-swatches button { display: grid; justify-items: center; align-content: center; gap: .3rem; min-height: 58px; min-width: 0;
+  padding: .25rem; overflow-wrap: anywhere; line-height: 1.25; border: 1px solid var(--rule); border-radius: 4px; text-align: center; font-size: .76rem; }
 .book-swatches button[aria-pressed="true"] { background: var(--gloss); border-color: var(--violet-ink); box-shadow: inset 0 0 0 1px var(--violet-ink); }
 .book-swatches i { width: 25px; height: 15px; border: 1px solid #8a8074; border-radius: 2px; background: linear-gradient(90deg,#47354d 35%,#f5eee2 35%); }
 .book-swatches [data-swatch="moss"] { background: linear-gradient(90deg,#2b4339 35%,#e9eadb 35%); }
 .book-swatches [data-swatch="moonlight"] { background: linear-gradient(90deg,#323d58 35%,#262b37 35%); }
+.book-swatches [data-swatch="amber"] { background: linear-gradient(90deg,#3a2e28 35%,#2a2420 35%); }
+.book-swatches [data-swatch="pine"] { background: linear-gradient(90deg,#2a3d37 35%,#1f2a27 35%); }
+.book-swatches [data-swatch="wisteria"] { background: linear-gradient(90deg,#382f50 35%,#2a2536 35%); }
+.book-swatches [data-swatch="rose"] { background: linear-gradient(90deg,#40303a 35%,#2c2528 35%); }
+.book-swatches [data-swatch="graphite"] { background: linear-gradient(90deg,#353c41 35%,#272a2d 35%); }
+.book-swatches [data-swatch="lagoon"] { background: linear-gradient(90deg,#27403f 35%,#1d2b2e 35%); }
 .book-nav button, .book-masthead { display: inline-flex; align-items: center; gap: .6rem; color: #fff1d8; }
 .book-nav button { min-height: 42px; padding: .5rem .9rem; border: 1px solid #b09b80; background: #29242de8; border-radius: 4px; font-size: .82rem; }
 .book-masthead { font: 500 clamp(1.45rem,3vw,2.25rem)/1.08 Georgia,serif; letter-spacing: -.025em; text-shadow: 0 1px 4px #130f19, 0 1px 12px #100d17; }

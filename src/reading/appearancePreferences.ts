@@ -1,7 +1,7 @@
 export const studyWindows = ["misty-sakura", "sakura-train", "night-sparkler", "rainy-window"] as const;
 export const landscapeWindows = ["forgotten-railway", "morning-lilies", "quiet-afternoon"] as const;
 export const readingWindows = ["follow", ...studyWindows, ...landscapeWindows] as const;
-export const bookPalettes = ["lamplight", "moss", "moonlight"] as const;
+export const bookPalettes = ["lamplight", "moss", "moonlight", "amber", "pine", "wisteria", "rose", "graphite", "lagoon"] as const;
 export const windowTransitions = ["dissolve", "instant"] as const;
 
 export interface ReadingAppearance {

@@ -9,6 +9,8 @@ const names = {
   "forgotten-railway": ["Forgotten Railway", "忘れられた鉄道"], "morning-lilies": ["Morning Lilies", "朝のユリ"],
   "quiet-afternoon": ["Quiet Afternoon", "静かな午後"], lamplight: ["Lamplight", "灯火"], moss: ["Moss & Linen", "苔とリネン"],
   moonlight: ["Moonlit Ink", "月夜のインク"],
+  amber: ["Amber Hearth", "琥珀の炉辺"], pine: ["Pine Night", "松の夜"], wisteria: ["Wisteria Dusk", "藤の黄昏"],
+  rose: ["Rose Ash", "薄紅の灰"], graphite: ["Graphite Mist", "墨色の霧"], lagoon: ["Quiet Lagoon", "静かな入り江"],
 };
 
 export function ReadingAppearanceSettings({ value, change, ja }: {
