@@ -32,6 +32,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { THEME_IDS, splitThemePreferences, type ThemeId } from './themeIds';
+import { bookPalettes, readingWindows, windowTransitions, defaultReadingAppearance, type ReadingAppearance } from "./reading/appearancePreferences";
 export { THEME_IDS, type ThemeId } from './themeIds';
 
 import { DEFAULT_CLOUD_JAPANESE_VOICE, getCloudJapaneseVoice } from "./voiceCatalog";
@@ -51,7 +52,7 @@ export type BgOpacity = typeof BG_OPACITIES[number];
 export const KANJI_FORMS = ["auto", "digital", "written", "compare"] as const;
 export type KanjiFormPreference = typeof KANJI_FORMS[number];
 
-export interface UserPreferences extends QuizPreferences {
+export interface UserPreferences extends QuizPreferences, ReadingAppearance {
   theme: ThemeId;
   fontStyle: "digital" | "written";
   language: "en" | "ja";
@@ -95,6 +96,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   bgOpacity: "medium",
   autoCycleBg: true,
   ...DEFAULT_QUIZ_PREFERENCES,
+  ...defaultReadingAppearance,
 };
 
 /** Fixed key order: makes serializePreferences() a stable comparison key. */
@@ -125,6 +127,9 @@ export const PREFERENCE_STORAGE_KEYS: Record<keyof UserPreferences, string> = {
   bgOpacity: "hira_theme_bg_opacity",
   autoCycleBg: "astra_auto_cycle_bg",
   ...QUIZ_STORAGE_KEYS,
+  readingWindow: "astra_reading_window",
+  readingPalette: "astra_reading_palette",
+  readingTransition: "astra_reading_transition",
 };
 
 /** New key: the local copy of the synced envelope (values + updatedAt). */
@@ -142,6 +147,9 @@ function oneOf<T extends string>(list: readonly T[], value: unknown): T | undefi
 function validateValue<K extends keyof UserPreferences>(key: K, value: unknown): UserPreferences[K] | undefined {
   let result: unknown;
   switch (key) {
+    case "readingWindow": result = oneOf(readingWindows, value); break;
+    case "readingPalette": result = oneOf(bookPalettes, value); break;
+    case "readingTransition": result = oneOf(windowTransitions, value); break;
     case "theme": result = oneOf(THEME_IDS, value); break;
     case "fontStyle": result = oneOf(["digital", "written"] as const, value); break;
     case "language": result = oneOf(["en", "ja"] as const, value); break;

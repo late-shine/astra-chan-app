@@ -98,6 +98,8 @@ import ReferenceCharts, { type ChartsTabId } from "./components/ReferenceCharts"
 import InteractiveWorkbench, { type SandboxMode } from "./components/InteractiveWorkbench";
 import GrammarDojo from "./components/GrammarDojo";
 import ReadingRoomScreen from "./components/ReadingRoomScreen";
+import { ReadingWindow } from "./components/ReadingWindow";
+import type { ReadingAppearance } from "./reading/appearancePreferences";
 import { DEFAULT_CLOUD_JAPANESE_VOICE, getCloudJapaneseVoice } from "./voiceCatalog";
 import {
   PREFERENCE_CHANGED_EVENT,
@@ -155,7 +157,6 @@ import bgSakuraTrain from "./assets/images/bg_sakura_train.jpg";
 import bgNightSparkler from "./assets/images/bg_night_sparkler.jpg";
 import bgRainyWindowAnime from "./assets/images/bg_rainy_window_anime.jpg";
 import astraReadingImg from "./assets/images/Astra-reading.png";
-import astraReadingClickedImg from "./assets/images/Astra-reading-clicked.png";
 
 // Native Audio Synthesizer for UI/UX feedback
 function playChime(success: boolean) {
@@ -324,9 +325,19 @@ export default function App() {
   const bgParallaxX = useTransform(parallaxX, (v) => v * -16);
   const bgParallaxY = useTransform(parallaxY, (v) => v * -10);
   // Screens navigation state
-  const [currentScreen, setCurrentScreen] = useState<"menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "sandbox" | "grammar-dojo" | "reading-room">("menu");
+  const [currentScreen, setCurrentScreen] = useState<"menu" | "quiz" | "kanji-scroll" | "profile" | "results" | "online-multiplayer" | "review-deck" | "vocab-quiz" | "kanji-quiz" | "charts" | "sandbox" | "grammar-dojo" | "reading-room">(() =>
+    window.history.state?.astraReadingOpen === true ? "reading-room" : "menu"
+  );
+  useEffect(() => {
+    const open = currentScreen === "reading-room";
+    if (open === (window.history.state?.astraReadingOpen === true)) return;
+    try {
+      window.history.replaceState({ ...window.history.state, astraReadingOpen: open }, "");
+    } catch { /* The local bookmark also works when returning through the Study Room. */ }
+  }, [currentScreen]);
   const [quizCompanionSpeech, setQuizCompanionSpeech] = useState(true);
   const [kanaLaunch, setKanaLaunch] = useState<KanaLaunch>("practice");
+  const readingRoomOpen = currentScreen === "reading-room";
   const studioQuiz = currentScreen === "quiz" || currentScreen === "results" || currentScreen === "vocab-quiz" || currentScreen === "kanji-quiz";
 
   /* ===== POLISH C4: REFERENCE CHARTS TOPIC AND SANDBOX ENTRY MODE (memory only) ===== */
@@ -748,6 +759,10 @@ export default function App() {
   };
   const [componentPrefs, setComponentPrefs] = useState<ComponentPreferences>(readComponentPreferences);
   const [quizPreferences, setQuizPreferences] = useState(() => pickQuizPreferences(initialPreferences));
+  const [readingAppearance, setReadingAppearance] = useState<ReadingAppearance>(() => ({
+    readingWindow: initialPreferences.readingWindow, readingPalette: initialPreferences.readingPalette,
+    readingTransition: initialPreferences.readingTransition,
+  }));
   useEffect(() => {
     window.addEventListener(PREFERENCE_CHANGED_EVENT, refreshComponentPrefs);
     return () => window.removeEventListener(PREFERENCE_CHANGED_EVENT, refreshComponentPrefs);
@@ -770,6 +785,7 @@ export default function App() {
     autoCycleBg,
     ...componentPrefs,
     ...quizPreferences,
+    ...readingAppearance,
   });
   const preferenceKey = serializePreferences(preferenceSnapshot);
   const preferenceSnapshotRef = useRef<UserPreferences>(preferenceSnapshot);
@@ -785,7 +801,7 @@ export default function App() {
       preferenceKey !== serializePreferences(preferenceSnapshotRef.current)) return;
     lastSyncedPreferenceKeyRef.current = preferenceKey;
     const envelope: SyncedPreferences = { values: { ...preferenceSnapshotRef.current }, updatedAt: Date.now() };
-    writeLocalPreferences(pickQuizPreferences(preferenceSnapshotRef.current));
+    writeLocalPreferences({ ...pickQuizPreferences(preferenceSnapshotRef.current), ...readingAppearance });
     writePreferencesEnvelope(envelope);
     setStats((previous) => ({ ...previous, preferences: envelope }));
   }, [preferenceKey]);
@@ -793,6 +809,11 @@ export default function App() {
   /** Adopt synced values on this device (state + the existing localStorage keys). */
   const applyPreferenceValues = (values: Partial<UserPreferences>) => {
     writeLocalPreferences(values);
+    setReadingAppearance(previous => ({
+      readingWindow: values.readingWindow ?? previous.readingWindow,
+      readingPalette: values.readingPalette ?? previous.readingPalette,
+      readingTransition: values.readingTransition ?? previous.readingTransition,
+    }));
     setQuizPreferences(pickQuizPreferences(completePreferences(values, preferenceSnapshotRef.current)));
     if (values.theme !== undefined) setTheme(values.theme);
     if (values.fontStyle !== undefined) setFontStyle(values.fontStyle);
@@ -1651,15 +1672,15 @@ export default function App() {
     };
   };
 
-  const handleRecordReadingMiss = (token: ReadingToken) => {
+  const handleRecordReadingMiss = (token: ReadingToken, origin: { storyId: string; tokenIndex: number }) => {
     if (!token.dictKey || !token.reading || !token.meaning) return;
     const now = Date.now();
     setStats((previous) => {
       const current = previous.readingMisses || [];
       const existing = current.find((item) => item.dictKey === token.dictKey);
       const nextMisses = existing
-        ? current.map((item) => item.dictKey === token.dictKey ? { ...item, lastSeen: now, count: item.count + 1 } : item)
-        : [...current, { dictKey: token.dictKey, surface: token.surface, reading: token.reading!, meaning: token.meaning!, firstSeen: now, lastSeen: now, count: 1 }];
+        ? current.map((item) => item.dictKey === token.dictKey ? { ...item, origin, lastSeen: now, count: item.count + 1 } : item)
+        : [...current, { dictKey: token.dictKey, surface: token.surface, reading: token.reading!, meaning: token.meaning!, firstSeen: now, lastSeen: now, count: 1, origin }];
       const updated = { ...previous, readingMisses: nextMisses };
       return updated;
     });
@@ -1871,21 +1892,23 @@ export default function App() {
     return uid || "";
   };
 
-  const speakWithBrowserVoice = (phrase: string) => {
+  const speakWithBrowserVoice = (phrase: string, onEnd?: () => void) => {
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(phrase);
+      if (onEnd) { utterance.onend = onEnd; utterance.onerror = onEnd; }
       utterance.lang = "ja-JP";
       utterance.rate = 0.8;
       const selectedVoice = availableJapaneseVoices.find((voice) => voice.voiceURI === selectedJapaneseVoiceURI);
       if (selectedVoice) utterance.voice = selectedVoice;
       window.speechSynthesis.speak(utterance);
     } else {
+      onEnd?.();
       showToast("Sound synthesis is not supported on this device.");
     }
   };
 
-  const speakWithCloudVoice = async (phrase: string) => {
+  const speakWithCloudVoice = async (phrase: string, onEnd?: () => void) => {
     const requestId = ++cloudSpeechRequestRef.current;
     window.speechSynthesis?.cancel();
     cloudAudioRef.current?.pause();
@@ -1913,27 +1936,29 @@ export default function App() {
 
       if (requestId !== cloudSpeechRequestRef.current) return;
       const audio = new Audio(audioUrl);
+      if (onEnd) { audio.onended = onEnd; audio.onerror = onEnd; }
       cloudAudioRef.current = audio;
       await audio.play();
     } catch (error) {
+      if (requestId !== cloudSpeechRequestRef.current) return;
       console.warn("Gemini Japanese voice unavailable; using browser fallback.", error);
       if (!cloudFallbackNoticeRef.current) {
         cloudFallbackNoticeRef.current = true;
         showToast("Gemini voice unavailable. Using your browser voice instead.");
       }
-      speakWithBrowserVoice(phrase);
+      speakWithBrowserVoice(phrase, onEnd);
     }
   };
 
   // Uses the selected Gemini voice when requested, with the browser voice
   // engine as a free/offline fallback.
-  const speakJapanese = (phrase: string) => {
+  const speakJapanese = (phrase: string, onEnd?: () => void) => {
     if (speechVoiceMode === "cloud") {
-      void speakWithCloudVoice(phrase);
+      void speakWithCloudVoice(phrase, onEnd);
     } else {
       cloudSpeechRequestRef.current += 1;
       cloudAudioRef.current?.pause();
-      speakWithBrowserVoice(phrase);
+      speakWithBrowserVoice(phrase, onEnd);
     }
   };
 
@@ -3089,7 +3114,7 @@ export default function App() {
   // ──── RENDER ───────────────────────────────────────────────────────────────
   return (
     <AppearanceProvider theme={quizPreferences.quizAppearance} onChange={id => setQuizPreferences(previous => ({...previous, quizAppearance:id}))}>
-    <div data-entrance={entrancePhase} className={atelierScreen ? "relative w-full bg-natural-bg" : `min-h-screen text-natural-charcoal font-sans flex flex-col justify-between py-2 px-4 relative bg-natural-bg transition-colors duration-300 ${entranceConnected ? "astra-app--journey" : "overflow-x-hidden"}`}>
+    <div data-reading-room={readingRoomOpen || undefined} data-entrance={entrancePhase} className={atelierScreen ? "relative w-full bg-natural-bg" : `min-h-screen text-natural-charcoal font-sans flex flex-col justify-between py-2 px-4 relative bg-natural-bg transition-colors duration-300 ${entranceConnected ? "astra-app--journey" : "overflow-x-hidden"}`}>
       <input
         ref={progressUploadInputRef}
         type="file"
@@ -3105,7 +3130,9 @@ export default function App() {
         className="hidden"
       />
       {/* ===== FIXED MULTI-SCENE BACKGROUNDS (position:fixed prevents twitching on clicks) ===== */}
-      {!atelierScreen && (!entranceConnected || !roomCoversViewport) && <>
+      {readingRoomOpen && <ReadingWindow activeScene={activeBgScene} choice={readingAppearance.readingWindow}
+        transition={readingAppearance.readingTransition} blur={bgBlur} opacity={bgOpacity} />}
+      {!atelierScreen && !readingRoomOpen && (!entranceConnected || !roomCoversViewport) && <>
       <motion.div className="fixed inset-0 pointer-events-none select-none z-0 overflow-hidden" style={{ x: bgParallaxX, y: bgParallaxY, scale: 1.05 }}>
         {/* Scene 0 — Misty Sakura Path */}
         <div
@@ -3172,7 +3199,7 @@ export default function App() {
       </>}
 
       {/* Keep the fade host stable while the covered canvas stops its animation. */}
-      {!atelierScreen && <div className="astra-app-atmosphere" aria-hidden="true">
+      {!atelierScreen && !readingRoomOpen && <div className="astra-app-atmosphere" aria-hidden="true">
         {(!entranceConnected || !roomCoversViewport) && <AtmosphereCanvas
           animationType={bgAnimationType}
           intensity={bgIntensity}
@@ -3271,7 +3298,7 @@ export default function App() {
       <div className={atelierScreen ? "relative z-10 w-full" : `w-full ${(currentScreen === "charts" || currentScreen === "sandbox" || currentScreen === "grammar-dojo" || currentScreen === "reading-room") ? "max-w-5xl px-2 sm:px-4" : "max-w-4xl"} mx-auto flex-grow flex flex-col z-10 relative`} style={atelierScreen ? undefined : { paddingBottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" }}>
 
         {/* APP HEADER */}
-        {!atelierScreen && <header className="flex flex-col sm:flex-row items-center justify-between gap-4 py-3 border-b border-natural-border/60 mb-4">
+        {!atelierScreen && !readingRoomOpen && <header className="flex flex-col sm:flex-row items-center justify-between gap-4 py-3 border-b border-natural-border/60 mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 border border-natural-border rounded-xl bg-natural-card shadow-sm">
               <span className="text-xl font-bold font-serif text-natural-forest tracking-wider">あ</span>
@@ -3682,7 +3709,7 @@ export default function App() {
 
 
         {/* COMPANION STATUS BOARD */}
-        {!atelierScreen && (currentScreen === "menu" || currentScreen === "kanji-scroll" || currentScreen === "reading-room") && (
+        {!atelierScreen && (currentScreen === "menu" || currentScreen === "kanji-scroll") && (
         <div id="companion-section-wrapper" className="mb-4">
           <MascotCompanion
             mood={mascotMood}
@@ -3691,8 +3718,6 @@ export default function App() {
             selectedChar={currentScreen === "kanji-scroll" ? KANJI_DATA[currentKanjiIndex].kanji : undefined}
             speechOverride={mascotSpeechOverride}
             readingImage={astraReadingImg}
-            readingClickedImage={astraReadingClickedImg}
-            readingRoomActive={currentScreen === "reading-room"}
             onClickCompanion={handleMascotClick}
           />
         </div>
@@ -3781,34 +3806,43 @@ export default function App() {
 
           {/* ================= SCREEN: READING ROOM ================= */}
           {currentScreen === "reading-room" && (
-            <ReadingRoomScreen
-              onBack={() => {
-                setCurrentScreen("menu");
-                setMascotMood("idle");
-                setMascotSpeechOverride(null);
-              }}
-              language={language}
-              speakJapanese={speakJapanese}
-              addCard={addCard}
-              hasCard={hasCard}
-              onRecordReadingMiss={handleRecordReadingMiss}
-              showToast={showToast}
-              onReviewDeck={() => {
-                setCurrentScreen("review-deck");
-                setMascotMood("idle");
-                setMascotSpeechOverride(null);
-              }}
-              mascotMood={mascotMood}
-              onMascotClick={handleMascotClick}
-              onReadingStarted={() => {
-                setMascotMood("reading");
-                setMascotSpeechOverride(null);
-              }}
-              onReadingMiss={() => {
-                setMascotMood("reading");
-                setMascotSpeechOverride("That word felt difficult? It is okay. I will keep it here so we can study it together later.");
-              }}
-            />
+            <React.Fragment key={progressOwner ?? "unbound"}>
+              <ReadingRoomScreen
+                appearance={readingAppearance}
+                onAppearanceChange={patch => setReadingAppearance(previous => ({ ...previous, ...patch }))}
+                owner={progressOwner}
+                language={language}
+                speakJapanese={speakJapanese}
+                stopSpeech={() => {
+                  cloudSpeechRequestRef.current += 1;
+                  cloudAudioRef.current?.pause();
+                  window.speechSynthesis?.cancel();
+                }}
+                hasWord={key => quizReady && hasCard(key, "vocab")}
+                readingNotes={quizReady ? stats.readingMisses : undefined}
+                onSaveWord={(token, origin) => {
+                  if (!progressOwner || !quizReady || !isCurrentQuizOwner(progressOwner)) {
+                    showToast(language === "ja" ? "学習データの準備中です。" : "Your Review Deck is still loading.");
+                    return false;
+                  }
+                  if (!token.addToSrs || !token.dictKey || hasCard(token.dictKey, "vocab")) return false;
+                  addCard(token.dictKey, "vocab");
+                  handleRecordReadingMiss(token, origin);
+                  return true;
+                }}
+                onBack={() => {
+                  setCurrentScreen("menu");
+                  setMascotMood("idle");
+                  setMascotSpeechOverride(null);
+                }}
+                onReviewDeck={() => {
+                  setSrsQueue(getSessionQueue());
+                  setSrsQueueIndex(0);
+                  setSrsRevealed(false);
+                  setCurrentScreen("review-deck");
+                }}
+              />
+            </React.Fragment>
           )}
 
           {/* ================= SCREEN: SRS REVIEW DECK ================= */}
@@ -3826,7 +3860,7 @@ export default function App() {
           openPanel={dockPanel}
           onOpenPanelChange={setDockPanel}
           onPanelHeightChange={setDockPanelHeight}
-          quiet={dockQuiet}
+          quiet={dockQuiet || readingRoomOpen}
           isMusicPlaying={isMusicPlaying}
           musicVolume={musicVolume}
           selectedMusicTrack={selectedMusicTrack}

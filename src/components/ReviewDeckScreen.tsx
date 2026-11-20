@@ -3,6 +3,7 @@ import type React from "react";
 import { motion } from "motion/react";
 import { CheckCircle2, ChevronLeft, Flag, Minus, Settings2, X } from "lucide-react";
 import { KANJI_DATA, VOCABULARY_DATA } from "../data";
+import { readingVocabulary } from "../reading/readingData";
 import type { SRSCard, SrsSettings } from "../types";
 import {
   LEECH_LAPSE_THRESHOLD,
@@ -78,10 +79,14 @@ function formatNextDue(at: number, now: number): string {
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
+function findReviewWord(key: string) {
+  return VOCABULARY_DATA.find(word => word.word === key) ?? readingVocabulary.get(key);
+}
+
 /** What to show for a card in the Tricky cards list: the word or kanji and a short meaning. Falls back to the key. */
 function describeCard(card: SRSCard): { title: string; detail: string } {
   if (card.type === "vocab") {
-    const vocab = VOCABULARY_DATA.find((v) => v.word === card.itemKey);
+    const vocab = findReviewWord(card.itemKey);
     if (vocab) return { title: vocab.word, detail: `${vocab.hiragana !== vocab.word ? `${vocab.hiragana} · ` : ""}${vocab.english}` };
   } else if (card.type === "kanji") {
     const kanji = KANJI_DATA.find((k) => k.kanji === card.itemKey);
@@ -197,7 +202,7 @@ export default function ReviewDeckScreen({
             const [answeredThisSession, setAnsweredThisSession] = useState(0);
             const isDone = srsQueue.length === 0 || srsQueueIndex >= srsQueue.length;
             const currentCard = isDone ? null : srsQueue[srsQueueIndex];
-            const vocabData  = currentCard?.type === "vocab"  ? VOCABULARY_DATA.find(v => v.word  === currentCard.itemKey) ?? null : null;
+            const vocabData  = currentCard?.type === "vocab"  ? findReviewWord(currentCard.itemKey) ?? null : null;
             const kanjiData  = currentCard?.type === "kanji"  ? KANJI_DATA.find(k => k.kanji === currentCard.itemKey) ?? null : null;
             const remaining  = srsQueue.length - srsQueueIndex;
             const pct        = srsQueue.length > 0 ? (srsQueueIndex / srsQueue.length) * 100 : 100;

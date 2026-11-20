@@ -11,6 +11,7 @@ export interface ReadingToken {
 }
 
 export interface ReadingPassage {
+  easy?: boolean;
   id: string;
   title: string;
   titleJa: string;
@@ -44,7 +45,7 @@ const punctuation = (surface: string): ReadingToken => ({
   tappable: false,
 });
 
-export const SEED_READING_PASSAGES: ReadingPassage[] = [
+const originalStories: ReadingPassage[] = [
   {
     id: "morning-walk",
     title: "A Morning Routine & Walk",
@@ -519,6 +520,65 @@ export const SEED_READING_PASSAGES: ReadingPassage[] = [
   },
 ];
 
+const easyStories: ReadingPassage[] = [
+  {
+    id: "sleepy-cat", easy: true, title: "The Sleepy Cat", titleJa: "ねむいねこ",
+    translation: "There’s a cat. It’s a white cat. The cat sleeps on top of a book.",
+    tokens: [
+      word("ねこ", "ねこ", "cat", "猫"), grammar("が", "が", "marks what is here"),
+      word("います", "います", "is here (a living thing)", "いる"), punctuation("。"),
+      word("しろい", "しろい", "white", "白い"), word("ねこ", "ねこ", "cat", "猫"),
+      grammar("です", "です", "is"), punctuation("。"),
+      word("ねこ", "ねこ", "cat", "猫"), grammar("は", "わ", "marks what we’re talking about"),
+      word("ほん", "ほん", "book", "本"), grammar("の", "の", "links the book to the place on top of it"),
+      word("うえ", "うえ", "top / above", "上"), grammar("で", "で", "where something happens"),
+      word("ねます", "ねます", "sleeps", "寝る"), punctuation("。"),
+    ],
+  },
+  {
+    id: "two-apples", easy: true, title: "Two Apples", titleJa: "りんごがふたつ",
+    translation: "There are two apples. One is mine. The other one is Astra’s. We eat together.",
+    tokens: [
+      word("りんご", "りんご", "apple"), grammar("が", "が", "marks what is here"),
+      word("ふたつ", "ふたつ", "two things", "二つ"), word("あります", "あります", "there are (things)", "ある"), punctuation("。"),
+      word("ひとつ", "ひとつ", "one thing", "一つ"), grammar("は", "わ", "as for"),
+      word("わたし", "わたし", "I / me", "私"), grammar("の", "の", "shows ownership: mine here"),
+      grammar("です", "です", "is"), punctuation("。"),
+      word("もう", "もう", "another (in もうひとつ)"), word("ひとつ", "ひとつ", "one thing", "一つ"),
+      grammar("は", "わ", "as for"), word("アストラ", "あすとら", "Astra, your reading companion"),
+      grammar("の", "の", "shows ownership: Astra’s here"), grammar("です", "です", "is"), punctuation("。"),
+      word("いっしょに", "いっしょに", "together", "一緒に"), word("たべます", "たべます", "eat", "食べる"), punctuation("。"),
+    ],
+  },
+  {
+    id: "one-umbrella", easy: true, title: "One Umbrella", titleJa: "ひとつのかさ",
+    translation: "It’s raining. I don’t have an umbrella. Astra comes. The two of us share an umbrella.",
+    tokens: [
+      word("あめ", "あめ", "rain", "雨"), grammar("です", "です", "is"), punctuation("。"),
+      word("かさ", "かさ", "umbrella", "傘"), grammar("が", "が", "marks the thing that is missing"),
+      grammar("ありません", "ありません", "there isn’t one / I don’t have one"), punctuation("。"),
+      word("アストラ", "あすとら", "Astra, your reading companion"), grammar("が", "が", "marks who comes"),
+      word("きます", "きます", "comes", "来る"), punctuation("。"),
+      word("ふたり", "ふたり", "two people", "二人"), grammar("で", "で", "together as a group"),
+      word("かさ", "かさ", "umbrella", "傘"), grammar("に", "に", "marks where we go"),
+      word("はいります", "はいります", "go under (the umbrella)", "入る"), punctuation("。"),
+    ],
+  },
+];
+
+export const SEED_READING_PASSAGES: ReadingPassage[] = [...easyStories, ...originalStories];
+
 export function getPassageText(passage: ReadingPassage): string {
   return passage.tokens.map((token) => token.surface).join("");
+}
+
+// Keep each passage form with its own pronunciation when the main vocabulary catalog lacks the word.
+export const readingVocabulary = new Map<string, { word: string; hiragana: string; english: string; romaji: string }>();
+// Preserve the display form of existing cards when a starter story spells the same word in kana.
+for (const passage of [...originalStories, ...easyStories]) {
+  for (const token of passage.tokens) {
+    if (token.addToSrs && token.dictKey && token.meaning && token.reading && !readingVocabulary.has(token.dictKey)) {
+      readingVocabulary.set(token.dictKey, { word: token.surface, hiragana: token.reading, english: token.meaning, romaji: "" });
+    }
+  }
 }

@@ -110,6 +110,7 @@ export interface SrsSettings {
 }
 
 export interface ReadingMissRecord {
+  origin?: { storyId: string; tokenIndex: number };
   dictKey: string;
   surface: string;
   reading: string;
