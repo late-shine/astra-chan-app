@@ -6,6 +6,8 @@
 /* Keep this host mounted when the covered particle canvas stops rendering.
    Group-level screen blending preserves the particles' relation to the theme. */
 .astra-app-atmosphere { position: fixed; inset: 0; z-index: 0; pointer-events: none; mix-blend-mode: screen; }
+[data-room-covered="true"] .astra-app-backdrop,
+[data-room-covered="true"] .astra-app-atmosphere { visibility: hidden; }
 .astra-menu--journey, .astra-app--journey main > [role="region"] { transform: none !important; overflow: visible; }
 .astra-learn-content { transition: opacity 160ms ease, translate 160ms ease; }
 .astra-learn-content[data-leaving="true"] { opacity: 0; translate: 0 -6px; pointer-events: none; }

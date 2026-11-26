@@ -5,6 +5,7 @@ interface AtmosphereCanvasProps {
   intensity: "low" | "medium" | "high";
   theme: string;
   activeBgScene: number;
+  pausedRef?: React.RefObject<boolean>;
 }
 
 interface RainParticle {
@@ -85,7 +86,8 @@ export default function AtmosphereCanvas({
   animationType,
   intensity,
   theme,
-  activeBgScene
+  activeBgScene,
+  pausedRef
 }: AtmosphereCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -107,7 +109,7 @@ export default function AtmosphereCanvas({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    let animationId: number;
+    let animationId = 0;
     const dpr = window.devicePixelRatio || 1;
     let width = window.innerWidth;
     let height = window.innerHeight;
@@ -269,6 +271,10 @@ export default function AtmosphereCanvas({
 
     // Animation Loop
     const draw = () => {
+      if (pausedRef?.current) {
+        animationId = 0;
+        return;
+      }
       ctx.clearRect(0, 0, width, height);
 
       // Get latest targets
@@ -493,14 +499,29 @@ export default function AtmosphereCanvas({
         ctx.globalAlpha = 1.0;
       }
 
-      animationId = requestAnimationFrame(draw);
+      animationId = pausedRef?.current ? 0 : requestAnimationFrame(draw);
     };
 
-    draw();
+    const syncVisibility = () => {
+      if (pausedRef?.current) {
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+          animationId = 0;
+        }
+      } else if (!animationId) {
+        animationId = requestAnimationFrame(draw);
+      }
+    };
+
+    window.addEventListener("astra:atmosphere-visibility", syncVisibility);
+    if (!pausedRef?.current) {
+      draw();
+    }
 
     return () => {
+      window.removeEventListener("astra:atmosphere-visibility", syncVisibility);
       window.removeEventListener("resize", handleResize);
-      cancelAnimationFrame(animationId);
+      if (animationId) cancelAnimationFrame(animationId);
     };
   }, [intensity, theme]);
 

@@ -51,7 +51,7 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
     let loaded = false, failed = false, duration = 0, desiredTime = 0, lastRequested = -1;
     let settleTimer = 0, settleRaf = 0, snapping = false, touching = false;
     let lastScroll = window.scrollY, scrollDirection = 0, landingUntil = 0, landingPoint = 0;
-    let watchdog = 0, seekPending = false, pendingFocus = false;
+    let watchdog = 0, seekPending = false, pendingFocus = false, stalls = 0, inkTimer = 0;
     let width = 0, height = innerHeight, top = 0, endScroll = 0, settleStart = 0, contentWidth = 0;
     let plane = mediaPlane(innerWidth, height, portrait), initialScale = plane.startScale, initialY = 0;
     let ink: ReturnType<typeof createInk> | null = null, available = false;
@@ -144,12 +144,19 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
       v.pause(); v.removeAttribute('src'); v.load();
       window.clearTimeout(watchdog); setMediaState('failed'); wake();
     }
+    function recover() {
+      if (!live || failed || !loaded) return;
+      if (++stalls > 3) { fail(); return; }
+      lastRequested = -1;
+      try { v.currentTime = desiredTime; } catch { fail(); return; }
+      watchdog = window.setTimeout(recover, 4000);
+    }
     function seek() {
       if (!loaded || failed || reduced || v.seeking) return;
       const next = seekFrame(desiredTime, duration, v.currentTime, lastRequested);
       if (next !== null) {
         lastRequested = next; seekPending = true;
-        window.clearTimeout(watchdog); watchdog = window.setTimeout(fail, 4000);
+        window.clearTimeout(watchdog); watchdog = window.setTimeout(recover, 4000);
         try { v.currentTime = next; } catch { fail(); }
       }
     }
@@ -157,7 +164,14 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
       raf = 0; if (!live || document.hidden) return;
       const journey = documentJourney(window.scrollY, launchScroll.current, top, height, reduced);
       const covered = journey.takeover >= .999;
-      if (covered !== wasCovered) { wasCovered = covered; coverageCallback.current(covered); }
+      if (covered !== wasCovered) {
+        wasCovered = covered;
+        if (app) {
+          if (covered) app.dataset.roomCovered = 'true';
+          else delete app.dataset.roomCovered;
+        }
+        coverageCallback.current(covered);
+      }
       target = journey.story;
       const dt = previous ? Math.min((now - previous) / 1000, .05) : 1 / 60;
       previous = now;
@@ -166,6 +180,9 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
       if (Math.abs(p - target) < .0005) p = target;
       progress.current = p;
       const t = timeline(p);
+      if (t.ink > 0 && !available && !reduced && inkTimer) {
+        window.clearTimeout(inkTimer); inkTimer = 0; syncInk();
+      }
       desiredTime = t.video * Math.max(0, duration - 1 / 30); seek();
       // Layout expansion is tied directly to scroll, never to delayed video decoding.
       const expansion = reduced ? 0 : journey.takeover;
@@ -175,23 +192,24 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
       // fullscreen crop only after the stage is pinned to the viewport top.
       const y = initialY * (1 - expansion) + Math.min(0, plane.top) * ((reduced ? 0 : pinned) - expansion);
       card.style.transform = `translate3d(0,${y}px,0) scale(${scale})`;
-      el.style.setProperty('--entrance-radius', `${20 * (1 - expansion) / scale}px`);
+      // Keep per-frame custom properties on the stage so Practice descendants do not restyle every frame.
+      box.style.setProperty('--entrance-radius', `${20 * (1 - expansion) / scale}px`);
       // The backdrop has a transparent upper edge while the shell is visible.
       // Seal that edge only after pinning, becoming solid before camera/ink.
-      el.style.setProperty('--entrance-darkness', String(smooth(.12, .95, journey.takeover)));
-      el.style.setProperty('--entrance-mat-seal', String(pinned));
+      box.style.setProperty('--entrance-darkness', String(smooth(.12, .95, journey.takeover)));
+      box.style.setProperty('--entrance-mat-seal', String(pinned));
       // Quiet, colored shadows replace repeated scenery. Wisps recede before
       // the camera begins, keeping the later ink wash a distinct moment.
       const shadows = smooth(.03, .58, journey.takeover) * (1 - smooth(.84, 1, journey.takeover));
       const mist = smooth(.12, .46, journey.takeover) * (1 - smooth(.62, .95, journey.takeover));
-      el.style.setProperty('--entrance-shadows', String(shadows));
-      el.style.setProperty('--entrance-mist', String(mist * (reduced ? .35 : 1)));
-      el.style.setProperty('--entrance-mist-drift', `${reduced ? 0 : 18 * journey.takeover}px`);
+      box.style.setProperty('--entrance-shadows', String(shadows));
+      box.style.setProperty('--entrance-mist', String(mist * (reduced ? .35 : 1)));
+      box.style.setProperty('--entrance-mist-drift', `${reduced ? 0 : 18 * journey.takeover}px`);
       // This wash sits behind the existing shell, so its controls stay clear.
       if (tone) tone.style.opacity = String(.78 * smooth(.04, .82, journey.takeover) * (1 - smooth(.94, 1, journey.takeover)));
       if (particles) particles.style.opacity = String(1 - smooth(.12, .76, journey.takeover));
-      el.style.setProperty('--entrance-copy', String(1 - smooth(.05, .75, journey.takeover)));
-      el.style.setProperty('--entrance-room', t.ink > 0 ? '1' : '0');
+      box.style.setProperty('--entrance-copy', String(1 - smooth(.05, .75, journey.takeover)));
+      box.style.setProperty('--entrance-room', t.ink > 0 ? '1' : '0');
       cv.style.opacity = available && !reduced && t.ink > 0 && t.ink < 1 ? '1' : '0';
       card.style.opacity = t.ink >= 1 ? '0' : available && !reduced ? '1' : String(1 - t.ink);
       if (available && !reduced && t.ink > 0 && t.ink < 1) ink!.render(t.ink);
@@ -212,7 +230,9 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
         const title = end.querySelector<HTMLElement>('h1');
         if (title) { title.tabIndex = -1; title.focus({ preventScroll: true }); }
       }
-      Object.assign(el.dataset, { progress: p.toFixed(4), takeover: journey.takeover.toFixed(4), targetTime: desiredTime.toFixed(3), videoTime: v.currentTime.toFixed(3), ink: available ? 'webgl' : 'crossfade' });
+      if (import.meta.env.DEV) {
+        Object.assign(el.dataset, { progress: p.toFixed(4), takeover: journey.takeover.toFixed(4), targetTime: desiredTime.toFixed(3), videoTime: v.currentTime.toFixed(3), ink: available ? 'webgl' : 'crossfade' });
+      }
       // No idle animation loop. Scroll, resize, and decoder events wake us.
       if (p !== target) raf = requestAnimationFrame(tick);
     }
@@ -234,33 +254,41 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
       }
       wake();
     };
+    const scheduleInk = () => {
+      if (!live || reduced) return;
+      window.clearTimeout(inkTimer);
+      inkTimer = window.setTimeout(() => { inkTimer = 0; syncInk(); }, 400);
+    };
     const onData = () => {
       if (failed || reduced) return;
       duration = v.duration;
       if (!Number.isFinite(duration) || duration <= 0) { fail(); return; }
-      loaded = true; window.clearTimeout(watchdog); setMediaState('ready');
+      loaded = true; stalls = 0; window.clearTimeout(watchdog); setMediaState('ready');
       desiredTime = timeline(p).video * Math.max(0, duration - 1 / 30);
       if (desiredTime < 1 / 30) v.style.opacity = '1';
       seek(); wake();
     };
     const onSeeked = () => {
-      seekPending = false; window.clearTimeout(watchdog);
-      if (!failed && Math.abs(v.currentTime - desiredTime) < .1) v.style.opacity = '1';
+      seekPending = false; stalls = 0; window.clearTimeout(watchdog);
+      if (!failed) v.style.opacity = '1';
       seek(); wake();
     };
     const visibility = () => {
       if (document.hidden) { window.clearTimeout(watchdog); cancelSettle(); }
       else {
-        if (!reduced && !failed && (!loaded || seekPending)) watchdog = window.setTimeout(fail, 8000);
+        if (!reduced && !failed) {
+          if (!loaded) watchdog = window.setTimeout(fail, 15000);
+          else if (seekPending) watchdog = window.setTimeout(recover, 4000);
+        }
         wake();
       }
     };
     const contextLost = (e: Event) => { e.preventDefault(); available = false; wake(); };
     end.inert = true;
-    refreshInk.current = syncInk;
+    refreshInk.current = scheduleInk;
     cv.addEventListener('webglcontextlost', contextLost);
     v.addEventListener('loadeddata', onData); v.addEventListener('seeked', onSeeked); v.addEventListener('error', fail);
-    if (!reduced) { v.src = `/assets/entrance/room-${variant}.mp4`; v.load(); watchdog = window.setTimeout(fail, 12000); }
+    if (!reduced) { v.src = `/assets/entrance/room-${variant}.mp4`; v.load(); watchdog = window.setTimeout(fail, 15000); }
     else { v.pause(); v.removeAttribute('src'); v.load(); }
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('wheel', interrupt, { passive: true });
@@ -274,12 +302,12 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
     observer.observe(el.parentElement!);
     if (app) observer.observe(app);
     measure();
-    syncInk();
+    scheduleInk();
     // The cue advances a little; only Skip explicitly jumps to the destination.
     advance.current = () => window.scrollTo({ top: Math.min(endScroll, window.scrollY + height * .65), behavior: reduced ? 'instant' : 'smooth' });
     skip.current = () => { cancelSettle(); landingUntil = 0; lastScroll = endScroll; pendingFocus = true; p = 1; window.scrollTo({ top: endScroll, behavior: 'instant' }); wake(); };
     return () => {
-      live = false; cancelSettle(); cancelAnimationFrame(raf); window.clearTimeout(watchdog); refreshInk.current = null; observer.disconnect();
+      live = false; cancelSettle(); cancelAnimationFrame(raf); window.clearTimeout(watchdog); window.clearTimeout(inkTimer); refreshInk.current = null; observer.disconnect();
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('wheel', interrupt);
       window.removeEventListener('touchstart', touchStart);
@@ -291,6 +319,7 @@ export function RoomEntrance({ onBack, onCoverChange, children }: { onBack: () =
       ink?.dispose(); v.pause(); v.removeAttribute('src'); v.load();
       tone?.style.removeProperty('opacity');
       particles?.style.removeProperty('opacity');
+      if (app) delete app.dataset.roomCovered;
       coverageCallback.current(false);
     };
   }, [portrait, reduced, variant]);

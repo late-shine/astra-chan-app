@@ -467,7 +467,27 @@ export default function App() {
   const [activeHubTab, setActiveHubTab] = useState<"learn" | "practice">("learn");
   const [showStudyRoom, setShowStudyRoom] = useState(true);
   const [entrancePhase, setEntrancePhase] = useState<"idle" | "loading" | "leaving" | "connected">("idle");
-  const [roomCoversViewport, setRoomCoversViewport] = useState(false);
+  const roomCoversViewportRef = useRef(false);
+  const handleRoomCoverChange = useCallback((covered: boolean) => {
+    if (roomCoversViewportRef.current === covered) return;
+    roomCoversViewportRef.current = covered;
+    window.dispatchEvent(new CustomEvent("astra:atmosphere-visibility"));
+  }, []);
+  const preloadedPosterRef = useRef<{ src: string; ready: Promise<void> } | null>(null);
+  const warmupEntrancePoster = useCallback((src: string) => {
+    if (preloadedPosterRef.current?.src === src) return preloadedPosterRef.current.ready;
+    const pic = new Image();
+    pic.src = src;
+    const ready = pic.decode().catch(() => {});
+    preloadedPosterRef.current = { src, ready };
+    return ready;
+  }, []);
+  useEffect(() => {
+    if (currentScreen !== "menu" || activeHubTab === "practice") return;
+    const posterSrc = `/assets/entrance/room-${innerWidth < 768 ? "mobile" : "desktop"}.webp`;
+    const timer = window.setTimeout(() => { void warmupEntrancePoster(posterSrc); }, 600);
+    return () => window.clearTimeout(timer);
+  }, [currentScreen, activeHubTab, warmupEntrancePoster]);
   const entranceRequest = useRef(0);
   useEffect(() => {
     if (currentScreen !== "menu") { entranceRequest.current++; setEntrancePhase("idle"); }
@@ -478,13 +498,12 @@ export default function App() {
     if (tab !== "practice") { setEntrancePhase("idle"); setActiveHubTab(tab); return; }
     if (entrancePhase === "connected" && !showStudyRoom) return;
     setEntrancePhase("loading");
-    const pic = new Image();
-    pic.src = `/assets/entrance/room-${innerWidth < 768 ? "mobile" : "desktop"}.webp`;
-    // The existing app stays visible while the first image is decoded.
+    const posterSrc = `/assets/entrance/room-${innerWidth < 768 ? "mobile" : "desktop"}.webp`;
+    // The existing app stays visible while the first image is decoded (warmed on menu idle).
     await new Promise<void>(resolve => {
       // A stalled poster must not trap navigation; the inline fallback keeps Skip available.
       const timeout = window.setTimeout(resolve, 8000);
-      pic.decode().catch(() => {}).finally(() => { window.clearTimeout(timeout); resolve(); });
+      void warmupEntrancePoster(posterSrc).finally(() => { window.clearTimeout(timeout); resolve(); });
     });
     if (request !== entranceRequest.current) return;
     setEntrancePhase("leaving");
@@ -3132,8 +3151,8 @@ export default function App() {
       {/* ===== FIXED MULTI-SCENE BACKGROUNDS (position:fixed prevents twitching on clicks) ===== */}
       {readingRoomOpen && <ReadingWindow activeScene={activeBgScene} choice={readingAppearance.readingWindow}
         transition={readingAppearance.readingTransition} blur={bgBlur} opacity={bgOpacity} />}
-      {!atelierScreen && !readingRoomOpen && (!entranceConnected || !roomCoversViewport) && <>
-      <motion.div className="fixed inset-0 pointer-events-none select-none z-0 overflow-hidden" style={{ x: bgParallaxX, y: bgParallaxY, scale: 1.05 }}>
+      {!atelierScreen && !readingRoomOpen && <>
+      <motion.div className="astra-app-backdrop fixed inset-0 pointer-events-none select-none z-0 overflow-hidden" style={{ x: bgParallaxX, y: bgParallaxY, scale: 1.05 }}>
         {/* Scene 0 — Misty Sakura Path */}
         <div
           className="absolute inset-0 transition-opacity duration-[3000ms] ease-in-out"
@@ -3200,12 +3219,13 @@ export default function App() {
 
       {/* Keep the fade host stable while the covered canvas stops its animation. */}
       {!atelierScreen && !readingRoomOpen && <div className="astra-app-atmosphere" aria-hidden="true">
-        {(!entranceConnected || !roomCoversViewport) && <AtmosphereCanvas
+        <AtmosphereCanvas
           animationType={bgAnimationType}
           intensity={bgIntensity}
           theme={theme}
           activeBgScene={activeBgScene}
-        />}
+          pausedRef={roomCoversViewportRef}
+        />
       </div>}
 
       {entranceConnected && <div className="astra-entrance-tone" aria-hidden="true" />}
@@ -3758,7 +3778,7 @@ export default function App() {
           {/* ================= SCREEN 1: MENU ================= */}
           {currentScreen === "menu" && (!atelierHome || entranceConnected) && <MenuScreen {...menuScreenProps}
             entrancePreparing={entrancePhase === "loading"} entranceLeaving={entrancePhase === "leaving"}
-            practiceEntrance={entranceConnected ? <RoomEntrance onBack={cancelEntrance} onCoverChange={setRoomCoversViewport}>{practiceFlow}</RoomEntrance> : undefined} /> }
+            practiceEntrance={entranceConnected ? <RoomEntrance onBack={cancelEntrance} onCoverChange={handleRoomCoverChange}>{practiceFlow}</RoomEntrance> : undefined} /> }
 
           {/* ================= SCREEN 2: ACTIVE QUIZ WORKSPACE ================= */}
           {(studioQuiz || (atelierHome && !entranceConnected)) && practiceFlow}
